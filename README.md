@@ -27,7 +27,7 @@ How the app meets each part of the challenge text.
 | Objective 4: rate and significance | Sen's slope + CI, Mann–Kendall, t-test, all shown side by side |
 | Audience: students and the public | Plain-language definitions on hover and in a glossary; detective framing |
 | Ask a few questions, then find variables | **Guided intake** (2 questions) and **Ask the detective** (type "is Phoenix getting hotter?") |
-| Demonstration examples to watch | **9 guided cases** with briefings and animated reveals (a replay button re-runs the reveal) |
+| Demonstration examples to watch | **11 guided cases** with briefings and animated reveals (a replay button re-runs the reveal) |
 | Identify data likely to show trends in particular areas | Sweep and **World survey** |
 | Seasonal cycle should be removed | Monthly anomalies; per-month trend fingerprint |
 | Longer records can make a trend significant | **Emergence chart**: how the evidence builds as years are added |
@@ -130,11 +130,14 @@ API docs: http://127.0.0.1:8000/docs
 ## Tests
 
 ```bash
-cd backend && .venv\Scripts\activate && pytest
+cd backend
+.venv\Scripts\activate
+pytest
 ```
 
 ```bash
-cd frontend && npm test
+cd frontend
+npm test
 ```
 
 The backend suite runs offline: fake NASA POWER and planet-stream calls supply synthetic series with known seasonal cycles and trends.
@@ -143,6 +146,7 @@ Parsers are tested on samples copied from the real files, and a failing stream i
 ## Project layout
 
 ```
+START.bat       one-click start and stop on Windows (with STOP.bat, start-app.ps1, stop-app.ps1)
 backend/app/    nasa_power.py  streams.py  stats.py  analysis.py  context.py  planet.py  places.py  morans.py  main.py
                 ml.py (ridge, k-means, silhouette, stability)  forecast.py  archetypes.py
 backend/tests/  reference-value, pipeline, parser and API tests

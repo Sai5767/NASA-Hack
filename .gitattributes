@@ -1,0 +1,14 @@
+# Let Git normalize text files, and keep the Windows launcher scripts on Windows line endings
+# no matter how a collaborator's Git is configured.
+* text=auto
+
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+*.sh text eol=lf
+
+# Never treat these as text
+*.png binary
+*.jpg binary
+*.woff2 binary
