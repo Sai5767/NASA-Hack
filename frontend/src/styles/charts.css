@@ -1,0 +1,53 @@
+.chart-block { display: grid; gap: 10px; min-width: 0; }
+.chart-head { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; align-items: center; }
+.chart-wrap { min-width: 0; width: 100%; }
+.chart-wrap svg, .emergence svg { display: block; max-width: 100%; overflow: visible; }
+
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--text-dim); font-family: var(--font-mono); }
+.legend li { display: flex; align-items: center; gap: 6px; }
+.sw { display: inline-block; flex: none; }
+.sw.line { width: 16px; height: 3px; border-radius: 2px; }
+.sw.box { width: 11px; height: 11px; border-radius: 3px; }
+
+.ax-unit { fill: var(--text-faint); font: 11px var(--font-mono); }
+.ax-tick { fill: var(--text-faint); font: 11px var(--font-mono); }
+.grid { stroke: rgba(110, 150, 255, 0.12); stroke-width: 1; }
+.zero { stroke: rgba(255, 255, 255, 0.34); stroke-width: 1; stroke-dasharray: 3 4; }
+.band { fill: rgba(77, 255, 217, 0.16); }
+.cross { stroke: rgba(255, 255, 255, 0.28); stroke-width: 1; }
+.tip-box { fill: rgba(5, 9, 22, 0.96); stroke: var(--line-strong); }
+.tip-title { fill: var(--text-faint); font: 11px var(--font-mono); }
+.tip-val { fill: var(--text); font: 600 13px var(--font-mono); }
+.tip-sub { fill: var(--text-dim); font: 11px var(--font-mono); }
+
+/* Stripes */
+.stripes-block { display: grid; gap: 6px; }
+.stripes { display: flex; height: 56px; border-radius: 10px; overflow: hidden; border: 1px solid var(--line); }
+.stripes i { flex: 1; transform-origin: bottom; animation: stripeIn 0.5s var(--ease) both; animation-delay: var(--d, 0ms); }
+.stripes-key { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 11px; color: var(--text-faint); flex-wrap: wrap; }
+.stripes-key .sw { margin: 0 3px 0 0; vertical-align: -1px; }
+
+/* Fingerprint */
+.fingerprint svg { width: 100%; max-width: 340px; display: block; margin: 0 auto; overflow: visible; }
+.fp-ring { fill: none; stroke: var(--line); }
+.fp-ring.base { stroke: var(--line-strong); stroke-dasharray: 3 4; }
+.fp-label { fill: var(--text-faint); font: 11px var(--font-mono); transition: fill 0.15s; }
+.fp-label.on { fill: var(--accent); }
+.fp-wedge { cursor: pointer; transition: fill-opacity 0.15s; }
+.fp-wedge:hover { fill-opacity: 1; }
+.fp-missing { fill: rgba(255, 255, 255, 0.08); }
+.fp-big { fill: var(--text); font: 700 24px var(--font-mono); }
+.fp-mid { fill: var(--accent); font: 700 15px var(--font-mono); }
+.fp-small { fill: var(--text-faint); font: 11px var(--font-mono); }
+.fp-note { font-size: 12.5px; color: var(--text-dim); line-height: 1.5; margin-top: 8px; }
+
+/* Emergence */
+.emergence { min-width: 0; }
+.zone.up { fill: rgba(255, 194, 77, 0.07); }
+.zone.down { fill: rgba(255, 194, 77, 0.07); }
+.thresh { stroke: rgba(255, 194, 77, 0.55); stroke-width: 1; stroke-dasharray: 4 4; }
+.zone-label { fill: rgba(255, 194, 77, 0.8); font: 10.5px var(--font-mono); }
+.emerge-line { stroke: var(--accent); stroke-width: 1.2; stroke-dasharray: 3 4; }
+.emerge-label { fill: var(--accent); font: 700 12px var(--font-mono); }
+
+.spark { display: block; overflow: visible; }
