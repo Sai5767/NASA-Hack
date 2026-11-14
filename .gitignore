@@ -12,6 +12,9 @@ frontend/dist/
 .env
 .env.*
 
+# Process ids written by START.bat
+.app-pids.json
+
 # Editors and OS
 .vscode/
 .idea/

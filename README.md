@@ -99,15 +99,17 @@ and refuses to claim any for Sahel rainfall.
 
 ## Run it
 
-Windows PowerShell, from this folder:
+**One click (Windows):** double-click **`START.bat`**. It needs Python 3.10+ and Node.js 18+ installed, and does the rest:
+on the first run it creates the Python environment and installs the backend and front-end packages (about a minute), then it starts the
+backend (port 8000) and front-end (port 5173) in two minimized windows and opens **http://127.0.0.1:5173** in your browser.
+Double-clicking it again while the app is running just reopens the page. Double-click **`STOP.bat`** when you are finished; it closes
+only the servers that were started from this folder.
 
-```bash
-powershell -ExecutionPolicy Bypass -File .\start-app.ps1
-```
+For a desktop shortcut, right-click `START.bat` and choose Send to, then Desktop (create shortcut).
 
-It opens the backend (port 8000) and front-end (port 5173) in their own windows. Then open **http://127.0.0.1:5173**.
+From a terminal the same thing is `.\START.bat` and `.\STOP.bat`. If a step fails, the window stays open and says what went wrong.
 
-Manual setup:
+Manual setup, for other systems or if you prefer separate terminals:
 
 ```bash
 cd backend
