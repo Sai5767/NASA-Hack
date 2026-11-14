@@ -49,6 +49,22 @@ export function sweepCsv(sweep) {
   ].join("\n");
 }
 
+export function worldCsv(world) {
+  const header = [
+    `# Trend Detective world survey: ${world.variable.label} (${world.variable.units}), ${world.period.start_year}-${world.period.end_year}`,
+    "# Sample places only; not an evenly spaced or complete picture of the planet.",
+    "place,kind,lat,lon,slope_per_decade,ci_low_per_decade,ci_high_per_decade,percent_of_mean,p_value,significant,significant_after_fdr,note",
+  ];
+  return [
+    ...header,
+    ...world.places.map((p) =>
+      p.ok
+        ? [p.name, p.kind, p.lat, p.lon, p.slope_per_decade, p.ci_low_per_decade, p.ci_high_per_decade, p.percent_of_mean ?? "", p.p_value, p.significant, p.significant_fdr, ""].map(escape).join(",")
+        : [p.name, p.kind, p.lat, p.lon, "", "", "", "", "", "", "", p.message].map(escape).join(","),
+    ),
+  ].join("\n");
+}
+
 export function scanCsv(grid) {
   const header = [
     `# Trend Detective region scan: ${grid.variable.label}, ${grid.period.start_year}-${grid.period.end_year}`,

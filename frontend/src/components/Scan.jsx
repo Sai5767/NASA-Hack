@@ -1,5 +1,6 @@
 import { formatP, formatPlace, signed } from "../lib/format.js";
 import { downloadText, scanCsv } from "../lib/csv.js";
+import Sparkline from "./charts/Sparkline.jsx";
 import Term from "./Term.jsx";
 
 const SIZES = [5, 10, 20, 30, 40];
@@ -99,6 +100,32 @@ export default function Scan({ cfg, onCfg, onRun, loading, hasPin, stale, data, 
             <li><b>{data.counts.none}</b> no clear trend</li>
             {data.counts.failed > 0 && <li className="faint"><b>{data.counts.failed}</b> not analyzed</li>}
           </ul>
+
+          {data.composite && (
+            <div className="composite">
+              <div>
+                <p className="eyebrow">The region as a whole</p>
+                <p className="mono composite-rate" style={{ color: data.composite.stats.significant ? (data.composite.stats.sign === "up" ? "var(--up)" : "var(--down)") : "var(--text-dim)" }}>
+                  {signed(data.composite.stats.slope_per_decade)} <small>{units}/decade</small>
+                </p>
+                <p className="dim small">
+                  95% range {signed(data.composite.stats.ci_low_per_decade)} to {signed(data.composite.stats.ci_high_per_decade)} · p {formatP(data.composite.stats.p_value)} ·{" "}
+                  {data.composite.stats.significant ? "significant" : "not significant"}.
+                </p>
+                <p className="dim small">
+                  Area-weighted average of {data.composite.n_cells} places. {Math.round(data.composite.agreeing_share * 100)}% of places have a
+                  significant trend in the same direction.
+                </p>
+              </div>
+              <Sparkline
+                values={data.composite.annual.map((a) => a.value)}
+                color={data.composite.stats.significant ? (data.composite.stats.sign === "up" ? "var(--up)" : "var(--down)") : "var(--flat)"}
+                width={150}
+                height={48}
+                delay={300}
+              />
+            </div>
+          )}
 
           {data.opposite_trends && (
             <div className="banner opposite reveal-pop">

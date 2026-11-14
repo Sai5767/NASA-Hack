@@ -130,6 +130,10 @@ for _variable in (
 ):
     VARIABLES[_variable]["note"] = MODELED_NOTE
 
+# Absolute temperatures: how strongly they follow global warming is a meaningful question.
+for _variable in ("T2M", "T2M_MAX", "T2M_MIN", "TS"):
+    VARIABLES[_variable]["tracks_global_temp"] = True
+
 _cache: OrderedDict[tuple, dict[str, float | None]] = OrderedDict()
 
 

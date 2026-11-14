@@ -6,11 +6,15 @@ import "./styles/theme.css";
 import "./styles/layout.css";
 import "./styles/panels.css";
 import "./styles/charts.css";
+import "./styles/extras.css";
 import "./styles/motion.css";
 import App from "./App.jsx";
+import ErrorBoundary from "./components/ErrorBoundary.jsx";
 
 createRoot(document.getElementById("root")).render(
   <React.StrictMode>
-    <App />
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   </React.StrictMode>,
 );

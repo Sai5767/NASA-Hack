@@ -7,6 +7,7 @@ import Fingerprint from "./charts/Fingerprint.jsx";
 import Stripes from "./charts/Stripes.jsx";
 import TrendChart from "./charts/TrendChart.jsx";
 import InView from "./InView.jsx";
+import Suspects from "./Suspects.jsx";
 import Term from "./Term.jsx";
 
 const STAMP_WORDS = { strong: "STRONG TREND", moderate: "LIKELY TREND", weak: "FAINT SIGNAL", none: "INCONCLUSIVE" };
@@ -47,6 +48,22 @@ function Stamp({ grade, stats }) {
   );
 }
 
+function shapeWord(shape) {
+  if (shape.label === "step") return `Step near ${shape.step_year}`;
+  if (shape.label === "steady") return "Steady ramp";
+  return "No clear shape";
+}
+
+function shapeSub(shape, units) {
+  const line = Math.round(shape.r2_line * 100);
+  const step = shape.r2_step == null ? null : Math.round(shape.r2_step * 100);
+  if (shape.label === "step") {
+    return `Average ${shape.mean_before.toPrecision(3)} → ${shape.mean_after.toPrecision(3)} ${units}. One step explains ${step}% of the variance, a straight line ${line}%.`;
+  }
+  if (shape.label === "steady") return `A straight line explains ${line}% of the variance${step != null ? `, a single step ${step}%` : ""}.`;
+  return `Neither a line (${line}%) nor a single step${step != null ? ` (${step}%)` : ""} explains much of the variance.`;
+}
+
 function noiseSentence(snr) {
   if (snr == null) return "no variation to compare";
   const x = Math.abs(snr);
@@ -57,6 +74,17 @@ function noiseSentence(snr) {
 
 export default function CaseFile({ data }) {
   const [play, setPlay] = useState(0);
+  const [copied, setCopied] = useState(false);
+
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      window.prompt("Copy this link to share the case:", window.location.href);
+    }
+  };
   const { variable, location, period, quality, stats, ols, grade, summary, annual, checks, robustness, caveats, fingerprint, month_agreement: agreement, emergence } = data;
   const units = variable.units;
   const tone = stats.significant ? stats.sign : "flat";
@@ -74,6 +102,7 @@ export default function CaseFile({ data }) {
           </p>
         </div>
         <div className="cf-actions">
+          <button type="button" className="btn btn-sm" onClick={copyLink}>{copied ? "✓ Copied" : "⧉ Link"}</button>
           <button type="button" className="btn btn-sm" onClick={() => setPlay((n) => n + 1)}>▶ Replay</button>
           <button
             type="button"
@@ -117,6 +146,9 @@ export default function CaseFile({ data }) {
         >
           <Count value={stats.p_value} format={(v) => (stats.p_value < 0.001 ? "< 0.001" : v.toFixed(3))} delay={800} />
           <small>{stats.significant ? "significant" : "not significant"}</small>
+        </Metric>
+        <Metric term="shape" label="Shape of the record" delay={750} sub={shapeSub(data.shape, units)}>
+          <span className="shape-word">{shapeWord(data.shape)}</span>
         </Metric>
       </div>
 
@@ -196,6 +228,10 @@ export default function CaseFile({ data }) {
             </div>
           )}
         </section>
+      </InView>
+
+      <InView minHeight={300}>
+        <Suspects data={data} />
       </InView>
 
       <section className="card notes">

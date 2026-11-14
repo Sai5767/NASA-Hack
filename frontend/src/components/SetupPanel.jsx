@@ -1,8 +1,9 @@
 import { useMemo } from "react";
 import { FIRST_YEAR, INTAKE_PLACES, LAST_FULL_YEAR } from "../lib/cases.js";
+import AskBox from "./AskBox.jsx";
 
 /** Case setup: variable, place and years. Place clicks on the globe update these fields too. */
-export default function SetupPanel({ variables, draft, onDraft, onVariable, onApply, onPlace, disabled, message }) {
+export default function SetupPanel({ variables, draft, onDraft, onVariable, onApply, onPlace, onAsk, places, disabled, message }) {
   const groups = useMemo(() => {
     const out = {};
     variables.forEach((v) => {
@@ -20,6 +21,7 @@ export default function SetupPanel({ variables, draft, onDraft, onVariable, onAp
         onApply();
       }}
     >
+      {places.length > 0 && <AskBox places={places} variables={variables} currentVariable={draft.variable} onAsk={onAsk} />}
       <label className="field">
         Variable to investigate
         <select value={draft.variable} onChange={(e) => onVariable(e.target.value)}>

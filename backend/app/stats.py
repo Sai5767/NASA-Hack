@@ -341,3 +341,93 @@ def ols(
         r2=r2,
         significant=p_value < alpha,
     )
+
+
+# --------------------------------------------------------------------------- correlation
+
+
+def pearson(x: list[float], y: list[float]) -> float | None:
+    """Pearson correlation, or None when either series has no variation."""
+    n = len(x)
+    if n != len(y) or n < 3:
+        raise ValueError("Need two series of equal length (at least 3).")
+    mx, my = sum(x) / n, sum(y) / n
+    sxx = sum((a - mx) ** 2 for a in x)
+    syy = sum((b - my) ** 2 for b in y)
+    if sxx <= 0 or syy <= 0:
+        return None
+    return sum((a - mx) * (b - my) for a, b in zip(x, y)) / math.sqrt(sxx * syy)
+
+
+def effective_sample_size(n: int, r1_x: float, r1_y: float) -> float:
+    """Bretherton et al. (1999) effective sample size for correlating two autocorrelated series."""
+    product = max(0.0, r1_x) * max(0.0, r1_y)  # only positive persistence reduces information
+    n_eff = n * (1.0 - product) / (1.0 + product)
+    return min(float(n), max(3.0, n_eff))
+
+
+def correlation_p_value(r: float, n_eff: float) -> float:
+    """Two-sided p-value for a correlation using the effective number of independent samples."""
+    if n_eff <= 2:
+        return 1.0
+    if abs(r) >= 1.0:
+        return 0.0
+    t = r * math.sqrt((n_eff - 2.0) / (1.0 - r * r))
+    return t_two_sided_p(t, n_eff - 2.0)
+
+
+def linear_detrend(values: list[float], times: list[float]) -> list[float]:
+    """Residuals of a least-squares line (the series with its straight-line trend removed)."""
+    fit = ols(values, times)
+    t_mean = sum(times) / len(times)
+    y_mean = sum(values) / len(values)
+    return [v - (y_mean + fit.slope * (t - t_mean)) for v, t in zip(values, times)]
+
+
+# --------------------------------------------------------------------------- shape of a record
+
+
+@dataclass(frozen=True)
+class StepFit:
+    split: int            # index of the first value of the second segment
+    mean_before: float
+    mean_after: float
+    r2: float             # share of variance explained by "two flat levels"
+
+
+def pettitt(values: list[float]) -> tuple[int, float]:
+    """Pettitt (1979) change-point test.
+
+    Returns (index of the first value after the most likely shift, approximate two-sided p-value).
+    """
+    n = len(values)
+    if n < 8:
+        raise ValueError("At least 8 values are needed to look for a change point.")
+    u = 0.0
+    best_abs, best_t = -1.0, 0
+    for t in range(n - 1):
+        xt = values[t]
+        u += sum((xt > xj) - (xt < xj) for xj in values)  # V_t = sum_j sign(x_t - x_j)
+        if abs(u) > best_abs:
+            best_abs, best_t = abs(u), t
+    p_value = min(1.0, 2.0 * math.exp(-6.0 * best_abs**2 / (n**3 + n**2)))
+    return best_t + 1, p_value
+
+
+def best_step(values: list[float], min_segment: int = 5) -> StepFit | None:
+    """Best split of the record into two flat levels (least squares). None if the record is too short."""
+    n = len(values)
+    if n < 2 * min_segment:
+        return None
+    y_mean = sum(values) / n
+    sst = sum((v - y_mean) ** 2 for v in values)
+    best: tuple[float, int] | None = None
+    for k in range(min_segment, n - min_segment + 1):
+        a, b = values[:k], values[k:]
+        ma, mb = sum(a) / len(a), sum(b) / len(b)
+        sse = sum((v - ma) ** 2 for v in a) + sum((v - mb) ** 2 for v in b)
+        if best is None or sse < best[0]:
+            best = (sse, k)
+    sse, k = best
+    a, b = values[:k], values[k:]
+    return StepFit(split=k, mean_before=sum(a) / len(a), mean_after=sum(b) / len(b), r2=1.0 - sse / sst if sst > 0 else 0.0)

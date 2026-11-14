@@ -24,11 +24,17 @@ from .analysis import (
     AnalysisError,
     analyze_many,
     analyze_point,
+    annual_core,
     grid_points,
 )
+from .context import build_context
 from .morans import morans_i
 from .nasa_power import VARIABLES, PowerError
+from .places import PLACES
+from .planet import build_vitals
 from .stats import benjamini_hochberg, normal_two_sided_p
+
+MAX_WORLD_CONCURRENCY = 4
 
 MAX_GRID_SIDE = 5           # up to 5 x 5 = 25 cells per scan
 MAX_CONCURRENT_FETCHES = 3  # be polite to the NASA POWER service
@@ -194,6 +200,7 @@ async def grid(
             "slope_per_decade": s["slope_per_decade"],
             "total_change": s["total_change"],
             "signal_to_noise": s["signal_to_noise"],
+            "_annual": {a["year"]: a["value"] for a in res["annual"]},
         }
 
     cells = await asyncio.gather(*(scan(la, lo) for la, lo in points))
@@ -202,6 +209,10 @@ async def grid(
     # Many cells are tested at once, so some would pass by luck: control the false-discovery rate.
     for cell, flag in zip(ok, benjamini_hochberg([c["p_value"] for c in ok], ALPHA)):
         cell["significant_fdr"] = flag
+
+    composite = _composite(VARIABLES[variable], [(c["lat"], c["_annual"]) for c in ok], ok)
+    for c in ok:
+        c.pop("_annual", None)
 
     pool = [c for c in ok if c["significant_fdr"]] or [c for c in ok if c["significant"]]
     strongest_up = max((c for c in pool if c["slope_per_decade"] > 0), key=lambda c: c["slope_per_decade"], default=None)
@@ -228,6 +239,7 @@ async def grid(
             "nominal_only": sum(1 for c in ok if c["significant"] and not c["significant_fdr"]),
             "none": sum(1 for c in ok if not c["significant"]),
         },
+        "composite": composite,
         "strongest_increase": strongest_up,
         "strongest_decrease": strongest_down,
         "opposite_trends": strongest_up is not None and strongest_down is not None,
@@ -240,6 +252,126 @@ async def grid(
             "pattern": spatial.pattern,
             "cells_used": spatial.cells_used,
         },
+    }
+
+
+def _composite(info: dict, series: list[tuple[float, dict[int, float]]], cells: list[dict]) -> dict | None:
+    """One regional series: the area-weighted (cos latitude) mean of every analyzed cell, then its trend."""
+    if len(series) < 3:
+        return None
+    years = sorted(set.intersection(*(set(annual) for _, annual in series)))
+    if len(years) < MIN_YEARS:
+        return None
+    weights = [max(math.cos(math.radians(lat)), 1e-6) for lat, _ in series]
+    total = sum(weights)
+    values = [sum(w * annual[y] for w, (_, annual) in zip(weights, series)) / total for y in years]
+    if max(values) - min(values) <= 1e-12:
+        return None
+    s = annual_core(info, years, values)["stats"]
+    same_sign = [c for c in cells if c["significant_fdr"] and (c["slope_per_decade"] > 0) == (s["slope_per_decade"] > 0)]
+    return {
+        "n_cells": len(series),
+        "annual": [{"year": y, "value": v} for y, v in zip(years, values)],
+        "stats": {k: s[k] for k in (
+            "slope_per_decade", "ci_low_per_decade", "ci_high_per_decade", "total_change", "p_value",
+            "significant", "sign", "signal_to_noise", "percent_of_mean", "n_years",
+        )},
+        "agreeing_share": len(same_sign) / len(series),
+    }
+
+
+@app.get("/api/suspects")
+async def suspects(
+    variable: str,
+    lat: float = Query(..., ge=-90, le=90),
+    lon: float = Query(..., ge=-180, le=180),
+    start_year: int = Query(FIRST_YEAR),
+    end_year: int = Query(date.today().year - 1),
+) -> dict:
+    """What moves with this trend? Climate rhythms, global warming and an independent NASA cross-check."""
+    _check_variable(variable)
+    _check_years(start_year, end_year)
+    try:
+        res = await analyze_point(variable, lat, lon, start_year, end_year, detail=False)
+    except AnalysisError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except PowerError as exc:
+        raise HTTPException(502, str(exc)) from exc
+    years = [a["year"] for a in res["annual"]]
+    values = [a["value"] for a in res["annual"]]
+    return await build_context(VARIABLES[variable], lat, years, values, res["stats"])
+
+
+@app.get("/api/vitals")
+async def vitals(
+    start_year: int = Query(FIRST_YEAR),
+    end_year: int = Query(date.today().year - 1),
+) -> dict:
+    """Earth's vital signs: global temperature, CO2 and sea ice (trend tests) plus ENSO, PDO and NAO (status)."""
+    _check_years(start_year, end_year)
+    return await build_vitals(start_year, end_year)
+
+
+@app.get("/api/places")
+def places() -> list[dict]:
+    """Well-known places and regions for search and the World view."""
+    return PLACES
+
+
+@app.get("/api/world")
+async def world(
+    variable: str,
+    start_year: int = Query(FIRST_YEAR),
+    end_year: int = Query(date.today().year - 1),
+) -> dict:
+    """One variable across every place in the gazetteer: where is it changing most? (Sample sites, not the whole globe.)"""
+    _check_variable(variable)
+    _check_years(start_year, end_year)
+    limiter = asyncio.Semaphore(MAX_WORLD_CONCURRENCY)
+
+    async def probe(place: dict) -> dict:
+        base = {k: place[k] for k in ("id", "name", "kind", "lat", "lon")}
+        async with limiter:
+            try:
+                res = await analyze_point(variable, place["lat"], place["lon"], start_year, end_year, detail=False)
+            except (AnalysisError, PowerError) as exc:
+                return {**base, "ok": False, "message": str(exc)}
+        s = res["stats"]
+        return {
+            **base,
+            "ok": True,
+            "sign": s["sign"],
+            "significant": s["significant"],
+            "significant_fdr": False,
+            "p_value": s["p_value"],
+            "slope_per_decade": s["slope_per_decade"],
+            "ci_low_per_decade": s["ci_low_per_decade"],
+            "ci_high_per_decade": s["ci_high_per_decade"],
+            "percent_of_mean": s["percent_of_mean"],
+            "signal_to_noise": s["signal_to_noise"],
+        }
+
+    entries = await asyncio.gather(*(probe(p) for p in PLACES))
+    ok = [e for e in entries if e["ok"]]
+    for entry, flag in zip(ok, benjamini_hochberg([e["p_value"] for e in ok], ALPHA)):
+        entry["significant_fdr"] = flag
+    solid = [e for e in ok if e["significant_fdr"]]
+    return {
+        "variable": {"id": variable, **VARIABLES[variable]},
+        "period": {"start_year": start_year, "end_year": end_year},
+        "places": entries,
+        "counts": {
+            "total": len(entries),
+            "analyzed": len(ok),
+            "rising": sum(1 for e in solid if e["slope_per_decade"] > 0),
+            "falling": sum(1 for e in solid if e["slope_per_decade"] < 0),
+            "nominal_only": sum(1 for e in ok if e["significant"] and not e["significant_fdr"]),
+            "none": sum(1 for e in ok if not e["significant"]),
+            "failed": len(entries) - len(ok),
+        },
+        "top_rising": sorted((e for e in solid if e["slope_per_decade"] > 0), key=lambda e: -e["slope_per_decade"])[:5],
+        "top_falling": sorted((e for e in solid if e["slope_per_decade"] < 0), key=lambda e: e["slope_per_decade"])[:5],
+        "note": "These are sample sites around the world, not an evenly spaced or complete picture of the planet.",
     }
 
 

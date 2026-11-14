@@ -41,3 +41,37 @@ def fake_power(monkeypatch):
 
     monkeypatch.setattr("app.analysis.fetch_monthly_multi", fake_fetch)
     return fake_fetch
+
+
+STREAM_SPECS = {
+    # id: (first year, last year, trend per year, noise sd, seasonal amplitude, base value)
+    "gistemp_global": (1880, 2025, 0.012, 0.08, 0.0, 0.0),
+    "co2_mlo": (1958, 2025, 1.8, 0.4, 3.0, 320.0),
+    "arctic_ice": (1979, 2025, -0.05, 0.25, 4.5, 11.0),
+    "antarctic_ice": (1979, 2025, 0.0, 0.5, 7.0, 11.0),
+    "oni": (1950, 2025, 0.0, 1.0, 0.0, 0.0),
+    "pdo": (1950, 2025, 0.0, 1.0, 0.0, 0.0),
+    "nao": (1950, 2025, 0.0, 1.0, 0.0, 0.0),
+}
+
+
+@pytest.fixture
+def fake_streams(monkeypatch):
+    """Replace the public planet streams with synthetic monthly series and zonal bands."""
+    import random
+
+    async def fake_monthly(stream_id):
+        first, last, trend, noise, amp, base = STREAM_SPECS[stream_id]
+        seed = zlib.crc32(stream_id.encode()) % 10_000
+        return make_monthly(first, last, trend_per_year=trend, noise_sd=noise, seed=seed, base=base, seasonal_amplitude=amp)
+
+    async def fake_zonal():
+        rng = random.Random(4)
+        return {
+            name: {y: 0.02 * (y - 1950) + rng.gauss(0, 0.2) for y in range(1950, 2026)}
+            for _, _, name in __import__("app.streams", fromlist=["ZONAL_BANDS"]).ZONAL_BANDS
+        }
+
+    monkeypatch.setattr("app.streams.get_monthly", fake_monthly)
+    monkeypatch.setattr("app.streams.get_zonal", fake_zonal)
+    return fake_monthly

@@ -1,12 +1,13 @@
-"""Turns monthly NASA POWER series into a full "case file" of trend evidence.
+"""Turns monthly series (NASA POWER or the public planet streams) into a full "case file" of trend evidence.
 
-For one variable at one location this module produces:
+For one series this module produces:
   * annual means, monthly anomalies (seasonal cycle removed) and a 12-month average
   * Sen's slope with a 95% interval, Mann-Kendall significance, and a regression t-test
   * signal vs noise (how big the change is compared with normal year-to-year swings)
   * a 12-month "fingerprint" (which calendar months drive the trend)
   * trend emergence (how the evidence builds as years are added)
   * robustness checks (trimming years from either end) and a transparent evidence grade
+  * a shape check: is it a steady ramp, or more like a step change?
 """
 
 from __future__ import annotations
@@ -15,7 +16,7 @@ import math
 from statistics import mean
 
 from .nasa_power import VARIABLES, annual_means, fetch_monthly_multi
-from .stats import benjamini_hochberg, mann_kendall, mk_z_and_p, ols, sample_std
+from .stats import benjamini_hochberg, best_step, mann_kendall, mk_z_and_p, ols, pettitt, sample_std
 
 FIRST_YEAR = 1981            # first year of NASA POWER monthly data
 MIN_YEARS = 20               # a trend over fewer complete years is not meaningful
@@ -26,6 +27,7 @@ MIN_TRIMMED_YEARS = 15
 MIN_MONTH_VALUES = 15
 MONTH_AGREEMENT_TARGET = 0.75
 SIGNAL_TO_NOISE_TARGET = 1.0
+STEP_ADVANTAGE = 0.05        # a step must explain this much more variance than a line to be called step-like
 
 GRADE_LABELS = {
     "strong": "Strong evidence",
@@ -198,6 +200,28 @@ def _robustness(years: list[int], values: list[float], full_sign: int) -> list[d
     return out
 
 
+def _shape(years: list[int], values: list[float], r2_line: float, significant_trend: bool) -> dict:
+    """Is the record a steady ramp, a step change, or neither? (Pettitt test plus step-vs-line fit.)"""
+    _, pettitt_p = pettitt(values)
+    step = best_step(values)
+    out = {
+        "label": "unclear",
+        "pettitt_p": pettitt_p,
+        "r2_line": r2_line,
+        "r2_step": None,
+        "step_year": None,
+        "mean_before": None,
+        "mean_after": None,
+    }
+    if step is not None:
+        out.update(r2_step=step.r2, step_year=years[step.split], mean_before=step.mean_before, mean_after=step.mean_after)
+    if step is not None and pettitt_p < ALPHA and step.r2 > r2_line + STEP_ADVANTAGE:
+        out["label"] = "step"
+    elif significant_trend:
+        out["label"] = "steady"
+    return out
+
+
 def _grade(p_value: float, significant: bool, passed: int, total: int) -> str:
     if p_value < 0.01 and passed == total:
         return "strong"
@@ -208,56 +232,11 @@ def _grade(p_value: float, significant: bool, passed: int, total: int) -> str:
     return "none"
 
 
-# --------------------------------------------------------------------------- main assembly
+# --------------------------------------------------------------------------- annual core
 
 
-def _summary(info, lat, lon, years, mk, total_change, snr, grade_label, passed, total) -> str:
-    unit = info["units"]
-    place = f"({lat:.2f}, {lon:.2f})"
-    span = f"{years[0]}–{years[-1]}"
-    rate = (
-        f"{_num(mk.sens_slope * 10)} {unit} per decade "
-        f"(95% range {_num(mk.sens_ci_low * 10)} to {_num(mk.sens_ci_high * 10)})"
-    )
-    if mk.significant and mk.sens_slope != 0:
-        verb = "rose" if mk.sens_slope > 0 else "fell"
-        text = f"{info['label']} at {place} {verb} over {span}: {rate}, about {_num(total_change)} {unit} in total."
-        if snr is not None:
-            text += f" That change is roughly {abs(snr):.1f}× the normal year-to-year swing."
-    else:
-        text = (
-            f"{info['label']} at {place} shows no statistically significant trend over {span}. "
-            f"The best estimate is {rate}, but the data are too variable to be confident in it."
-        )
-    return f"{text} {grade_label} ({passed} of {total} checks passed)."
-
-
-def analyze_series(
-    variable: str,
-    lat: float,
-    lon: float,
-    monthly: dict[str, float | None],
-    start_year: int,
-    end_year: int,
-    detail: bool = True,
-) -> dict:
-    """Full analysis of one variable's monthly series. Raises AnalysisError when it cannot be analyzed."""
-    info = VARIABLES[variable]
-    annual = annual_means(monthly)
-    valid_months = sum(1 for v in monthly.values() if v is not None)
-
-    if len(annual) < MIN_YEARS:
-        if valid_months == 0 and info.get("land_only"):
-            raise AnalysisError(f"{info['label']} is only measured over land; this point has no data.")
-        raise AnalysisError(
-            f"Only {len(annual)} complete years of data were found here; at least {MIN_YEARS} are needed."
-        )
-
-    years = list(annual.keys())
-    values = list(annual.values())
-    if max(values) - min(values) <= 1e-12:
-        raise AnalysisError(f"{info['label']} does not vary here (for example, no snowfall at this latitude).")
-
+def annual_core(info: dict, years: list[int], values: list[float]) -> dict:
+    """Trend statistics for an annual series. Shared by single places, composites and planet streams."""
     times = [float(y) for y in years]
     mk = mann_kendall(values, times, alpha=ALPHA)
     ols_res = ols(values, times, alpha=ALPHA, variance_factor=mk.variance_factor)
@@ -269,7 +248,7 @@ def analyze_series(
     noise_sd = sample_std(residuals)
     snr = total_change / noise_sd if noise_sd > 0 else None
     mean_value = mean(values)
-    percent_of_mean = total_change / mean_value * 100.0 if info["ratio"] and mean_value > 0 else None
+    percent_of_mean = total_change / mean_value * 100.0 if info.get("ratio") and mean_value > 0 else None
     sign = "up" if mk.sens_slope > 0 else "down" if mk.sens_slope < 0 else "flat"
 
     stats = {
@@ -305,6 +284,69 @@ def analyze_series(
         "r2": ols_res.r2,
         "significant": ols_res.significant,
     }
+    return {"mk": mk, "ols": ols_res, "stats": stats, "ols_block": ols_block, "snr": snr, "total_change": total_change}
+
+
+# --------------------------------------------------------------------------- main assembly
+
+
+def _summary(info, where, years, mk, total_change, snr, grade_label, passed, total) -> str:
+    unit = info["units"]
+    span = f"{years[0]}–{years[-1]}"
+    rate = (
+        f"{_num(mk.sens_slope * 10)} {unit} per decade "
+        f"(95% range {_num(mk.sens_ci_low * 10)} to {_num(mk.sens_ci_high * 10)})"
+    )
+    if mk.significant and mk.sens_slope != 0:
+        verb = "rose" if mk.sens_slope > 0 else "fell"
+        text = f"{info['label']} {where} {verb} over {span}: {rate}, about {_num(total_change)} {unit} in total."
+        if snr is not None:
+            text += f" That change is roughly {abs(snr):.1f}× the normal year-to-year swing."
+    else:
+        text = (
+            f"{info['label']} {where} shows no statistically significant trend over {span}. "
+            f"The best estimate is {rate}, but the data are too variable to be confident in it."
+        )
+    return f"{text} {grade_label} ({passed} of {total} checks passed)."
+
+
+def analyze_series(
+    variable: str,
+    lat: float | None,
+    lon: float | None,
+    monthly: dict[str, float | None],
+    start_year: int,
+    end_year: int,
+    detail: bool = True,
+    info: dict | None = None,
+    where: str | None = None,
+) -> dict:
+    """Full analysis of one series' monthly values. Raises AnalysisError when it cannot be analyzed.
+
+    `info` and `where` let planet-wide streams (not tied to a POWER variable or a point) reuse this engine.
+    """
+    info = info or VARIABLES[variable]
+    if where is None:
+        where = f"at ({lat:.2f}, {lon:.2f})" if lat is not None and lon is not None else "worldwide"
+    annual = annual_means(monthly)
+    valid_months = sum(1 for v in monthly.values() if v is not None)
+
+    if len(annual) < MIN_YEARS:
+        if valid_months == 0 and info.get("land_only"):
+            raise AnalysisError(f"{info['label']} is only measured over land; this point has no data.")
+        raise AnalysisError(
+            f"Only {len(annual)} complete years of data were found here; at least {MIN_YEARS} are needed."
+        )
+
+    years = list(annual.keys())
+    values = list(annual.values())
+    if max(values) - min(values) <= 1e-12:
+        raise AnalysisError(f"{info['label']} does not vary here (for example, no snowfall at this latitude).")
+
+    core = annual_core(info, years, values)
+    mk, ols_res, stats, snr = core["mk"], core["ols"], core["stats"], core["snr"]
+    total_change = core["total_change"]
+
     expected_months = (end_year - start_year + 1) * 12
     quality = {
         "years_used": len(years),
@@ -318,12 +360,14 @@ def analyze_series(
         "period": {"start_year": years[0], "end_year": years[-1]},
         "quality": quality,
         "stats": stats,
-        "ols": ols_block,
+        "ols": core["ols_block"],
         "annual": [{"year": y, "value": v} for y, v in zip(years, values)],
     }
     if not detail:
         return result
 
+    times = [float(y) for y in years]
+    t0 = times[0]
     records = _monthly_records(monthly)
     clim = _climatology(records)
     fingerprint = _fingerprint(records)
@@ -332,6 +376,7 @@ def analyze_series(
     agree = sum(1 for row in ok_months if full_sign != 0 and row["sign"] == full_sign)
     emergence_series, emergence_year = _emergence(years, values)
     robustness = _robustness(years, values, full_sign)
+    shape = _shape(years, values, ols_res.r2, mk.significant)
 
     ols_agrees = ols_res.significant and _sign(ols_res.slope) == full_sign
     month_fraction = agree / len(ok_months) if ok_months else 0.0
@@ -383,6 +428,12 @@ def analyze_series(
     caveats = list(BASE_CAVEATS)
     if info.get("note"):
         caveats.insert(0, info["note"])
+    if shape["label"] == "step":
+        caveats.insert(
+            0,
+            f"The record looks more like a step change near {shape['step_year']} (average {shape['mean_before']:.3g} → "
+            f"{shape['mean_after']:.3g}) than a steady ramp, so a straight-line trend may misdescribe it.",
+        )
     if mk.variance_factor > 1.0:
         caveats.insert(
             0,
@@ -404,19 +455,20 @@ def analyze_series(
                 "ci_high_per_year": mk.sens_ci_high,
                 "pivot_year": mean(times),
                 "pivot_value": mk.sens_intercept + mk.sens_slope * (mean(times) - t0),
-                "mean_value": mean_value,
+                "mean_value": stats["mean_value"],
             },
             "fingerprint": fingerprint,
             "month_agreement": {"agree": agree, "total": len(ok_months)},
             "emergence": {"series": emergence_series, "year": emergence_year},
             "robustness": robustness,
+            "shape": shape,
             "checks": checks,
             "grade": {"code": grade_code, "label": grade_label, "passed": passed, "total": len(checks)},
             "agreement": {
                 "tests_agree": ols_res.significant == mk.significant
                 and (not mk.significant or _sign(ols_res.slope) == full_sign),
             },
-            "summary": _summary(info, lat, lon, years, mk, total_change, snr, grade_label, passed, len(checks)),
+            "summary": _summary(info, where, years, mk, total_change, snr, grade_label, passed, len(checks)),
             "caveats": caveats,
         }
     )

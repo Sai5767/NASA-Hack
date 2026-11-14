@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Children, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { geoDistance, geoEqualEarth, geoGraticule10, geoOrthographic, geoPath } from "d3-geo";
 import { feature, mesh } from "topojson-client";
 import world from "world-atlas/countries-110m.json";
@@ -133,14 +133,19 @@ function drawRadar(ctx, x, y, color, now) {
  *
  * pins:   [{ lat, lon, color, label, phase }]
  * cells:  [{ lat, lon, fill, alpha, stroke, strokeWidth, dash, tip }] drawn as `cellHalf`-degree squares
+ * dots:   [{ lat, lon, color, r, ring, tip }] data markers; clicking one calls onDotPick(dot)
  * focus:  { lat, lon, k?, nonce } -> flies the camera there whenever `nonce` changes
+ * modeRequest: { mode: "globe" | "flat", nonce } -> switches the map style
  */
 export default function Globe({
   pins = [],
   cells = [],
   cellHalf = 0,
   selectedCell = null,
+  dots = [],
+  onDotPick,
   focus = null,
+  modeRequest = null,
   busy = false,
   idleSpin = false,
   onPick,
@@ -159,6 +164,7 @@ export default function Globe({
   const idleAt = useRef(0);
   const dirty = useRef(true);
   const hoverKey = useRef("");
+  const dotPositions = useRef([]);
   const live = useRef({});
 
   const polys = useMemo(
@@ -173,11 +179,11 @@ export default function Globe({
     return { delays: dists.map((d) => (d / maxDist) * 650), total: 1100, at: performance.now() };
   }, [cells]);
 
-  live.current = { pins, cells, polys, cellHalf, selectedCell, busy, idleSpin, reduced, mode, reveal, hoverCell: hover?.cell ?? -1 };
+  live.current = { pins, cells, polys, cellHalf, selectedCell, dots, busy, idleSpin, reduced, mode, reveal, hoverCell: hover?.cell ?? -1, hoverDot: hover?.dot ?? -1 };
 
   useEffect(() => {
     dirty.current = true;
-  }, [pins, cells, selectedCell, busy, mode, hover, sizeTick, reduced]);
+  }, [pins, cells, selectedCell, dots, busy, mode, hover, sizeTick, reduced]);
 
   // Keep canvas size in sync with its container.
   useEffect(() => {
@@ -198,6 +204,11 @@ export default function Globe({
     const v = view.current;
     fly.current = { from: { ...v }, to: { ...v, ...to }, t0: performance.now(), dur: live.current.reduced ? 1 : duration, arc };
   }, []);
+
+  // The app can ask for a different map style (for example the flat map for a world overview).
+  useEffect(() => {
+    if (modeRequest) switchMode(modeRequest.mode);
+  }, [modeRequest?.nonce]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Camera flies to a new focus.
   useEffect(() => {
@@ -364,6 +375,27 @@ export default function Globe({
         }
       }
 
+      // Data markers (one per place in the World view).
+      const positions = [];
+      L.dots.forEach((dot, i) => {
+        if (isGlobe && geoDistance([dot.lon, dot.lat], [v.lon, v.lat]) > Math.PI / 2 - 0.02) return;
+        const pt = proj([dot.lon, dot.lat]);
+        if (!pt) return;
+        const r = dot.r ?? 5;
+        positions.push({ i, x: pt[0], y: pt[1], r });
+        ctx.beginPath();
+        ctx.arc(pt[0], pt[1], r, 0, Math.PI * 2);
+        ctx.fillStyle = withAlpha(dot.color, dot.ring ? 0.9 : 0.55);
+        ctx.shadowColor = dot.color;
+        ctx.shadowBlur = dot.ring ? 12 : 4;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.lineWidth = dot.ring || L.hoverDot === i ? 2 : 1;
+        ctx.strokeStyle = L.hoverDot === i ? "#ffffff" : dot.ring ? "rgba(255,255,255,0.85)" : "rgba(4,6,13,0.7)";
+        ctx.stroke();
+      });
+      dotPositions.current = positions;
+
       // Pins and the radar sweep.
       L.pins.forEach((pin, idx) => {
         if (isGlobe && geoDistance([pin.lon, pin.lat], [v.lon, v.lat]) > Math.PI / 2 - 0.03) return;
@@ -421,6 +453,20 @@ export default function Globe({
     return { lat: ll[1], lon: wrapLon(ll[0]) };
   };
 
+  /** Index of the data marker under a screen point, or -1. */
+  const dotAt = (x, y) => {
+    let best = -1;
+    let bestDist = Infinity;
+    for (const p of dotPositions.current) {
+      const d = Math.hypot(p.x - x, p.y - y);
+      if (d <= Math.max(p.r + 5, 10) && d < bestDist) {
+        best = p.i;
+        bestDist = d;
+      }
+    }
+    return best;
+  };
+
   const onPointerDown = (e) => {
     if (e.pointerType === "mouse" && e.button !== 0) return;
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -456,10 +502,11 @@ export default function Globe({
     }
     const L = live.current;
     const cell = L.cells.findIndex((c) => cellContains(c, ll.lat, ll.lon, L.cellHalf));
-    const key = `${ll.lat.toFixed(1)}|${ll.lon.toFixed(1)}|${cell}`;
+    const dot = dotAt(x, y);
+    const key = `${ll.lat.toFixed(1)}|${ll.lon.toFixed(1)}|${cell}|${dot}`;
     if (key !== hoverKey.current) {
       hoverKey.current = key;
-      setHover({ ...ll, cell, x, y });
+      setHover({ ...ll, cell, dot, x, y });
     }
   };
 
@@ -469,6 +516,11 @@ export default function Globe({
     idleAt.current = performance.now() + 6000;
     if (d && !d.moved && performance.now() - d.t0 < 700) {
       const [x, y] = eventPoint(e);
+      const dot = dotAt(x, y);
+      if (dot >= 0) {
+        onDotPick?.(live.current.dots[dot]);
+        return;
+      }
       const ll = lonLatAt(x, y);
       if (ll) onPick?.(ll.lat, ll.lon);
     }
@@ -504,6 +556,7 @@ export default function Globe({
   };
 
   const hoveredCell = hover && hover.cell >= 0 ? cells[hover.cell] : null;
+  const hoveredDot = hover && hover.dot >= 0 ? dots[hover.dot] : null;
   const primary = pins[0];
 
   return (
@@ -518,6 +571,7 @@ export default function Globe({
       <canvas
         ref={canvasRef}
         className="globe-canvas"
+        style={hoveredDot ? { cursor: "pointer" } : undefined}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
@@ -553,11 +607,13 @@ export default function Globe({
       </div>
 
       <div className="hud hud-bl">{children}</div>
-      <div className="hud hud-br hint" aria-hidden="true">drag · rotate &nbsp; scroll · zoom &nbsp; click · drop pin</div>
+      {Children.toArray(children).length === 0 && (
+        <div className="hud hud-br hint" aria-hidden="true">drag · rotate &nbsp; scroll · zoom &nbsp; click · drop pin</div>
+      )}
 
-      {hoveredCell?.tip && (
+      {(hoveredDot?.tip || hoveredCell?.tip) && (
         <div className="globe-tip" style={{ left: Math.min(hover.x + 16, sizeRef.current.w - 230), top: Math.max(8, hover.y - 8) }}>
-          {hoveredCell.tip}
+          {hoveredDot?.tip ?? hoveredCell.tip}
         </div>
       )}
     </div>

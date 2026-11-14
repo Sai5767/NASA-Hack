@@ -22,3 +22,7 @@ export const fetchTrend = (params, signal) => getJson("/api/trend", params, sign
 export const fetchSweep = (params, signal) => getJson("/api/sweep", params, signal);
 export const fetchGrid = (params, signal) => getJson("/api/grid", params, signal);
 export const fetchDuel = (params, signal) => getJson("/api/duel", params, signal);
+export const fetchSuspects = (params, signal) => getJson("/api/suspects", params, signal);
+export const fetchVitals = (params, signal) => getJson("/api/vitals", params, signal);
+export const fetchWorld = (params, signal) => getJson("/api/world", params, signal);
+export const fetchPlaces = (signal) => getJson("/api/places", {}, signal);

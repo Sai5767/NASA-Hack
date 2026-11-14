@@ -4,6 +4,7 @@ const LINES = [
   "TREND DETECTIVE · Earth system case files",
   "linking to NASA POWER data service ........ ok",
   "loading 19 Earth-system variables ......... ok",
+  "tuning in NASA, NOAA and NSIDC streams .... ok",
   "calibrating significance tests ............ ok",
   "ready. choose a place on the globe.",
 ];

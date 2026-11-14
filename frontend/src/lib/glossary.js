@@ -84,6 +84,24 @@ export const GLOSSARY = [
       "Five checks: Mann–Kendall significant, regression agrees, most months agree, survives trimming 5 years from the ends, and change larger than normal swings. Strong = all five and p < 0.01; Moderate = significant and at least four; Weak = significant but fewer, or p < 0.10 with three; otherwise none.",
   },
   {
+    id: "shape",
+    term: "Shape check",
+    short:
+      "Is the record a steady ramp, or more like a sudden step to a new level? It compares a straight line with a single step (and runs the Pettitt change-point test). A step means a straight-line trend can mislead.",
+  },
+  {
+    id: "enso",
+    term: "ENSO",
+    short:
+      "El Niño–Southern Oscillation: a natural swing in Pacific Ocean temperatures every few years that shifts weather around the world. Removing it shows whether a trend is more than that swing.",
+  },
+  {
+    id: "amplification",
+    term: "Heat ratio",
+    short:
+      "How many degrees a place warms for each degree the whole planet warms, found by regressing the place's yearly temperature on NASA GISTEMP's global temperature. Above 1× means it warms faster than the planet.",
+  },
+  {
     id: "reanalysis",
     term: "Reanalysis",
     short:

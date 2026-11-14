@@ -3,7 +3,7 @@ import { CASES, INTAKE_PLACES, INTAKE_TOPICS, SURPRISES } from "../lib/cases.js"
 import { GLOSSARY } from "../lib/glossary.js";
 import Modal from "./Modal.jsx";
 
-const TAB_LABEL = { investigate: "Case file", sweep: "Sweep", scan: "Region scan", duel: "Duel" };
+const TAB_LABEL = { investigate: "Case file", sweep: "Sweep", scan: "Region scan", duel: "Duel", world: "World survey", vitals: "Planet vitals" };
 
 export function CasesDialog({ variables, onOpen, onClose }) {
   const name = (id) => variables.find((v) => v.id === id)?.label ?? id;
@@ -21,7 +21,7 @@ export function CasesDialog({ variables, onOpen, onClose }) {
               <span className="dim">{c.question}</span>
               <span className="tags mono">
                 <i>{name(c.variable)}</i>
-                <i>{c.a.name}{c.b ? ` vs ${c.b.name}` : ""}</i>
+                <i>{c.a?.name ?? "Worldwide"}{c.b ? ` vs ${c.b.name}` : ""}</i>
               </span>
               <span className="open">Open case ▸</span>
             </button>
@@ -120,7 +120,8 @@ export function AboutDialog({ onClose }) {
         </p>
         <h3>Data and credits</h3>
         <ul>
-          <li>Monthly Earth-system data: NASA Langley Research Center (LaRC) POWER Project, funded through the NASA Earth Science/Applied Science Program.</li>
+          <li>Monthly Earth-system data at any place: NASA Langley Research Center (LaRC) POWER Project, funded through the NASA Earth Science/Applied Science Program.</li>
+          <li>Planet-wide records: NASA GISS Surface Temperature Analysis (GISTEMP v4); NOAA Global Monitoring Laboratory (CO₂ at Mauna Loa); NSIDC Sea Ice Index (NOAA@NSIDC); NOAA Climate Prediction Center and NCEI (ENSO, NAO, PDO).</li>
           <li>Land and borders: Natural Earth (public domain), via the world-atlas package. Fonts: Space Grotesk and JetBrains Mono (SIL Open Font License).</li>
           <li>This project is not affiliated with or endorsed by NASA.</li>
         </ul>

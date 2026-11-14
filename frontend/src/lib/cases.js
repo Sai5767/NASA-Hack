@@ -73,6 +73,43 @@ export const CASES = [
     ],
   },
   {
+    id: "alaska",
+    tab: "investigate",
+    codename: "Who's behind Alaska's warming?",
+    question: "Which big climate pattern moves in step with Arctic Alaska's temperature, and does the trend survive without it?",
+    variable: "T2M",
+    a: { lat: 70, lon: -150, name: "Arctic Alaska" },
+    clues: [
+      "Scroll to the suspect lineup: is any climate pattern LINKED, and which ones have an ALIBI?",
+      "Read the ENSO alibi check: does the trend change once El Niño and La Niña are removed?",
+      "Compare with NASA GISTEMP's independent reading for the same latitude band.",
+    ],
+  },
+  {
+    id: "fastest",
+    tab: "world",
+    codename: "Where is it changing fastest?",
+    question: "Across the sample places, where is air temperature rising or falling the most?",
+    variable: "T2M",
+    clues: [
+      "Switch the map to Map view to see every dot at once. Ringed dots hold up after correcting for testing many places.",
+      "Size shows signal vs noise: a big dot is a change that stands well clear of normal swings.",
+      "Click any dot to open its full case file.",
+    ],
+  },
+  {
+    id: "vitals",
+    tab: "vitals",
+    codename: "The planet's vital signs",
+    question: "Which of Earth's vital signs are trending, which are not, and which month changes most?",
+    variable: "T2M",
+    clues: [
+      "Compare the evidence grades: are all four trend vitals equally clear?",
+      "Find the month with the steepest sea-ice decline.",
+      "Read the shape line for Antarctic sea ice: is a straight line the right story?",
+    ],
+  },
+  {
     id: "heartland",
     tab: "scan",
     codename: "Heartland scan",
