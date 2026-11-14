@@ -59,6 +59,24 @@ def test_enso_is_linked_and_independent_rhythms_are_not(world):
     assert "correlations" in ctx["caveat"]
 
 
+def test_predictability_finds_the_one_driver_that_matters(world):
+    p = _run(world)["predictability"]
+    assert p["n_years"] == len(YEARS)
+    assert p["cv_r2"] > 0.5 and p["useful"] is True  # ENSO drives 0.8x of the made-up swings
+    drops = {i["id"]: i["drop"] for i in p["importance"]}
+    assert drops["oni"] == max(drops.values()) and drops["oni"] > 0.3
+    assert abs(drops["pdo"]) < 0.05 and abs(drops["nao"]) < 0.05  # independent drivers add nothing
+
+
+def test_predictability_admits_when_the_drivers_cannot_predict_anything(world):
+    info = VARIABLES["T2M"]
+    rng = random.Random(77)
+    noise = {y: rng.gauss(0, 1) for y in YEARS}  # unrelated to every driver
+    stats = annual_core(info, YEARS, [noise[y] for y in YEARS])["stats"]
+    p = asyncio.run(build_context(info, 42.0, YEARS, [noise[y] for y in YEARS], stats))["predictability"]
+    assert p["useful"] is False and p["cv_r2"] < 0.05
+
+
 def test_removing_enso_recovers_the_underlying_trend(world):
     ctx = _run(world)
     adj = ctx["enso_adjusted"]

@@ -75,6 +75,38 @@ function HeatRatio({ a, label }) {
   );
 }
 
+function Predictability({ p }) {
+  const top = [...p.importance].sort((a, b) => b.drop - a.drop)[0];
+  const maxDrop = Math.max(0.05, ...p.importance.map((i) => Math.max(0, i.drop)));
+  return (
+    <>
+      <p>
+        {p.useful ? (
+          <>
+            Together, the three patterns predict about <b>{Math.round(p.cv_r2 * 100)}%</b> of this place's year-to-year swings in years the model has never
+            seen (<Term id="cv">leave-one-year-out testing</Term>). The most useful is <b>{top.label}</b>.
+          </>
+        ) : (
+          <>
+            Together, the three patterns do <b>not</b> predict this place's year-to-year swings better than guessing the average (cross-validated R²{" "}
+            <span className="mono">{p.cv_r2.toFixed(2)}</span>), so the links above are too weak to use for forecasting.
+          </>
+        )}
+      </p>
+      <ul className="importance">
+        {p.importance.map((i) => (
+          <li key={i.id}>
+            <span>{i.label}</span>
+            <span className="imp-bar" aria-hidden="true"><i style={{ width: `${(Math.max(0, i.drop) / maxDrop) * 100}%` }} /></span>
+            <span className="mono">{i.drop >= 0 ? "+" : ""}{(i.drop * 100).toFixed(0)}%</span>
+          </li>
+        ))}
+      </ul>
+      <p className="faint small">Importance is how much of that out-of-sample skill disappears when one pattern's values are shuffled.</p>
+    </>
+  );
+}
+
 /** The "why": which big climate patterns move with this place, and how it compares with independent data. */
 export default function Suspects({ data }) {
   const { variable, location, period } = data;
@@ -116,6 +148,13 @@ export default function Suspects({ data }) {
               <Suspect key={s.id} s={s} label={variable.label} index={i} />
             ))}
           </ul>
+
+          {ctx.predictability && (
+            <div className="finding">
+              <p className="eyebrow">Can they forecast it? <span className="badge ml">machine learning</span></p>
+              <Predictability p={ctx.predictability} />
+            </div>
+          )}
 
           {ctx.enso_adjusted && (
             <div className="finding">

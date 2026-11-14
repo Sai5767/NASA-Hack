@@ -27,7 +27,9 @@ from .analysis import (
     annual_core,
     grid_points,
 )
+from .archetypes import build_archetypes
 from .context import build_context
+from .forecast import run_forecast_lab
 from .morans import morans_i
 from .nasa_power import VARIABLES, PowerError
 from .places import PLACES
@@ -373,6 +375,40 @@ async def world(
         "top_falling": sorted((e for e in solid if e["slope_per_decade"] < 0), key=lambda e: e["slope_per_decade"])[:5],
         "note": "These are sample sites around the world, not an evenly spaced or complete picture of the planet.",
     }
+
+
+@app.get("/api/forecast")
+async def forecast(
+    variable: str,
+    lat: float = Query(..., ge=-90, le=90),
+    lon: float = Query(..., ge=-180, le=180),
+    start_year: int = Query(FIRST_YEAR),
+    end_year: int = Query(date.today().year - 1),
+) -> dict:
+    """Forecast lab: backtested 1-5 year forecast with conformal error bands, and how it compares with naive baselines."""
+    _check_variable(variable)
+    _check_years(start_year, end_year)
+    try:
+        res = await analyze_point(variable, lat, lon, start_year, end_year, detail=False)
+    except AnalysisError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except PowerError as exc:
+        raise HTTPException(502, str(exc)) from exc
+    years = [a["year"] for a in res["annual"]]
+    values = [a["value"] for a in res["annual"]]
+    lab = run_forecast_lab(years, values)
+    return {"variable": {"id": variable, **VARIABLES[variable]}, "location": {"lat": lat, "lon": lon}, **lab}
+
+
+@app.get("/api/archetypes")
+async def archetypes(
+    start_year: int = Query(FIRST_YEAR),
+    end_year: int = Query(date.today().year - 1),
+    k: int | None = Query(None, ge=2, le=6, description="Number of archetypes; defaults to the best-separated choice"),
+) -> dict:
+    """Trend archetypes: cluster the sample places by how all their variables are changing, and find climate twins."""
+    _check_years(start_year, end_year)
+    return await build_archetypes(start_year, end_year, k=k)
 
 
 @app.get("/api/duel")

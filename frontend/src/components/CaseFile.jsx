@@ -7,6 +7,7 @@ import Fingerprint from "./charts/Fingerprint.jsx";
 import Stripes from "./charts/Stripes.jsx";
 import TrendChart from "./charts/TrendChart.jsx";
 import InView from "./InView.jsx";
+import ForecastLab from "./ForecastLab.jsx";
 import Suspects from "./Suspects.jsx";
 import Term from "./Term.jsx";
 
@@ -232,6 +233,10 @@ export default function CaseFile({ data }) {
 
       <InView minHeight={300}>
         <Suspects data={data} />
+      </InView>
+
+      <InView minHeight={420}>
+        <ForecastLab data={data} />
       </InView>
 
       <section className="card notes">

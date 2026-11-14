@@ -12,6 +12,7 @@ import asyncio
 
 from . import streams
 from .analysis import ALPHA, MIN_YEARS, annual_core
+from .ml import cv_r2, loo_predictions, permutation_importance
 from .nasa_power import annual_means
 from .stats import (
     benjamini_hochberg,
@@ -61,6 +62,37 @@ def _rhythm_link(local: dict[int, float], driver: dict[int, float]) -> dict | No
         "n_eff": n_eff,
         "p_value": correlation_p_value(r, n_eff),
         "explained": r * r * 100.0,
+    }
+
+
+PREDICTABILITY_LAMBDA = 5.0   # fixed (not tuned on the same data it is scored on)
+PREDICTABILITY_REPEATS = 30
+
+
+def _predictability(local: dict[int, float], drivers: dict[str, dict[int, float]]) -> dict | None:
+    """How much of the year-to-year swing can ENSO, PDO and NAO together predict in years the model has not seen?
+
+    Ridge regression on the detrended series, scored by leave-one-year-out cross-validation. Positive CV R^2 means the
+    model beats guessing the average for unseen years; zero or below means the drivers give no usable forecast.
+    """
+    ids = [r["id"] for r in RHYTHMS]
+    if any(d not in drivers for d in ids):
+        return None
+    years = sorted(set(local).intersection(*(set(drivers[d]) for d in ids)))
+    if len(years) < MIN_COMMON_YEARS:
+        return None
+    times = [float(t) for t in years]
+    y = linear_detrend([local[t] for t in years], times)
+    columns = [linear_detrend([drivers[d][t] for t in years], times) for d in ids]
+    x = [[col[i] for col in columns] for i in range(len(years))]
+    score = cv_r2(y, loo_predictions(x, y, PREDICTABILITY_LAMBDA))
+    drops = permutation_importance(x, y, PREDICTABILITY_LAMBDA, repeats=PREDICTABILITY_REPEATS, seed=1)
+    labels = {r["id"]: r["label"] for r in RHYTHMS}
+    return {
+        "n_years": len(years),
+        "cv_r2": score,
+        "useful": score > 0.05,
+        "importance": [{"id": d, "label": labels[d], "drop": drop} for d, drop in zip(ids, drops)],
     }
 
 
@@ -159,9 +191,12 @@ async def build_context(variable_info: dict, lat: float, years: list[int], value
 
     suspects: list[dict] = []
     testable: list[int] = []
+    driver_series: dict[str, dict[int, float]] = {}
     for rhythm in RHYTHMS:
         entry = {"id": rhythm["id"], "label": rhythm["label"], "high_phase": rhythm["high_phase"], "low_phase": rhythm["low_phase"], "ok": False}
         driver = fetched(rhythm["id"], rhythm["label"])
+        if driver:
+            driver_series[rhythm["id"]] = driver
         link = _rhythm_link(local, driver) if driver else None
         if link:
             entry.update(link, ok=True, significant_fdr=False)
@@ -190,6 +225,7 @@ async def build_context(variable_info: dict, lat: float, years: list[int], value
     return {
         "years": [years[0], years[-1]],
         "suspects": suspects,
+        "predictability": _predictability(local, driver_series),
         "enso_adjusted": enso_adjusted,
         "amplification": amplification,
         "zonal": zonal,

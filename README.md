@@ -32,6 +32,7 @@ How the app meets each part of the challenge text.
 | Seasonal cycle should be removed | Monthly anomalies; per-month trend fingerprint |
 | Longer records can make a trend significant | **Emergence chart**: how the evidence builds as years are added |
 | Trends can be non-linear; linear is a good start | Linear trends, plus a **shape check** (steady ramp vs step change, Pettitt test) that warns when a line misleads |
+| Beyond the brief | Backtested **forecasts** with calibrated bands, **archetype clustering** of places, and a **predictability** model (see Machine learning) |
 
 ### Data streams
 
@@ -59,6 +60,8 @@ Not used, and why: NASA's Hydrology Data Rods (the request now returns a web pag
 - **World survey:** one variable at 68 sample sites on a flat map. Dot color = direction, ring = survives correction, size = signal vs noise.
 - **Planet vitals:** global temperature, CO₂, Arctic and Antarctic sea ice get the same case-file engine; ENSO/PDO/NAO are shown as status readouts and
   deliberately not tested for a trend.
+- **Machine learning** (see below): a **forecast lab** with a replay slider, **trend archetypes and climate twins**, and a cross-validated
+  **predictability** model.
 - **Shareable links** (the URL carries the whole question), CSV export, keyboard-accessible globe, `prefers-reduced-motion` respected,
   and an error screen instead of a blank page if something breaks.
 
@@ -73,6 +76,26 @@ Not used, and why: NASA's Hydrology Data Rods (the request now returns a web pag
 - **Robustness:** the trend is re-tested after trimming 5 years from the start, the end, and both.
 - **Shape check:** best step vs straight line (variance explained) plus the Pettitt change-point test.
 - **Evidence grade** (strong / moderate / weak / none) comes from five visible checks.
+
+## Machine learning
+
+All of it is pure Python (no ML libraries), seeded, tested against known answers, and each piece reports how far to trust it.
+
+- **Forecast lab (supervised learning, backtesting).** Eight models compete in a rolling-origin backtest: two naive baselines, three statistical trend
+  models, a **ridge regression on past years**, and an ensemble. Each is trained only on data up to a past year and scored on the next 1–5 years.
+  The winner forecasts the next five years. Its error band is a **split-conformal interval** built from its own backtest errors, and its coverage is
+  re-checked on origins it was not calibrated on. If nothing beats the naive baseline, the app says the series is hard to forecast. A **replay slider**
+  shows what the model would have predicted at an earlier year next to what actually happened.
+- **Trend archetypes and climate twins (unsupervised learning).** Each of the 68 sample places gets a fingerprint: the signal-vs-noise of 15 variables,
+  group-weighted so five temperature variables cannot dominate. **k-means** (k-means++ starts) groups them. The **silhouette score** and a bootstrap
+  **stability** score (adjusted Rand index over resamples) are shown, and you can explore other numbers of archetypes. Cosine-similarity nearest
+  neighbors give every place its **climate twins**.
+- **Predictability (cross-validated ridge regression).** How much of a place's year-to-year swing do ENSO, PDO and NAO predict together, in years the model
+  has not seen (leave-one-year-out), with permutation importance for each driver.
+
+These are statistical extrapolation and pattern-finding on short records, not climate projections. On real data the checks behave sensibly: ENSO
+predicts about 86% of the equatorial Pacific's yearly swings but essentially none of Iowa's; the forecast lab credits skill for Delhi's sunlight
+and refuses to claim any for Sahel rainfall.
 
 ## Run it
 
@@ -119,6 +142,7 @@ Parsers are tested on samples copied from the real files, and a failing stream i
 
 ```
 backend/app/    nasa_power.py  streams.py  stats.py  analysis.py  context.py  planet.py  places.py  morans.py  main.py
+                ml.py (ridge, k-means, silhouette, stability)  forecast.py  archetypes.py
 backend/tests/  reference-value, pipeline, parser and API tests
 frontend/src/   components/ (Globe, CaseFile, Suspects, Sweep, Scan, Duel, World, Vitals, charts/…)  lib/  styles/
 ```

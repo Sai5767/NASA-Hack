@@ -102,6 +102,42 @@ export const GLOSSARY = [
       "How many degrees a place warms for each degree the whole planet warms, found by regressing the place's yearly temperature on NASA GISTEMP's global temperature. Above 1× means it warms faster than the planet.",
   },
   {
+    id: "cv",
+    term: "Leave-one-year-out testing",
+    short:
+      "Each year is predicted by a model trained on all the other years, so the score reflects years the model never saw. The cross-validated R² says how much better than guessing the average it does; zero or below means no real skill.",
+  },
+  {
+    id: "backtest",
+    term: "Backtest",
+    short:
+      "A fair test of a forecaster: pretend it is some past year, give the model only the data up to then, ask for the next few years, and compare with what really happened. Repeating this over many past years shows whether a model has real skill.",
+  },
+  {
+    id: "conformal",
+    term: "Conformal error band",
+    short:
+      "The forecast's error band is taken from the winning model's own backtest mistakes: the range that contained the truth 80% of the time in the past. It makes no bell-curve assumption, and its coverage is then re-checked on years it was not calibrated on.",
+  },
+  {
+    id: "kmeans",
+    term: "k-means clustering",
+    short:
+      "An unsupervised machine-learning method that groups items into k clusters by repeatedly assigning each to the nearest cluster center and moving the centers. It finds groups in the data without being told what to look for.",
+  },
+  {
+    id: "silhouette",
+    term: "Separation (silhouette)",
+    short:
+      "How well separated the clusters are, from −1 to +1. Above 0.5 is strong, 0.25 to 0.5 is reasonable, below 0.25 is weak: the groups overlap and should not be over-interpreted.",
+  },
+  {
+    id: "stability",
+    term: "Stability",
+    short:
+      "Do the same groups appear when 20% of the places are left out at random? Measured with the adjusted Rand index (1 = identical groups, about 0 = random). Unstable groups are probably an accident of which places were sampled.",
+  },
+  {
     id: "reanalysis",
     term: "Reanalysis",
     short:

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { fetchDuel, fetchGrid, fetchPlaces, fetchSweep, fetchTrend, fetchVariables, fetchVitals, fetchWorld } from "./api.js";
+import { fetchArchetypes, fetchDuel, fetchGrid, fetchPlaces, fetchSweep, fetchTrend, fetchVariables, fetchVitals, fetchWorld } from "./api.js";
+import Archetypes, { CLUSTER_COLORS } from "./components/Archetypes.jsx";
 import Boot from "./components/Boot.jsx";
 import Briefing from "./components/Briefing.jsx";
 import CaseFile from "./components/CaseFile.jsx";
@@ -26,6 +27,7 @@ const SWEEP_STEPS = ["Pulling 19 variables in one request…", "Removing the sea
 const SCAN_STEPS = ["Contacting NASA POWER…", "Analyzing each place on the grid…", "Applying false-discovery control…", "Measuring the spatial pattern…"];
 const DUEL_STEPS = ["Fetching both places…", "Fitting both trends…", "Testing whether the rates differ…"];
 const WORLD_STEPS = ["Asking NASA POWER about sample places around the world…", "Fitting a trend at each one…", "Applying false-discovery control…", "Placing the dots…"];
+const ARCH_STEPS = ["Fetching every variable at each sample place…", "Measuring each variable's change against its normal swings…", "Clustering similar fingerprints…", "Testing whether the groups are stable…"];
 const VITALS_STEPS = ["Reading NASA GISTEMP…", "Reading NOAA CO₂ and NSIDC sea ice…", "Testing each vital sign…", "Checking the climate rhythms…"];
 
 const keys = {
@@ -35,6 +37,7 @@ const keys = {
   duel: (p, b) => [p.variable, p.lat, p.lon, b.lat, b.lon, p.start, p.end].join("|"),
   world: (w) => [w.variable, w.start, w.end].join("|"),
   vitals: (y) => [y.start, y.end].join("|"),
+  archetypes: (y, k) => [y.start, y.end, k ?? "best"].join("|"),
 };
 
 const toDraftPatch = (patch) => {
@@ -113,6 +116,20 @@ function worldDots(data) {
       tip: `${p.name} · ${signed(p.slope_per_decade)} ${units}/decade · ${status}`,
     };
   });
+}
+
+/** One dot per place, colored by the archetype (cluster) it belongs to. */
+function archetypeDots(data) {
+  return data.places.map((p) => ({
+    id: p.id,
+    name: p.name,
+    lat: p.lat,
+    lon: p.lon,
+    color: CLUSTER_COLORS[p.cluster % CLUSTER_COLORS.length],
+    r: 6,
+    ring: false,
+    tip: `${p.name} · archetype ${p.cluster + 1} · twins: ${p.twins.map((t) => t.name).join(", ")}`,
+  }));
 }
 
 function seenBoot() {
@@ -200,6 +217,9 @@ export default function App() {
   const [duel, setDuel] = useState(EMPTY);
   const [world, setWorld] = useState(EMPTY);
   const [vitals, setVitals] = useState(EMPTY);
+  const [worldMode, setWorldMode] = useState("survey");
+  const [archetypes, setArchetypes] = useState(EMPTY);
+  const [archK, setArchK] = useState(null);
 
   const controllers = useRef({});
   const draftRef = useRef(draft);
@@ -278,6 +298,19 @@ export default function App() {
     [run],
   );
   const runVitals = useCallback((y) => run("vitals", keys.vitals(y), setVitals, (s) => fetchVitals({ start_year: y.start, end_year: y.end }, s)), [run]);
+  const runArchetypes = useCallback(
+    async (y, k) => {
+      const data = await run("archetypes", keys.archetypes(y, k), setArchetypes, (s) =>
+        fetchArchetypes({ start_year: y.start, end_year: y.end, ...(k ? { k } : {}) }, s),
+      );
+      if (data) {
+        setModeRequest({ mode: "flat", nonce: Date.now() });
+        setFocus({ lat: 18, lon: 10, k: 1.05, nonce: Date.now() + 1 });
+      }
+      return data;
+    },
+    [run],
+  );
   const runScan = useCallback(async () => {
     if (!params) return null;
     const data = await run("grid", keys.grid(params, scanCfg), setGrid, (s) =>
@@ -292,13 +325,14 @@ export default function App() {
 
   // Run whichever analysis the open tab needs when the question changes.
   useEffect(() => {
-    if (tab === "world" && world.key !== keys.world(worldParams)) runWorld(worldParams);
+    if (tab === "world" && worldMode === "survey" && world.key !== keys.world(worldParams)) runWorld(worldParams);
+    if (tab === "world" && worldMode === "archetypes" && archetypes.key !== keys.archetypes(vitalsYears, archK)) runArchetypes(vitalsYears, archK);
     if (tab === "vitals" && vitals.key !== keys.vitals(vitalsYears)) runVitals(vitalsYears);
     if (!params) return;
     if (tab === "investigate" && trend.key !== keys.trend(params)) runTrend(params);
     if (tab === "sweep" && sweep.key !== keys.sweep(params)) runSweep(params);
     if (tab === "duel" && pinB && duel.key !== keys.duel(params, pinB)) runDuel(params, pinB);
-  }, [tab, params, pinB, worldParams, vitalsYears]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [tab, params, pinB, worldParams, vitalsYears, worldMode, archK]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (tab === "scan" && autoScan.current && params) {
@@ -314,10 +348,10 @@ export default function App() {
 
   // On narrow screens the results sit below the globe: bring them into view.
   useEffect(() => {
-    if (window.innerWidth <= 1000 && (trend.data || sweep.data || grid.data || duel.data || world.data || vitals.data)) {
+    if (window.innerWidth <= 1000 && (trend.data || sweep.data || grid.data || duel.data || world.data || vitals.data || archetypes.data)) {
       resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
-  }, [trend.data, sweep.data, grid.data, duel.data, world.data, vitals.data]);
+  }, [trend.data, sweep.data, grid.data, duel.data, world.data, vitals.data, archetypes.data]);
 
   const commit = useCallback((patch, opts = {}) => {
     setParams((prev) => ({
@@ -337,8 +371,14 @@ export default function App() {
   const gridFresh = tab === "scan" && !!grid.data && !!params && grid.key === keys.grid(params, scanCfg);
   const cells = useMemo(() => (gridFresh ? scanCells(grid.data) : []), [gridFresh, grid.data]);
   const cellHalf = gridFresh ? grid.data.size / (grid.data.n - 1) / 2 : 0;
-  const worldFresh = tab === "world" && !!world.data && world.key === keys.world(worldParams);
-  const dots = useMemo(() => (worldFresh ? worldDots(world.data) : []), [worldFresh, world.data]);
+  const worldFresh = tab === "world" && worldMode === "survey" && !!world.data && world.key === keys.world(worldParams);
+  const archFresh =
+    tab === "world" && worldMode === "archetypes" && !!archetypes.data?.ok && archetypes.key === keys.archetypes(vitalsYears, archK);
+  const dots = useMemo(() => {
+    if (worldFresh) return worldDots(world.data);
+    if (archFresh) return archetypeDots(archetypes.data);
+    return [];
+  }, [worldFresh, archFresh, world.data, archetypes.data]);
 
   const handlePick = (lat, lon) => {
     const la = round2(lat);
@@ -418,6 +458,7 @@ export default function App() {
       setDraft((d) => ({ ...d, variable: c.variable, start: String(FIRST_YEAR), end: String(LAST_FULL_YEAR) }));
       setParams((prev) => (prev ? { ...prev, variable: c.variable, start: FIRST_YEAR, end: LAST_FULL_YEAR } : prev));
     }
+    if (c.tab === "world") setWorldMode(c.mode ?? "survey");
     setTab(c.tab);
   };
 
@@ -447,7 +488,7 @@ export default function App() {
   };
 
   const retry = () => {
-    if (tab === "world") return runWorld(worldParams);
+    if (tab === "world") return worldMode === "archetypes" ? runArchetypes(vitalsYears, archK) : runWorld(worldParams);
     if (tab === "vitals") return runVitals(vitalsYears);
     if (!params) return undefined;
     if (tab === "investigate") return runTrend(params);
@@ -460,7 +501,7 @@ export default function App() {
     ...(params ? [{ lat: params.lat, lon: params.lon, color: COLORS.a, label: "A" }] : []),
     ...(tab === "duel" && pinB ? [{ lat: pinB.lat, lon: pinB.lon, color: COLORS.b, label: "B", phase: 0.5 }] : []),
   ];
-  const busy = trend.loading || sweep.loading || grid.loading || duel.loading || world.loading || vitals.loading;
+  const busy = trend.loading || sweep.loading || grid.loading || duel.loading || world.loading || vitals.loading || archetypes.loading;
   const scanStale = !!params && !!grid.data && grid.key !== keys.grid(params, scanCfg);
   const briefingTab = activeCase?.tab;
   const tabs = [
@@ -529,12 +570,20 @@ export default function App() {
                 <li className="faint">solid outline = holds after correction</li>
               </ul>
             )}
-            {cells.length === 0 && dots.length > 0 && (
+            {cells.length === 0 && worldFresh && dots.length > 0 && (
               <ul className="globe-legend mono" aria-label="Map key">
                 <li><i className="round" style={{ background: COLORS.up }} /> rising</li>
                 <li><i className="round" style={{ background: COLORS.down }} /> falling</li>
                 <li><i className="round" style={{ background: COLORS.flat }} /> no clear trend</li>
                 <li className="faint">ringed = holds after correction · size = signal vs noise</li>
+              </ul>
+            )}
+            {cells.length === 0 && archFresh && (
+              <ul className="globe-legend mono" aria-label="Map key">
+                {archetypes.data.clusters.map((c) => (
+                  <li key={c.id}><i className="round" style={{ background: CLUSTER_COLORS[c.id % CLUSTER_COLORS.length] }} /> archetype {c.id + 1} · {c.size} places</li>
+                ))}
+                <li className="faint">hover a dot for its climate twins</li>
               </ul>
             )}
           </Globe>
@@ -636,14 +685,32 @@ export default function App() {
               </>
             )}
 
-            {tab === "world" &&
-              (world.loading ? (
-                <Loading title="Surveying the world" steps={WORLD_STEPS} />
-              ) : world.error ? (
-                <ErrorCard message={world.error} onRetry={retry} />
-              ) : world.data ? (
-                <World key={world.key} data={world.data} onOpen={openPlace} />
-              ) : null)}
+            {tab === "world" && (
+              <>
+                <div className="seg world-switch" role="group" aria-label="World view">
+                  <button type="button" className={worldMode === "survey" ? "on" : ""} onClick={() => setWorldMode("survey")}>One variable</button>
+                  <button type="button" className={worldMode === "archetypes" ? "on" : ""} onClick={() => setWorldMode("archetypes")}>All variables · archetypes</button>
+                </div>
+                {worldMode === "survey" &&
+                  (world.loading ? (
+                    <Loading title="Surveying the world" steps={WORLD_STEPS} />
+                  ) : world.error ? (
+                    <ErrorCard message={world.error} onRetry={retry} />
+                  ) : world.data ? (
+                    <World key={world.key} data={world.data} onOpen={openPlace} />
+                  ) : null)}
+                {worldMode === "archetypes" &&
+                  (archetypes.loading ? (
+                    <Loading title="Finding trend archetypes" steps={ARCH_STEPS} />
+                  ) : archetypes.error ? (
+                    <ErrorCard message={archetypes.error} onRetry={retry} />
+                  ) : archetypes.data?.ok ? (
+                    <Archetypes data={archetypes.data} onChooseK={setArchK} onOpen={openPlace} />
+                  ) : archetypes.data ? (
+                    <ErrorCard message={archetypes.data.message} />
+                  ) : null)}
+              </>
+            )}
 
             {tab === "vitals" &&
               (vitals.loading ? (

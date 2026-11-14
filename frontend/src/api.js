@@ -26,3 +26,5 @@ export const fetchSuspects = (params, signal) => getJson("/api/suspects", params
 export const fetchVitals = (params, signal) => getJson("/api/vitals", params, signal);
 export const fetchWorld = (params, signal) => getJson("/api/world", params, signal);
 export const fetchPlaces = (signal) => getJson("/api/places", {}, signal);
+export const fetchForecast = (params, signal) => getJson("/api/forecast", params, signal);
+export const fetchArchetypes = (params, signal) => getJson("/api/archetypes", params, signal);

@@ -110,6 +110,32 @@ export const CASES = [
     ],
   },
   {
+    id: "forecast",
+    tab: "investigate",
+    codename: "Could the detective have predicted it?",
+    question: "Using only past data, could a model have forecast Delhi's sunlight? How about the next five years?",
+    variable: "ALLSKY_SFC_SW_DWN",
+    a: { lat: 28.6, lon: 77.2, name: "Delhi region" },
+    clues: [
+      "Scroll to the forecast lab and drag the replay slider to an earlier year.",
+      "Compare the pink forecast with the white dots: how close did it get?",
+      "Read the scoreboard: which model won, and by how much against the naive baseline?",
+    ],
+  },
+  {
+    id: "twins",
+    tab: "world",
+    mode: "archetypes",
+    codename: "Climate twins",
+    question: "Which places are changing in the same way across all their variables, and who is Delhi's twin?",
+    variable: "T2M",
+    clues: [
+      "Read the separation and stability scores before trusting the groups.",
+      "Try a different number of archetypes: does the story survive?",
+      "Pick Delhi in the twins finder and see which places have the most similar pattern of change.",
+    ],
+  },
+  {
     id: "heartland",
     tab: "scan",
     codename: "Heartland scan",
