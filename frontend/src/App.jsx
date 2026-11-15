@@ -6,6 +6,8 @@ import Briefing from "./components/Briefing.jsx";
 import CaseFile from "./components/CaseFile.jsx";
 import { AboutDialog, CasesDialog, GlossaryDialog } from "./components/Dialogs.jsx";
 import Duel from "./components/Duel.jsx";
+import { ExplainContext } from "./components/ExplainContext.js";
+import Explainer from "./components/Explainer.jsx";
 import ForYou from "./components/ForYou.jsx";
 import Globe from "./components/Globe.jsx";
 import Home from "./components/Home.jsx";
@@ -203,6 +205,9 @@ export default function App() {
   const [viewPref, setViewPref] = useStoredState("td-view", null);
   const [detailFocus, setDetailFocus] = useState(null);
   const [forYouOpen, setForYouOpen] = useState(true);
+  const [explainer, setExplainer] = useState({ started: false, open: false, request: null });
+  const askExplainer = useCallback((request) => setExplainer({ started: true, open: true, request: request ? { ...request, nonce: Date.now() } : null }), []);
+  const explainTerm = useCallback((id) => askExplainer({ id }), [askExplainer]);
   const profile = useMemo(() => ({ ...DEFAULT_PROFILE, ...storedProfile }), [storedProfile]);
   const view = viewPref ?? defaultView(profile);
   const home = tab === "investigate" && !params;
@@ -574,7 +579,10 @@ export default function App() {
     </button>
   );
 
+  const explainData = tab === "investigate" && params && trend.data && trend.key === keys.trend(params) ? trend.data : null;
+
   return (
+    <ExplainContext.Provider value={explainTerm}>
     <div className="app">
       <Starfield />
       <svg width="0" height="0" style={{ position: "absolute" }} aria-hidden="true" focusable="false">
@@ -601,8 +609,9 @@ export default function App() {
           </div>
         </div>
         <nav className="nav" aria-label="Main">
-          <button type="button" className="btn btn-sm" onClick={() => setModal("intake")}>✦ Guided intake</button>
+          <button type="button" className="btn btn-sm" onClick={() => setModal("intake")}>✦ Personalise</button>
           <button type="button" className="btn btn-sm" onClick={() => setModal("cases")}>Case files</button>
+          <button type="button" className="btn btn-sm" onClick={() => askExplainer(null)}>? Explain</button>
           <button type="button" className="btn btn-sm" onClick={() => setModal("glossary")}>Glossary</button>
           <button type="button" className="btn btn-sm" onClick={() => setModal("about")}>About</button>
         </nav>
@@ -813,8 +822,12 @@ export default function App() {
 
       {modal === "cases" && <CasesDialog variables={variables} onOpen={openCase} onClose={() => setModal(null)} />}
       {modal === "intake" && <IntakeWizard initial={profile} onFinish={finishIntake} onSurprise={surprise} onClose={() => setModal(null)} />}
-      {modal === "glossary" && <GlossaryDialog onClose={() => setModal(null)} />}
+      {modal === "glossary" && <GlossaryDialog onClose={() => setModal(null)} onExplain={(id) => { setModal(null); explainTerm(id); }} />}
       {modal === "about" && <AboutDialog onClose={() => setModal(null)} />}
+      {explainer.started && (
+        <Explainer request={explainer.request} data={explainData} open={explainer.open} onClose={() => setExplainer((s) => ({ ...s, open: false }))} />
+      )}
     </div>
+    </ExplainContext.Provider>
   );
 }

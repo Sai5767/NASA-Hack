@@ -113,7 +113,7 @@ export default function Overview({ data, onDetail, onGo }) {
 
         <Answer n={3} question="4 · Is it real?" tone={grade.code === "none" ? "flat" : tone} headline={GRADE_WORDS[grade.code]} more="See the evidence" onMore={() => onDetail("evidence")}>
           <p className="dim">
-            {grade.passed} of {grade.total} checks passed, <Term id="pvalue">p</Term> = <span className="mono">{formatP(stats.p_value)}</span>. {pValueMeaning(stats)}
+            {grade.passed} of {grade.total} checks passed, <Term id="pvalue">p</Term> <span className="mono">{stats.p_value < 0.001 ? "< 0.001" : `= ${formatP(stats.p_value)}`}</span>. {pValueMeaning(stats)}
           </p>
         </Answer>
       </div>

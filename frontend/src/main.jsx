@@ -9,6 +9,7 @@ import "./styles/charts.css";
 import "./styles/extras.css";
 import "./styles/ml.css";
 import "./styles/overview.css";
+import "./styles/explainer.css";
 import "./styles/motion.css";
 import App from "./App.jsx";
 import ErrorBoundary from "./components/ErrorBoundary.jsx";

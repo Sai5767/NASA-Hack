@@ -32,7 +32,7 @@ export function CasesDialog({ variables, onOpen, onClose }) {
   );
 }
 
-export function GlossaryDialog({ onClose }) {
+export function GlossaryDialog({ onClose, onExplain }) {
   const [query, setQuery] = useState("");
   const items = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -47,7 +47,14 @@ export function GlossaryDialog({ onClose }) {
       <dl className="glossary">
         {items.map((g) => (
           <div key={g.id}>
-            <dt>{g.term}</dt>
+            <dt>
+              {g.term}{" "}
+              {onExplain && (
+                <button type="button" className="linklike" onClick={() => onExplain(g.id)}>
+                  Explain more ▸
+                </button>
+              )}
+            </dt>
             <dd>{g.short}</dd>
           </div>
         ))}

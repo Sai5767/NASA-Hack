@@ -221,7 +221,7 @@ button { cursor: pointer; }
 .term {
   position: relative;
   border-bottom: 1px dotted var(--accent);
-  cursor: help;
+  cursor: pointer;
   white-space: nowrap;
 }
 .term .term-pop {

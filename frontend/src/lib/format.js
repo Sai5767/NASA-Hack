@@ -32,6 +32,12 @@ export function formatP(p) {
   return p < 0.001 ? "< 0.001" : p.toFixed(3);
 }
 
+/** "p < 0.001" or "p = 0.219": the comparison sign belongs to the sentence, not the number. */
+export function formatPEq(p) {
+  if (p == null || !Number.isFinite(p)) return "p unknown";
+  return p < 0.001 ? "p < 0.001" : `p = ${p.toFixed(3)}`;
+}
+
 export function formatLat(lat) {
   return `${Math.abs(lat).toFixed(2)}°${lat >= 0 ? "N" : "S"}`;
 }
