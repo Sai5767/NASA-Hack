@@ -414,3 +414,43 @@ Do not call this complete until every point is true:
 - Final source/API/AI inventory and final handoff are accurate to the code actually shipped.
 
 When a visual request conflicts with scientific honesty, privacy, licensing, performance or accessibility, implement the safe truthful version and document the constraint rather than faking the effect.
+
+====================================================================
+12. ADDENDUM — OWNER UX FEEDBACK (added 15 November 2026)
+====================================================================
+
+Source: owner review PDF "Shits confusing ash" (13 points, screenshots of the current build). These are
+part of the acceptance criteria. Where an item is already satisfied by sections 1–11, the owning agent
+verifies it in the browser and says so in its report instead of re-doing it.
+
+Model/agent changes for this run (simple work moved off Opus):
+- A + B are merged into one read-only "Audit" agent (Opus 5.5).
+- C + H are merged into one "Backend" agent on Sonnet 5.5: the repairs are done and verified (341 passing);
+  this is now a re-run/drift check, not design work. Escalate to the lead if a real defect is found.
+- New agent J — "Charts" (Opus 5.5): owns the shared expandable chart viewer (item 7) and the chart
+  components under frontend/src/components/charts/, lib/chart.js and styles/charts.css.
+- I (Integration) runs on Sonnet 5.5; the lead makes final decisions.
+
+| # | Owner feedback | Owner agent | Model | What done looks like |
+| --- | --- | --- | --- | --- |
+| 1 | "What is site's own average?" (World map legend) | G | Opus | Legend says it in plain words, e.g. "warmer than this place usually is in this month", with a defined term for "baseline". |
+| 2 | Ask the detective reads keywords, so why must I pick a variable? | G | Opus | The free-text question decides place and variable (existing lib/ask.js parsing). The variable/lat/lon/year fields become an optional "Adjust" disclosure, pre-filled from the question. |
+| 3 | Ask the detective should be a tab like World, Duel, Vitals | G | Opus | Ask is its own Explore tab/view in the same tab row, not a box above every tool. |
+| 4 | Ledger: what is "correction"? Unit of sunlight? What do red/blue arrows mean? | G | Opus | Every count/chip has units (e.g. W/m² for sunlight), "survives correction" is a defined term ("still holds after accounting for testing many things at once"), and arrows are monochrome up/down with a legend ("▲ rising ▼ falling"). No red/blue (section 3B). |
+| 5 | Ledger variable chips: what does clicking do? | G | Opus | Chips are visibly filters (selected state, "Filter by variable" label, tooltip, clear-filter action). |
+| 6 | Scan: dotted red square meaning; colour mismatch with the amber "significant only before correction" chip | F (globe cells) + G (summary chips) | Opus | Cell style and the summary chip use the same encoding, and the on-globe legend lists every cell style shown (solid = holds after correction, dashed = only before correction, none = no clear trend). Uses monochrome/data-scale only, not news red/amber. |
+| 7 | Click any graph anywhere to expand it; change axis to log, change units, set axis range; export | J | Opus | One shared ChartViewer modal used by every chart: expand, log/linear y-axis (disabled with a reason when values ≤ 0), unit switch where a display conversion is exact (°C/°F/K, mm/day ↔ mm/month, etc.; converts displayed values only, never p-values/evidence), editable x/y range with reset, export PNG + CSV of the plotted (backend) values. Keyboard accessible, Esc closes. |
+| 8 | Every non-obvious term gets an explanation on hover/click | G | Opus | Extend existing Term.jsx + lib/glossary.js: subtle dotted underline, hover and click/tap/focus opens a short definition. Applied across Main, Explore, Ledger, Scan, Explainer. Glossary covers every specialist term in the UI (p-value, correction/FDR, Sen's slope, Moran's I, baseline, anomaly, reanalysis, forecast band, etc.). Other agents import <Term>; G owns the component. |
+| 9 | Undo/rewind after an accidental second pin | E | Opus | Pin history (bounded, e.g. last 10) with Undo (Ctrl/Cmd+Z and a visible "Back to previous pin" action). Restores the earlier pin and its completed scan result without refetching when cached. |
+| 10 | Save a pin with its scan: colour + label, kept until unpinned, shown on the globe and in a tab | E (state, storage, Saved tab) + F (globe rendering) | Opus | "Save pin" stores label, colour (from a small neutral-safe palette that never uses news red/amber/green), lat/lon, variable, years and the scan result summary in localStorage (bounded size; evicts oldest result payload, never the pin, with a note). Saved pins render on the globe as labelled markers and in a "Saved" tab; open restores the scan; unpin deletes. Privacy rule 5 still applies (locations/preferences only). |
+| 11 | Explainer is smart but annoying: can't see full answer, should be expandable/movable, suggestion chips clog it | G | Opus | Explainer panel resizable/expandable (and draggable on desktop, bottom sheet on mobile), answer area scrolls independently and is fully visible when expanded, suggestions collapse into one "Suggestions" disclosure after the first question. |
+| 12 | Leaving Scan and coming back keeps the data (good) but nothing shows a scan is still active; should persist if pinned | E | Opus | A persistent, small "Scan active: <place>" indicator on the Scan tab/top bar while a scan result is held; persisted with a saved pin (item 10). |
+| 13 | Duel + Scan (and other combos) should be possible; top tabs should be grouped accordingly | G (Explore structure) + E (shared state) | Opus | Explore tools are grouped into "Place tools" (Case file, Sweep, Scan a region) and "Compare & context" (Duel, World, Vitals, Ledger, Events, Ask). Compatible combinations (at least Duel + Scan) can be open together (split view on desktop, stacked on mobile) sharing the active pin. Incompatible combos are disabled with a reason. |
+
+Ownership notes:
+- E owns pin history/saved pins state (lib/pins.js, new), the Saved tab and the scan-active indicator.
+- F only renders saved pins and scan-cell styles on the globe from props E provides.
+- G owns Term.jsx, lib/glossary.js, Explainer.jsx, Ask (AskBox.jsx), Ledger.jsx, Scan.jsx summary UI,
+  World.jsx legend copy and the Explore tab structure.
+- J owns components/charts/*, lib/chart.js, styles/charts.css and the new ChartViewer; G and others
+  only wrap charts with the viewer hook J exports.
