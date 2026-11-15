@@ -26,6 +26,7 @@ import { CASES, FIRST_YEAR, LAST_FULL_YEAR, SURPRISES } from "./lib/cases.js";
 import { EVENTS, EVENT_BY_ID, KINDS } from "./lib/events.js";
 import { clamp, formatP, formatPlace, round2, signed } from "./lib/format.js";
 import { cellContains, nearestPlace } from "./lib/geo.js";
+import { intensity, mixHex, prepareLapse } from "./lib/lapse.js";
 import { DEFAULT_PROFILE, addWatch, defaultView, hasWatch, removeWatch, suggest, toggleWatch } from "./lib/profile.js";
 import { decodeState, encodeState } from "./lib/share.js";
 
@@ -130,6 +131,24 @@ function worldDots(data) {
   });
 }
 
+/** Time-lapse: each dot fades from grey toward red (above the site's own average) or blue (below) for the chosen year. */
+function lapseDots(data, prepared, year) {
+  const units = data.variable.units;
+  return data.places.map((p) => {
+    const base = { id: p.id, name: p.name, lat: p.lat, lon: p.lon, ring: false };
+    if (!p.ok) return { ...base, color: COLORS.failed, r: 3.5, tip: `${p.name} · not measurable here` };
+    const a = prepared.at(p.id, year);
+    if (a == null) return { ...base, color: COLORS.failed, r: 3, tip: `${p.name} · no value for ${year}` };
+    const k = intensity(a, prepared.scale);
+    return {
+      ...base,
+      color: mixHex(COLORS.flat, a >= 0 ? COLORS.up : COLORS.down, k),
+      r: 4 + 5 * k,
+      tip: `${p.name} · ${year}: ${signed(a, 3)} ${units} vs its own average`,
+    };
+  });
+}
+
 /** One dot per place, colored by the archetype (cluster) it belongs to. */
 function archetypeDots(data) {
   return data.places.map((p) => ({
@@ -206,6 +225,7 @@ export default function App() {
   const [archetypes, setArchetypes] = useState(EMPTY);
   const [archK, setArchK] = useState(null);
   const [ledger, setLedger] = useState(EMPTY);
+  const [lapse, setLapse] = useState({ on: false, year: null, playing: false, speed: 500 });
   const [storedProfile, setProfile] = useStoredState("td-profile", DEFAULT_PROFILE);
   const [watch, setWatch] = useStoredState("td-watch", []);
   const [viewPref, setViewPref] = useStoredState("td-view", null);
@@ -375,6 +395,17 @@ export default function App() {
   const worldFresh = tab === "world" && worldMode === "survey" && !!world.data && world.key === keys.world(worldParams);
   const archFresh =
     tab === "world" && worldMode === "archetypes" && !!archetypes.data?.ok && archetypes.key === keys.archetypes(vitalsYears, archK);
+  const lapseData = useMemo(() => (worldFresh ? prepareLapse(world.data.places) : null), [worldFresh, world.data]);
+  useEffect(() => {
+    if (!lapse.on || !lapse.playing || !lapseData) return undefined;
+    const last = lapseData.years[lapseData.years.length - 1];
+    const timer = setInterval(() => setLapse((l) => (l.year >= last ? { ...l, playing: false } : { ...l, year: l.year + 1 })), lapse.speed);
+    return () => clearInterval(timer);
+  }, [lapse.on, lapse.playing, lapse.speed, lapseData]);
+  useEffect(() => {
+    if (!worldFresh) setLapse((l) => (l.on ? { ...l, on: false, playing: false } : l));
+  }, [worldFresh]);
+
   const watchDots = useMemo(
     () =>
       home
@@ -400,11 +431,11 @@ export default function App() {
     [tab, eventId],
   );
   const dots = useMemo(() => {
-    if (worldFresh) return worldDots(world.data);
+    if (worldFresh) return lapse.on && lapseData ? lapseDots(world.data, lapseData, lapse.year) : worldDots(world.data);
     if (archFresh) return archetypeDots(archetypes.data);
     if (eventDots.length) return eventDots;
     return watchDots;
-  }, [worldFresh, archFresh, world.data, archetypes.data, eventDots, watchDots]);
+  }, [worldFresh, archFresh, world.data, archetypes.data, eventDots, watchDots, lapse.on, lapse.year, lapseData]);
 
   const handlePick = (lat, lon) => {
     const la = round2(lat);
@@ -696,7 +727,15 @@ export default function App() {
                 <li className="faint">solid outline = holds after correction</li>
               </ul>
             )}
-            {cells.length === 0 && worldFresh && dots.length > 0 && (
+            {worldFresh && lapse.on && <div className="lapse-year" aria-live="polite">{lapse.year}</div>}
+            {cells.length === 0 && worldFresh && lapse.on && (
+              <ul className="globe-legend mono" aria-label="Map key">
+                <li><i className="round" style={{ background: COLORS.up }} /> above the site's own average</li>
+                <li><i className="round" style={{ background: COLORS.down }} /> below it</li>
+                <li><i className="round" style={{ background: COLORS.flat }} /> near it · stronger colour = more unusual</li>
+              </ul>
+            )}
+            {cells.length === 0 && worldFresh && !lapse.on && dots.length > 0 && (
               <ul className="globe-legend mono" aria-label="Map key">
                 <li><i className="round" style={{ background: COLORS.up }} /> rising</li>
                 <li><i className="round" style={{ background: COLORS.down }} /> falling</li>
@@ -839,7 +878,7 @@ export default function App() {
                   ) : world.error ? (
                     <ErrorCard message={world.error} onRetry={retry} />
                   ) : world.data ? (
-                    <World key={world.key} data={world.data} onOpen={openPlace} />
+                    <World key={world.key} data={world.data} onOpen={openPlace} lapse={lapse} lapseYears={lapseData?.years ?? []} onLapse={setLapse} />
                   ) : null)}
                 {worldMode === "archetypes" &&
                   (archetypes.loading ? (

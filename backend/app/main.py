@@ -352,6 +352,8 @@ async def world(
             "ci_high_per_decade": s["ci_high_per_decade"],
             "percent_of_mean": s["percent_of_mean"],
             "signal_to_noise": s["signal_to_noise"],
+            # Yearly values as [year, value] pairs: the front-end's time-lapse colours each site by its own yearly anomaly.
+            "series": [[a["year"], round(a["value"], 4)] for a in res["annual"]],
         }
 
     entries = await asyncio.gather(*(probe(p) for p in PLACES))

@@ -84,6 +84,10 @@ def test_world_ranks_sample_sites_and_applies_fdr(fake_power):
     assert all(p["lat"] >= 0 and p["significant_fdr"] for p in rising)  # fake data rise in the north, fall in the south
     assert all(p["lat"] < 0 for p in body["top_falling"])
     assert body["counts"]["rising"] + body["counts"]["falling"] <= body["counts"]["analyzed"]
+    # every analyzed place carries its yearly values, for the time-lapse
+    for place in body["places"]:
+        assert len(place["series"]) >= 40 and all(len(pair) == 2 for pair in place["series"])
+        assert [y for y, _ in place["series"]] == sorted(y for y, _ in place["series"])
 
 
 def test_world_reports_land_only_variables_over_ocean_as_failed(monkeypatch):

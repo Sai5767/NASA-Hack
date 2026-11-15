@@ -1,6 +1,7 @@
 import { formatP, signed } from "../lib/format.js";
 import { downloadText, worldCsv } from "../lib/csv.js";
 import Term from "./Term.jsx";
+import TimeLapse from "./TimeLapse.jsx";
 
 function Row({ p, units, onOpen, index }) {
   const color = p.slope_per_decade >= 0 ? "var(--up)" : "var(--down)";
@@ -18,7 +19,7 @@ function Row({ p, units, onOpen, index }) {
 }
 
 /** One variable across every sample place. The dots themselves are drawn on the map. */
-export default function World({ data, onOpen }) {
+export default function World({ data, onOpen, lapse, lapseYears, onLapse }) {
   const { counts, variable } = data;
   const units = variable.units;
   const analyzed = data.places.filter((p) => p.ok).sort((a, b) => b.slope_per_decade - a.slope_per_decade);
@@ -40,6 +41,8 @@ export default function World({ data, onOpen }) {
           <button type="button" className="chip" onClick={() => downloadText(`trend-detective_world_${variable.id}.csv`, worldCsv(data))}>⤓ CSV</button>
         </div>
       </header>
+
+      {lapse && <TimeLapse lapse={lapse} years={lapseYears} units={units} onChange={onLapse} />}
 
       <div className="world-lists">
         <div className="card world-col">
