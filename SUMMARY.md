@@ -40,7 +40,7 @@ It has two parts: a **backend** (Python, does the maths and fetches NASA data) a
 
 ## How to use it
 1. Double-click **`START.bat`** in `C:\Users\mahas\Documents\NASA-Hack`. The first run installs what it needs.
-2. The page opens at http://127.0.0.1:5173. The footer shows the version (now `7e8fb1a`).
+2. The page opens at http://127.0.0.1:5173. The footer shows the version (a short code like `d29529a`; it changes with every update).
 3. Double-click **`STOP.bat`** when finished.
 
 ## Where things are
