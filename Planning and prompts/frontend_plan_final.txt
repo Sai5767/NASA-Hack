@@ -1,267 +1,121 @@
-TREND DETECTIVE — FINAL VERIFICATION, POLISH AND RELEASE PROMPT
+TREND DETECTIVE — TARGETED FINAL VISUAL FIX PROMPT
 Written 15 November 2026
 
-PURPOSE
+SCOPE
 
-You are the Claude lead for the final continuation of Trend Detective, a NASA Space Apps Challenge project. The repository has already had a substantial V3 rebuild. Do not restart it, blindly redo working features, or layer a second design system over the first.
+Make only the three fixes in this brief. The current V3 codebase already has working profile, source separation, globe, data-layer, timeline and Explore work. Do not redesign the application, redo backend repairs, alter scientific calculations or reintroduce cards/colours that were intentionally removed.
 
-Your job is to:
+Before changing anything:
 
-1. verify the current implementation in a real browser and with tests;
-2. repair the specific gaps below;
-3. fix anything claimed as complete that fails verification;
-4. finish the documentation; and
-5. hand over a polished, demonstrably working application.
-
-The visual standard is exceptionally high. The finished site must feel like one quiet, coherent dark-space product: a natural Earth, clear data, purposeful motion, no visual clutter and no mysterious technical language for a first-time high-school user.
+1. Read README.md, docs/V3_FINAL_HANDOFF.md, docs/V2_API_CONTRACT.md and the current globe, shell, sign-in, onboarding, news and style files.
+2. Start the current app and inspect the actual sign-in screen, Main globe and news behaviour in a real browser.
+3. Preserve unrelated user/team changes. Do not reset, clean, broadly reformat or replace working V3 features.
+4. After implementation, run frontend tests/build and browser-test the exact acceptance checks below.
 
 ====================================================================
-1. CURRENT BASELINE — PRESERVE UNLESS VERIFICATION FINDS A DEFECT
+1. SIGN-IN AND ONBOARDING — HALF EARTH BACKDROP
 ====================================================================
 
-The following are present in the current codebase according to fresh independent code/test audits. Treat them as existing work to verify and preserve, not features to rebuild from scratch:
+The welcome view must show only a beautiful partial Earth behind the login form and both onboarding questions.
 
-- The welcome and two-question onboarding now use the real base-only Globe renderer behind the local demo sign-in, rather than a CSS circle.
-- The password is dropped before profile persistence; only the local demo label/preferences are stored.
-- The core interface has a mostly monochrome black/white/grey token system, with controlled physical-Earth, data-layer and news-severity exceptions.
-- The Earth resumes idle rotation after roughly one second, including when data layers/news exist.
-- A cached, labelled coarse whole-Earth preview exists for primary metrics. It is separate from precise local data and is labelled approximate.
-- The monthly local-frame, forecast, Meteomatics, coarse-preview and news flows remain source-separated.
-- News automatically loads for saved locations after initial paint. The default Main news list is retired.
-- Existing callouts are outward-facing, animated, re-projected as Earth rotates and hidden at the limb.
-- The comparison route sends separate A and B coordinates and Duel renders both panes.
-- Main/Explore routing, local profile flow, chart viewer, glossary, Ask tab, saved pins, pin undo, scan-active state and grouped/split Explore tools are already implemented or documented as implemented in docs/V3_FINAL_HANDOFF.md.
-- Static frontend checks previously passed: 127 tests and a production build. This is historical evidence only; rerun after all final work.
-- The backend repair work is already present. docs/V2_BACKEND_REPAIR_HANDOFF.md reports 342 passing offline tests in the supported Docker/Python 3.12 target.
+Required composition:
 
-Do not interpret the baseline as proof that the user experience is done. Browser and integration verification is still incomplete.
+- Earth is large and positioned low/right or low/left so only approximately half of the globe enters the viewport. It should feel as if the user is looking past the edge of Earth from space, not at a centred dashboard globe.
+- The login/onboarding content stays centred or slightly opposite the visible Earth edge, with ample black negative space and excellent readability.
+- Earth rotates slowly and continuously in its normal base-only mode. It is an actual rendered Earth, not a CSS gradient/circle/image placeholder.
+- Use natural Earth colours: realistic blue ocean, muted green/brown land, soft white ice/cloud and gentle shadow. No country-border curves, graticules, radar, CRT or bright map seams.
+- Give only the outer limb a very subtle physically plausible blue atmospheric rim. The glow is thin, diffuse and calm; it must not become a neon ring, a large blue fog, a gradient background or a coloured panel.
+- The star background remains sparse, dim and black. There are no decorative grids, particles or moving effects competing with the form.
+- The form is a compact near-black reading surface, not a large opaque card. Keep logo, one sentence, email/password controls, one primary action and the concise demo privacy note.
+- The user may drag the background Earth, but the form remains easy to use. On release, Earth resumes its gentle idle spin after the existing short delay. Reduced motion keeps it still.
+- Before onboarding finishes, load no personal location, news, heatmap, live-weather or account data. This is base Earth only.
 
-====================================================================
-2. NON-NEGOTIABLE GUARDRAILS
-====================================================================
+Responsive rules:
 
-Science and data:
-
-- The browser displays backend trend/evidence/forecast values exactly. It must never recalculate p-values, slopes, significance, confidence intervals or forecast eligibility.
-- NASA POWER historical/reanalysis, Meteomatics operational weather and the internal monthly forecast remain distinct. Never average or silently blend sources/timescales.
-- The coarse whole-Earth view is an explicitly labelled approximate orientation layer. It must not show exact values, p-values, forecasts or local scientific claims.
-- Detailed local values, tooltips, calculations and significance always use real returned backend cells, even if the visual presentation is smoothed.
-- News is context, not scientific evidence or an official warning. Only verified stories use green, amber or red attention markers; unverified news remains neutral/dashed.
-- Why might this be happening is manual, source-cited, cautious and never a proof of causation.
-
-Privacy and security:
-
-- Keep the local-demo profile only. Discard sign-in passwords immediately; never send, log, hash or store them.
-- No key, password, token, secret, environment-file content or provider response body may reach browser code, logs, tests, screenshots, Git or documentation.
-- No Google imagery, Google tiles or Google branding. Any static Earth imagery must be licensed, credited, documented and never portrayed as live.
-
-Accessibility and honesty:
-
-- Maintain keyboard globe/timeline access, visible focus, 200% zoom support, accessible equivalent data tables/details and reduced motion.
-- A smooth visual field may improve readability, but must be identified as a visual interpolation. It must not manufacture a measurement or conceal missing data.
-- Do not fake a passing state or use placeholder data just to create a good screenshot.
+- On phone, show a larger cropped arc of Earth at the bottom or side, never behind the input fields so strongly that text becomes unreadable.
+- The login form remains visually dominant and does not overlap the Earth limb awkwardly.
+- Verify 1440×900, 1024×768 and 375×812 explicitly.
 
 ====================================================================
-3. REMAINING IMPLEMENTATION WORK
+2. MAIN PAGE — SUBTLE BLUE ATMOSPHERE ONLY
 ====================================================================
 
-3.1 Earth visual finish — highest visual priority
+Keep Main predominantly black, white and grey. Add only a restrained blue atmospheric glow around the Earth:
 
-Current issue: normal globe rendering still draws Natural Earth country-border curves. These are likely the unwanted lines the owner sees. The Earth must look smooth and natural, not like segmented map polygons.
-
-Implement and verify:
-
-- Remove country-border/graticule lines from the normal Main and Welcome Earth. Keep only a subtle, smooth land/ocean boundary if needed for legibility.
-- Use one carefully calibrated natural Earth palette: deep but realistic ocean blue, restrained green/brown land, white ice/cloud, soft directional lighting and a thin physical blue atmosphere at the limb.
-- Smooth coastlines, land edges and the outer limb through appropriate canvas/image resolution, anti-aliasing and draw order. No faceted seams, harsh curves, glowing outlines, map-slice appearance, CRT, radar or retro HUD.
-- If a technical map needs country boundaries or graticules, expose them only in a deliberate Explore technical view; they are off by default.
-- Preserve the black-space surrounding field and sparse stars, but never let decorative stars, grids, glows or particles compete with the Earth.
-
-Acceptance proof:
-
-- Capture screenshots of the Earth at several longitudes, zoom levels and display sizes. Review specifically for country borders, graticules, jagged coastlines, seams, inconsistent black shades and over-bright atmosphere.
-
-3.2 Strong, smooth and honest data layers
-
-Current issue: detailed selected-place data is still rendered as individual square cells, including tile outlines and an outer grid boundary. The coarse/local heatmap may still look too faint in an actual browser.
-
-Implement and verify:
-
-- Make temperature, rainfall and cloud-cover patterns visibly readable at normal viewing distance. Calibrate opacity/contrast/saturation in the real browser; the physical Earth remains visible below and a compact legend explains the scale.
-- When the user chooses a metric, keep the instant labelled coarse global preview. It must appear without a point selection or expensive global point-by-point request.
-- When the user selects/saves a place, replace or overlay its area with a smooth, surface-bound local field. Do not show square data tiles, tile outlines or a grid frame on the normal globe.
-- Build the local field only from returned local grid values. Use a documented canvas interpolation/rendering method with a feathered geographic edge and correct globe clipping at the limb.
-- Do not modify stored cell values or calculations. Exact values, missing values, provenance and the accessible data table remain available in Details. Missing data must not be blended into a plausible value; render an honest neutral missing area/pattern.
-- Data layers must curve with the sphere, remain clipped to the visible hemisphere, cross-fade smoothly between real time frames, and never appear as a flat rectangular sticker.
-- Maintain explicit observed/forecast separation through label, pattern and divider. Meteomatics stays a point/current-weather product rather than a historical/global field.
-
-Acceptance proof:
-
-- Screenshots and a short screen recording of each primary metric at world scale, a selected place, a month change, a forecast boundary and a missing-data example.
-- Verify that the legend is understandable without technical language and that the detailed local visual is described as smoothed/visualised, not additional measured cells.
-
-3.3 Real two-place comparison
-
-Current status: code sends distinct latitude/longitude pairs, but this lacks final dedicated UI regression coverage and browser proof.
-
-Implement and verify:
-
-- Trace A and B state from picker, route/state, request payload, response and visual result. Fix any place where B can silently become A or where a stale result is reused.
-- Display both place names and coordinates, and both values/series, clearly. Use line style, position, labels and symbols in addition to any data colour; do not rely on colour alone.
-- Handle one unavailable place honestly: show which is unavailable while retaining the other valid result. Never replace a two-place view with duplicate values.
-- Add frontend regression tests for distinct locations, A/B reversal, same-location handling and one-location-unavailable states. Keep the existing backend coverage.
-- Browser-test a real two-place comparison end to end with deliberately different places and confirm the request/result identities.
-
-3.4 Automatic news callout cycle while Earth rotates
-
-Current issue: current globe logic can select up to three visible automatic callouts. The owner wants an elegant one-at-a-time popup sequence while the Earth spins.
-
-Implement and verify:
-
-- After saved-location news is available, maintain a deterministic, bounded queue of eligible saved locations currently on the visible hemisphere.
-- Display only one autonomous popup at a time. Sequence: marker appears at its actual point; a fine leader grows outward along the sphere normal; the compact black/white callout fades/translates into place at the leader end.
-- Hold briefly, fade it away, then select the next eligible visible location. Use a calm dwell time and do not repeat the same point until others have been considered.
-- Recompute marker, leader and callout projection every animation frame. As a point reaches the limb or rotates behind Earth, tuck/fade the callout rather than letting it drift, overlap the globe or point to the wrong location.
-- Do not stop normal Earth rotation merely because an autonomous callout is visible.
-- Hover, keyboard focus, click, timeline scrubbing, dragging, an open drawer or a close/escape action overrides the automatic cycle immediately. Resume only after the relevant short idle state. Reduced motion disables autonomous cycling.
-- Verified attention uses green/amber/red outline/glyph/leader only. The callout fill and main interface remain black/white. Unverified items stay neutral/dashed and include their label.
-- The callout itself contains no more than headline, publisher, date and severity glyph. Open full details only on user action.
-
-Acceptance proof:
-
-- Record at least one full automatic cycle during normal rotation, a limb exit, a user hover/click takeover and a reduced-motion state.
-
-3.5 Verify the previously delivered V3 feature set, then repair only failures
-
-Do not rewrite these features if they already work. Give each a browser/test verification result in the final handoff and repair any failure:
-
-- World legend explains baseline/average in plain words.
-- Ask is an Explore tab; free text chooses place/variable and Adjust is optional.
-- Ledger uses units, defines correction, explains arrows and has discoverable variable filtering.
-- Scan legend/chips use consistent monochrome semantics.
-- Every chart opens the shared accessible viewer; expand, log/linear eligibility, exact display-unit conversion, axis range reset, PNG and CSV export all work.
-- Specialist terms have accessible hover/click/focus definitions.
-- Pin undo restores previous scan state without unnecessary refetch when cached.
-- Saved pins have label/colour/location/scan summary persistence, globe markers and Saved-tab restore/unpin behaviour.
-- Explainer can expand/resize, scroll its answer and keeps suggestion chips out of the way.
-- Scan-active state remains visible across tool navigation.
-- Duel plus Scan opens as a compatible split/stack view and preserves the shared active pin.
+- The glow follows the Earth’s circular limb rather than the whole page, side panels or controls.
+- It is faint enough that a user notices atmosphere/depth, not a colour effect. Avoid blue gradients across the page.
+- It uses one shared design token, so its alpha and hue match Welcome and Main exactly.
+- It must remain behind data layers, markers and callouts. It cannot wash out heatmaps, reduce text contrast or cause a mismatched shade.
+- No other blue interface accents, coloured boxes, blue borders or decorative shadows are introduced.
 
 ====================================================================
-4. DOCUMENTATION AND BACKEND VERIFICATION
+3. FIX NEWS POPUPS — CLEAN ROTATING GLOBAL-CITY STORY CYCLE
 ====================================================================
 
-4.1 README rewrite
+Current popup behaviour is not acceptable. Implement a clearly visible, elegant automatic sequence of news callouts that moves location by location as Earth rotates.
 
-README.md is stale. It still describes the pre-V3 Home/watchlist/five-question wizard, obsolete themes/components, old test counts and a stale hard-coded explanation model.
+Authorised city set:
 
-Rewrite it only after the final feature verification. It must be a truthful, easy-to-follow guide containing:
+- Add a small fixed, documented global showcase set of main cities across continents. Use approximately 8–12 cities, for example London, New York, São Paulo, Cairo, Delhi, Singapore, Tokyo, Sydney, Johannesburg and Mexico City.
+- This limited city list is intentional. Do not fetch arbitrary worldwide coordinates or create unbounded API work.
+- Saved user locations take priority. When a saved location is visible and has news, include it before or alongside the showcase cities.
+- Fetch/cache city news through the existing safe backend news flow. Respect provider rate limits, cache/stale state, publisher verification and failure fallbacks. Do not block Main render while news loads.
 
-- one-paragraph purpose and target audience;
-- beginner-friendly tour of Welcome, Main, Earth, metric layers, coarse preview, detailed local field, timeline, significance, comparison, news callouts, Explore and Why;
-- the actual first-visit/demo path a judge can follow;
-- precise explanation of approximate whole-Earth preview versus detailed local data;
-- data-source boundaries and news/forecast/Why caveats;
-- local-demo privacy behaviour;
-- setup prerequisites, safe environment-variable names, start/stop commands and test/build commands, with no secret values;
-- accessibility/reduced-motion and navigation controls;
-- known limitations, troubleshooting and a link to DATA_SOURCES_APIS_AND_AI_MODELS.txt.
+Visual/interaction behaviour:
 
-Do not document an option or command unless it is verified in the final project.
+1. Earth spins normally.
+2. When a city is on the visible hemisphere and has a story, show one small location marker on the exact projected city location.
+3. Animate a thin leader line outward from the surface point, following the apparent outward direction from the curved Earth.
+4. Animate one compact callout into place at the end of that leader: opacity and a small 6–12 px outward translation over roughly 180–250 ms. No bounce, flash, pulse or large scaling.
+5. Callout shows only:
+   - severity glyph;
+   - one/two-line headline;
+   - publisher and date.
+6. After a calm dwell, fade/contract it, then reveal the next eligible city when visible. The globe continues rotating throughout.
 
-4.2 Source/inventory document
+Cleanliness rules:
 
-DATA_SOURCES_APIS_AND_AI_MODELS.txt contains conflicting older V2 wording and newer V3 additions. Rewrite it after final verification as one consistent inventory:
+- Show at most one automatic popup at any time. Never show a side list, a popup forest or a stack of cards.
+- Keep callouts within the stage and away from left controls, timeline, account control and edges.
+- As a city approaches the limb or rotates behind Earth, fade/tuck its marker, leader and callout before it looks detached. Re-project all three continuously with globe movement; they must never drift or point to the wrong place.
+- User hover, keyboard focus, click, globe drag, timeline scrubbing or an open drawer takes control immediately and pauses/defer the automatic cycle. Resume only after the interaction is over and the short idle delay has elapsed.
+- With reduced motion, do not auto-cycle. Expose the same news through keyboard-focusable markers and a concise manual next/previous story control if needed.
 
-- actively used sources/services/assets;
-- optional configured integrations;
-- planned/not implemented items;
-- reference-only resources;
-- source endpoint families, base-Earth asset licence/credit if one is used, AI runtime model configuration, and development tools/models.
+Severity and trust:
 
-Never include a secret. Do not claim a live provider succeeded unless the owner-run smoke check succeeded.
+- Verified publisher: green outline/glyph for low attention, amber for medium attention, red for high attention. The callout background stays near-black/white; colour belongs only to the marker, leader and glyph.
+- Unverified publisher: neutral grey dashed marker/leader, no urgency colour and the visible label Unverified news context.
+- In expanded detail, always state: News context, not scientific evidence or an official warning.
+- Do not fabricate stories, severity, publisher, locations or dates. On no-news/provider-error states, show no automatic popup and retain a concise honest state in the manual detail path.
 
-4.3 Backend verification only
+Implementation expectation:
 
-Prior backend repairs appear complete. Do not reimplement them without a demonstrated defect.
-
-- Run the complete backend test suite in its supported Docker/Python 3.12 target, with network guard/mocks active.
-- Build the backend image and compare current code, API contract and fixtures for drift.
-- Confirm current protections remain: current web search tool and domain filters, server-side secrets, Meteomatics quotas/stream cap/stale fallback, publisher_verified and safe no-key fallbacks.
-- Prepare owner-run smoke-test instructions for one OpenAI explanation call and one Meteomatics request. The owner, not an agent, enters secrets and runs them.
-- If the currently running local server is stale or missing monthly/news endpoints, restart the documented local services before browser QA. Record the server version/endpoints checked in the final handoff.
-
-====================================================================
-5. AGENT PLAN AND FILE OWNERSHIP
-====================================================================
-
-Use parallel agents, but avoid conflicting edits. The lead integrates only after each owner reports.
-
-| Agent | Model | Ownership | Goal |
-| --- | --- | --- | --- |
-| 1. Lead/integrator | Opus 5.5 | integration decisions, shared seams, final handoff | Read reports, resolve only real conflicts, retain working V3 code |
-| 2. Earth/data visual | Opus 5.5 | Globe renderer, field layer, ramp/legend and globe styles | Sections 3.1–3.2 plus visual screenshots |
-| 3. News/motion | Opus 5.5 | globe callout state/renderer and motion tests | One-at-a-time autonomous rotation cycle in section 3.4 |
-| 4. Comparison and V3 verification | Opus 5.5 | comparison flow/tests, browser verification of section 3.5 | Prove/fix A/B and the delivered V3 interaction set |
-| 5. Docs and usability QA | Sonnet 5.5 | README, inventory document, navigation/accessibility QA | Truthful documentation and beginner journey validation |
-| 6. Backend verifier | Sonnet 5.5 | backend tests/contracts/docs only | Section 4.3; report drift, do not redesign backend |
-| 7. Final browser QA | Opus 5.5 | no broad feature rewrites; test/evidence fixes only | Responsive, motion, performance and visual-release gate |
-
-Rules:
-
-- Start with read-only audits. Each agent reports implemented, failed and unverified work before editing.
-- Agent 2 does not alter comparison, documentation or backend files. Agent 3 does not alter Earth/data field rendering. Agent 4 does not alter global design tokens without agreement from the lead.
-- Use separate worktrees or strict file ownership. Never use broad formatters over another agent’s changes.
-- The lead must resolve an API/state seam before edits cross file ownership.
-- Do not downgrade science, privacy, accessibility or performance merely to achieve an aesthetic effect.
+- Replace any current “up to three automatic callouts” selection with explicit single-active-callout state, deterministic queue/cooldown and cleanup on visibility/interaction changes.
+- Keep the queue bounded and stable: do not let animation frames trigger fetches, duplicate timers or state churn.
+- Tests must cover queue selection, only-one-active invariant, visible/hidden/limb behaviour, user takeover, reduced motion and verified/unverified visual mapping.
 
 ====================================================================
-6. REQUIRED FINAL QA MATRIX
+4. REQUIRED PROOF OF COMPLETION
 ====================================================================
 
-Run and report exact results after all edits:
+Run and report:
 
 - Frontend tests and production build.
-- Complete backend suite in Docker/Python 3.12, with no real network access.
-- Browser at 1440×900, 1024×768 and 375×812.
+- Browser checks at 1440×900, 1024×768 and 375×812.
 - Default motion and reduced-motion modes.
-- 200% text zoom, keyboard-only navigation and focus order.
-- Slow/no network, no API key, stale cache, empty and failed-provider states.
 
-Browser journeys that must be recorded or screenshot:
+Capture screenshots or a short recording proving:
 
-1. Fresh visit → local sign-in → two preference questions → Main.
-2. Choose temperature, rainfall and cloud cover: each instantly reveals a labelled coarse Earth preview.
-3. Choose a location: its detailed visual is smooth, legible, honest and surface-bound; inspect a month change, missing data and forecast boundary.
-4. Drag/rotate/release the globe: spin resumes after short idle. Inspect several Earth longitudes for no default country/graticule curves.
-5. Saved-location news loads: record one autonomous popup cycle, limb handling and user takeover.
-6. Create a true two-place Duel, reverse A/B, then test one unavailable location.
-7. Verify Ask, Saved pin, pin undo, Scan active, Explainer, chart viewer, glossary and Duel+Scan split view.
-8. Account changes: preferred locations/data control what is loaded; password is not persisted.
-9. Explore, evidence/Why opt-in and technical detail return cleanly to prior context.
+1. Welcome sign-in and both onboarding questions with a cropped half-Earth, natural colours and only a subtle blue limb.
+2. Main page with the same faint limb atmosphere and no blue page/panel treatment.
+3. A complete automatic city-news sequence: city appears → outward leader grows → compact popup enters → Earth continues rotating → popup exits/cycles.
+4. Limb handling and user hover/click/drag takeover.
+5. A verified green, amber or red story and a neutral unverified story.
 
-Visual release checklist:
+Definition of done:
 
-- No accidental coloured interface accent, blue/purple panel, shade mismatch, grid background, heavy box, inconsistent radius or legacy HUD.
-- Earth colours look physical and restrained; coast/limb/land are smooth at all tested sizes.
-- Heatmap/cloud layers are readable without obscuring Earth.
-- Local detail has no visible square grid/tile outline.
-- Trend/significance is understandable with monochrome direction/strength visuals before p-values.
-- No callout drifts, overlaps controls or points to the wrong location; autonomous callouts remain calm and singular.
-- Main is visual-first and low-text. Every non-obvious visual has an obvious plain-language drill-down.
-- Initial experience and all major screens are easy to navigate for people with no technical background.
-
-====================================================================
-7. DEFINITION OF DONE
-====================================================================
-
-Do not claim completion until:
-
-- all remaining work in Section 3 is implemented and evidenced;
-- all Section 3.5 V3 features either pass verification or have a documented repair;
-- frontend tests/build and supported backend tests pass after final wiring;
-- real browser screenshots/recordings prove the QA matrix;
-- README.md and DATA_SOURCES_APIS_AND_AI_MODELS.txt accurately describe the code actually shipped;
-- docs/V4_FINAL_VERIFICATION.md records changed files, tests/results, screenshots/recordings, browser/server versions, known limitations, owner-only smoke steps and one judge demo route.
-
-If a requirement cannot be safely or honestly implemented, preserve the guardrails, document the limitation and give the owner an explicit decision instead of faking the effect.
+- Half Earth, not a centred full globe, is clearly visible behind the welcome flow.
+- Blue glow is subtle, limb-bound and visually consistent across Welcome/Main.
+- Popups visibly work during normal rotation, are city/location anchored, animate outward, remain singular and never make the globe messy.
+- Existing data, science, privacy, accessibility and source-separation behaviour remains intact.
+- No unrelated redesign or backend rewrite was performed.
