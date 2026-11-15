@@ -16,7 +16,7 @@ import math
 from statistics import mean
 
 from .nasa_power import VARIABLES, annual_means, fetch_monthly_multi
-from .stats import benjamini_hochberg, best_step, mann_kendall, mk_z_and_p, ols, pettitt, sample_std
+from .stats import adjustment_is_material, benjamini_hochberg, best_step, mann_kendall, mk_z_and_p, ols, pettitt, sample_std
 
 FIRST_YEAR = 1981            # first year of NASA POWER monthly data
 MIN_YEARS = 20               # a trend over fewer complete years is not meaningful
@@ -271,7 +271,7 @@ def annual_core(info: dict, years: list[int], values: list[float]) -> dict:
         "noise_sd": noise_sd,
         "signal_to_noise": snr,
         "mean_value": mean_value,
-        "autocorr": {"r1": mk.r1, "adjusted": mk.variance_factor > 1.0, "factor": mk.variance_factor},
+        "autocorr": {"r1": mk.r1, "adjusted": adjustment_is_material(mk.variance_factor), "factor": mk.variance_factor},
     }
     ols_block = {
         "slope_per_decade": ols_res.slope * 10,
@@ -434,7 +434,7 @@ def analyze_series(
             f"The record looks more like a step change near {shape['step_year']} (average {shape['mean_before']:.3g} → "
             f"{shape['mean_after']:.3g}) than a steady ramp, so a straight-line trend may misdescribe it.",
         )
-    if mk.variance_factor > 1.0:
+    if adjustment_is_material(mk.variance_factor):
         caveats.insert(
             0,
             f"Neighboring years resemble each other here (autocorrelation {mk.r1:.2f}), so uncertainty was "

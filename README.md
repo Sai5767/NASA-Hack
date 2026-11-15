@@ -69,8 +69,10 @@ Not used, and why: NASA's Hydrology Data Rods (the request now returns a web pag
 
 - Yearly values come only from **complete 12-month years**, so seasons are never under-weighted.
 - **Sen's slope** with a Gilbert (1987) 95% interval; **Mann–Kendall** with tie correction; a **regression t-test** (Student-t written from scratch).
-- If neighboring years resemble each other (significant positive lag-1 autocorrelation), variance is inflated by `(1+r)/(1−r)`. Both adjusted and
-  unadjusted p-values are shown.
+- If neighboring years resemble each other (positive lag-1 autocorrelation, bias-corrected for short records), variance is inflated by
+  `(1+φ)/(1−φ)` and the regression test uses the effective number of independent years. Simulation puts the false-alarm rate at 4–7% for a
+  nominal 5% even with strongly persistent years (unadjusted: up to 39%). Both adjusted and unadjusted p-values are shown.
+  Every statistic is audited against SciPy, pymannkendall and pyhomogeneity: see [docs/STATS_AUDIT.md](docs/STATS_AUDIT.md).
 - **Benjamini–Hochberg** false-discovery control across scan cells, sweep variables, world sites, calendar months and the three rhythms.
 - Rhythm correlations use linearly detrended series and the **effective number of independent years** (Bretherton et al., 1999).
 - **Robustness:** the trend is re-tested after trimming 5 years from the start, the end, and both.

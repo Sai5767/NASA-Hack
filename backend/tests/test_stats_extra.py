@@ -6,6 +6,8 @@ import random
 import pytest
 
 from app.stats import (
+    adjustment_is_material,
+    bias_corrected_autocorr,
     benjamini_hochberg,
     lag1_autocorrelation,
     mann_kendall,
@@ -121,7 +123,9 @@ def test_ols_variance_factor_widens_interval():
     values = [0.1 * i + rng.gauss(0, 1) for i in range(40)]
     narrow = ols(values)
     wide = ols(values, variance_factor=4.0)
-    assert (wide.ci_high - wide.ci_low) == pytest.approx(2 * (narrow.ci_high - narrow.ci_low))
+    assert wide.se == pytest.approx(2 * narrow.se)                    # variance x4 means standard error x2
+    assert wide.df == pytest.approx(40 / 4.0 - 2.0)                   # only ~10 independent years remain
+    assert (wide.ci_high - wide.ci_low) > 2 * (narrow.ci_high - narrow.ci_low)  # fewer df, so a bigger t multiplier too
     assert wide.p_value >= narrow.p_value
 
 
@@ -134,11 +138,25 @@ def test_lag1_autocorrelation_signs():
     assert lag1_autocorrelation([3.0] * 10) == 0.0
 
 
-def test_variance_factor_only_applies_to_significant_positive_autocorrelation():
-    assert variance_factor_from_autocorr(0.05, 45) == 1.0     # within noise
+def test_variance_factor_uses_the_bias_corrected_positive_autocorrelation():
     assert variance_factor_from_autocorr(-0.6, 45) == 1.0     # negative never inflates
-    assert variance_factor_from_autocorr(0.5, 45) == pytest.approx(3.0)
-    assert variance_factor_from_autocorr(0.99, 45) == pytest.approx((1.8) / (0.2))  # capped at 0.8
+    assert variance_factor_from_autocorr(0.5, 7) == 1.0       # too short to correct
+    phi = (0.5 + 2 / 45) / (1 - 4 / 45)                       # a raw 0.5 hides a larger true persistence
+    assert variance_factor_from_autocorr(0.5, 45) == pytest.approx((1 + phi) / (1 - phi))
+    assert variance_factor_from_autocorr(0.99, 45) == pytest.approx(1.8 / 0.2)  # capped at phi = 0.8
+    assert variance_factor_from_autocorr(0.05, 45) > 1.0      # no significance gate: a small positive r1 still counts
+
+
+def test_bias_correction_undoes_the_expected_downward_bias():
+    n, phi = 44, 0.5
+    expected_raw = phi - (2 + 4 * phi) / n                    # what a short detrended record tends to show
+    assert bias_corrected_autocorr(expected_raw, n) == pytest.approx(phi)
+
+
+def test_only_a_material_adjustment_is_reported():
+    assert not adjustment_is_material(1.05)
+    assert adjustment_is_material(1.2)
+    assert adjustment_is_material(3.0)
 
 
 def test_persistent_series_gets_a_more_cautious_p_value():
@@ -153,12 +171,13 @@ def test_persistent_series_gets_a_more_cautious_p_value():
     assert result.p_value >= result.p_naive
 
 
-def test_white_noise_is_not_adjusted():
+def test_adjusted_p_value_is_never_smaller_than_the_naive_one():
     rng = random.Random(8)
-    values = [rng.gauss(0, 1) for _ in range(45)]
-    result = mann_kendall(values)
-    assert result.variance_factor == 1.0
-    assert result.p_value == pytest.approx(result.p_naive)
+    for _ in range(30):
+        values = [rng.gauss(0, 1) + 0.02 * i for i in range(45)]
+        result = mann_kendall(values)
+        assert result.variance_factor >= 1.0
+        assert result.p_value >= result.p_naive - 1e-12
 
 
 # ---- false-discovery rate -------------------------------------------------------------------

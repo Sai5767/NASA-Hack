@@ -22,6 +22,7 @@ from .stats import (
     linear_detrend,
     mann_kendall,
     ols,
+    adjustment_is_material,
     pearson,
     variance_factor_from_autocorr,
 )
@@ -136,7 +137,7 @@ def _amplification(local: dict[int, float], global_temp: dict[int, float]) -> di
         "r2": fit.r2,
         "p_value": fit.p_value,
         "n_years": len(years),
-        "autocorr_adjusted": factor > 1.0,
+        "autocorr_adjusted": adjustment_is_material(factor),
     }
 
 

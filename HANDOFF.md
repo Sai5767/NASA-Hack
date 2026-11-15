@@ -42,8 +42,8 @@ Environment gotchas: Windows PowerShell 5.1 (no `&&`); git pushes work with the 
 
 ## Progress checklist (update as you go)
 
-- [ ] 0. Branch, this file, first push
-- [ ] 1. Significance maths audited (docs/STATS_AUDIT.md, tests)
+- [x] 0. Branch, this file, first push
+- [x] 1. Significance maths audited (docs/STATS_AUDIT.md, tools/stats_audit/, backend/tests/test_stats_reference.py). Fixed: Sen CI rank, serial-correlation adjustment (bias-corrected, no gate, effective df in OLS), duel uses Welch t. 181 backend tests pass.
 - [ ] 2. Overview / Detail split
 - [ ] 3. Finance-style home: watchlist, For you, core vs extra tabs
 - [ ] 4. Question list and expanded intake

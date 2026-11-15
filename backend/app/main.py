@@ -34,7 +34,7 @@ from .morans import morans_i
 from .nasa_power import VARIABLES, PowerError
 from .places import PLACES
 from .planet import build_vitals
-from .stats import benjamini_hochberg, normal_two_sided_p
+from .stats import benjamini_hochberg, t_critical, t_two_sided_p
 
 MAX_WORLD_CONCURRENCY = 4
 
@@ -451,14 +451,23 @@ async def duel(
 
 
 def _trend_difference(a: dict, b: dict) -> dict:
-    """Do two regression slopes differ more than chance allows? (Approximate: treats places as independent.)"""
+    """Do two regression slopes differ more than chance allows?
+
+    Welch's t-test on the two slopes (each with its own standard error and degrees of freedom). Approximate in one
+    way, stated to the user: it treats the two places as independent, but nearby places share weather, so the test
+    errs on the cautious side.
+    """
     unit = a["variable"]["units"]
     diff = a["ols"]["slope_per_decade"] - b["ols"]["slope_per_decade"]
-    se = math.hypot(a["ols"]["se_per_decade"], b["ols"]["se_per_decade"])
+    se_a, se_b = a["ols"]["se_per_decade"], b["ols"]["se_per_decade"]
+    se = math.hypot(se_a, se_b)
     if se > 0:
         z = diff / se
-        p_value = normal_two_sided_p(z)
-        low, high = diff - 1.96 * se, diff + 1.96 * se
+        # Welch-Satterthwaite degrees of freedom for the difference of two estimates.
+        df = se**4 / (se_a**4 / a["ols"]["df"] + se_b**4 / b["ols"]["df"])
+        p_value = t_two_sided_p(z, df)
+        half = t_critical(ALPHA, df) * se
+        low, high = diff - half, diff + half
     else:
         z, p_value, low, high = (math.inf if diff != 0 else 0.0), (0.0 if diff != 0 else 1.0), diff, diff
     significant = p_value < ALPHA

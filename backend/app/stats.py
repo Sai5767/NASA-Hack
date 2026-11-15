@@ -5,8 +5,9 @@ Tools provided:
     confidence interval (Gilbert, 1987).
   * Ordinary least-squares trend with a t-test and confidence interval.
   * Adjustment for lag-1 serial correlation: when years resemble their neighbors, a
-    chance trend looks more convincing than it is, so the variance is inflated. The
-    adjustment is only applied when the autocorrelation is itself significant.
+    chance trend looks more convincing than it is, so the variance is inflated by
+    (1+phi)/(1-phi), where phi is the bias-corrected lag-1 autocorrelation. It is applied
+    whenever phi is positive, because a significance gate leaves the false-alarm rate near 10%.
   * Benjamini-Hochberg false-discovery-rate control for many simultaneous tests.
 
 Everything is pure Python (no SciPy), including the Student-t distribution.
@@ -21,6 +22,7 @@ from statistics import NormalDist, median
 
 _NORMAL = NormalDist()
 AUTOCORR_CAP = 0.8  # keeps the variance inflation finite for very persistent series
+NOTICE_FACTOR = 1.2  # variance inflation at which the app says the p-value was widened (phi of about 0.1)
 
 
 # --------------------------------------------------------------------------- distributions
@@ -117,12 +119,35 @@ def sample_std(x: list[float]) -> float:
     return math.sqrt(sum((v - mean) ** 2 for v in x) / (n - 1))
 
 
+def bias_corrected_autocorr(r1: float, n: int) -> float:
+    """Undo the small-sample bias of the lag-1 autocorrelation of a detrended series.
+
+    In a short record the autocorrelation of residuals about a fitted line is biased low, by roughly (2 + 4*phi) / n
+    (the mean-removed result of Marriott and Pope, 1954, plus one more 1/n for the fitted slope). Solving
+    r1 = phi - (2 + 4*phi) / n for phi gives the estimate below. The audit in docs/STATS_AUDIT.md checks it by simulation.
+    """
+    return max(-0.95, min(0.95, (r1 + 2.0 / n) / (1.0 - 4.0 / n)))
+
+
 def variance_factor_from_autocorr(r1: float, n: int) -> float:
-    """Variance inflation (1+r)/(1-r), applied only for significant positive autocorrelation."""
-    if n < 4 or r1 <= 1.96 / math.sqrt(n):
+    """Variance inflation (1+phi)/(1-phi) for positive serial correlation, using the bias-corrected phi.
+
+    Applied continuously (no significance gate), because a gate lets weakly persistent series through unadjusted and
+    leaves the false-alarm rate near 10%. Negative autocorrelation never deflates the variance (that would only add
+    risk of false alarms). Too-short series (n < 8) are left alone because r1 is too uncertain to correct.
+    """
+    if n < 8:
         return 1.0
-    r = min(r1, AUTOCORR_CAP)
-    return (1.0 + r) / (1.0 - r)
+    phi = bias_corrected_autocorr(r1, n)
+    if phi <= 0.0:
+        return 1.0
+    phi = min(phi, AUTOCORR_CAP)
+    return (1.0 + phi) / (1.0 - phi)
+
+
+def adjustment_is_material(factor: float) -> bool:
+    """True when the serial-correlation adjustment is big enough to tell the user about (a few percent is not)."""
+    return factor >= NOTICE_FACTOR
 
 
 def benjamini_hochberg(p_values: list[float], q: float = 0.05) -> list[bool]:
@@ -205,8 +230,10 @@ def _sens_confidence_interval(slopes: list[float], var_s: float, alpha: float) -
     ordered = sorted(slopes)
     n_pairs = len(ordered)
     c = _NORMAL.inv_cdf(1 - alpha / 2) * math.sqrt(var_s)
-    lower_rank = min(max(round((n_pairs - c) / 2), 0), n_pairs - 1)
-    upper_rank = min(max(round((n_pairs + c) / 2), 0), n_pairs - 1)
+    # Ranks are 1-based in the literature: the M1-th and (M2+1)-th smallest of the N ordered slopes, where
+    # M1 = (N - c) / 2 and M2 = (N + c) / 2 (Gilbert 1987; the same rule as the R "trend" package).
+    lower_rank = min(max(round((n_pairs - c) / 2) - 1, 0), n_pairs - 1)
+    upper_rank = min(max(round((n_pairs + c) / 2 + 1) - 1, 0), n_pairs - 1)
     return ordered[lower_rank], ordered[upper_rank]
 
 
@@ -280,7 +307,7 @@ class OLSResult:
     intercept: float           # fitted value at times[0]
     se: float                  # standard error of the slope (inflated when serial correlation was adjusted)
     t: float
-    df: int
+    df: float                  # n - 2, shrunk to the effective number of independent years when the variance was inflated
     p_value: float
     ci_low: float
     ci_high: float
@@ -315,7 +342,11 @@ def ols(
     sse = sum((v - (y_mean + slope * (t - t_mean))) ** 2 for t, v in zip(times, values))
     syy = sum((v - y_mean) ** 2 for v in values)
     r2 = 1.0 - sse / syy if syy > 0 else 0.0
-    df = n - 2
+    df = float(n - 2)
+    if variance_factor > 1.0:
+        # Serially correlated years carry less information: n / factor independent years remain, so the t distribution
+        # should use that many degrees of freedom. (Simulation: false alarms 9.7% -> 6.9% at phi = 0.7.)
+        df = max(n / variance_factor - 2.0, 2.0)
 
     if sse <= 1e-24 * max(syy, 1.0):  # perfect line
         se = 0.0
@@ -323,7 +354,7 @@ def ols(
         p_value = 0.0 if slope != 0 else 1.0
         ci_low = ci_high = slope
     else:
-        se = math.sqrt(sse / df / sxx * variance_factor)
+        se = math.sqrt(sse / (n - 2) / sxx * variance_factor)
         t_stat = slope / se
         p_value = t_two_sided_p(t_stat, df)
         half_width = t_critical(alpha, df) * se

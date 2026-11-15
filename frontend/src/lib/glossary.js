@@ -51,7 +51,7 @@ export const GLOSSARY = [
     id: "autocorr",
     term: "Serial correlation",
     short:
-      "When a year tends to resemble the year before it. That makes chance “trends” look more convincing than they are, so when it is statistically strong the uncertainty is widened.",
+      "When a year tends to resemble the year before it. That makes chance “trends” look more convincing than they are, so the uncertainty is widened whenever years tend to follow each other.",
   },
   {
     id: "fdr",
