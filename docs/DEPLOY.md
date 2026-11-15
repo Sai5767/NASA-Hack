@@ -1,80 +1,81 @@
-# Publishing Trend Detective on free hosting
+# Deploying Trend Detective
 
-**Status: deployed on Vercel (Option D), private by default.** The Docker routes (A to C) are prepared but not published, and
-have not been built on the machine this was written on (no Docker there); the one-process mode they rely on *has* been run and
-checked locally.
+This project is split into a **Vercel backend** and a separately hosted **static frontend on Porkbun**. Vercel is the only place that receives backend secrets. The Porkbun build receives one public setting: the Vercel API origin.
 
-## How it works
+## Before starting
 
-The API can serve the built front-end itself, so **one process and one URL** is all a host needs:
+- Push the repository to GitHub. `.env` files must remain uncommitted.
+- Have the final public frontend domain ready, including whether both `example.com` and `www.example.com` will be served.
+- Generate a long random `TD_CASE_SECRET` in a password manager. It must not be the same as any account password.
 
-1. `npm run build` in `frontend/` produces `frontend/dist`.
-2. When `frontend/dist/index.html` exists, `backend/app/deploy.py` mounts it at `/`. Every `/api/...` route keeps precedence.
-3. In a production build the front-end calls the API on the same origin (`frontend/src/api.js`), so no URLs need configuring.
-4. `TD_ALLOWED_ORIGINS` (comma separated, or `*`) adds extra browser origins, only needed if the page is hosted somewhere
-   other than the API.
+## Vercel: backend and environment variables
 
-Try it locally without Docker:
+1. In Vercel, import the GitHub repository. The Vercel project root directory must be the repository root.
+2. Deploy once. `vercel.json` builds the React frontend and routes `/api/*` to `api/index.py`, which exposes the FastAPI app.
+3. Copy the Vercel deployment’s production origin, for example `https://trend-detective-api.vercel.app`.
+4. Under **Project → Settings → Environment Variables**, add the following values for **Production**:
 
-```bash
-cd frontend
-npm run build
-cd ../backend
-.venv\Scripts\activate
-uvicorn app.main:app --port 8010
-```
+   | Name | Required | Value |
+   | --- | --- | --- |
+   | `METEOMATICS_USERNAME` | Yes for live-weather feature | Meteomatics account username |
+   | `METEOMATICS_PASSWORD` | Yes for live-weather feature | Meteomatics account password |
+   | `TD_CASE_SECRET` | Yes | New long random secret |
+   | `TD_ALLOWED_ORIGINS` | Yes for separate frontend | Comma-separated final frontend origins, e.g. `https://example.com,https://www.example.com` |
+   | `OPENAI_API_KEY` | Optional | Enables live “Why?” explanations |
+   | `OPENAI_EXPLANATION_MODEL` | Required with OpenAI key | A model available to the account and compatible with the Responses API |
 
-Then open http://127.0.0.1:8010. That is the whole app from one server.
+5. Redeploy. Environment-variable changes do not reliably affect an already-built deployment until a redeploy.
+6. Confirm these endpoints from a browser:
 
-## Option A: Render (free web service)
+   ```text
+   https://your-vercel-origin/api/health/details
+   https://your-vercel-origin/docs
+   ```
 
-1. Push this repository to GitHub (it already is) and make sure Render can read it.
-2. In Render choose **New, Blueprint**, pick the repository and branch. `render.yaml` describes the service: Docker, free plan,
-   health check `/api/places`.
-3. Wait for the build. The URL Render shows is the app.
+`backend/.env` is intentionally ignored by Vercel. [`api/index.py`](../api/index.py) sets `TD_LOAD_ENV_FILE=0`, so deploying cannot accidentally use a local secret file.
 
-## Option B: Hugging Face Spaces (Docker Space, free)
+## Porkbun: static frontend
 
-Create a Space of type **Docker**, push this repository to it, and set the Space's app port to `8000`. The `Dockerfile` is used as is.
+1. Create `frontend/.env.production` from `frontend/.env.production.example`.
+2. Set only the public API origin:
 
-## Option C: Fly.io
+   ```dotenv
+   VITE_API_BASE=https://your-vercel-origin
+   ```
 
-`fly launch` detects the `Dockerfile`; keep internal port `8000`.
+3. Build locally:
 
-## Option D: Vercel (what is deployed now)
+   ```powershell
+   cd frontend
+   npm ci
+   npm run build
+   ```
 
-Vercel serves the built front-end from its CDN and runs the API as one serverless Python function. Files involved:
+4. Upload the **contents** of `frontend/dist/` to the Porkbun hosting document root.
+5. If the Porkbun product provides rewrite rules, configure a single-page-app fallback to `/index.html` for client-side navigation.
+6. Enable HTTPS on the chosen frontend domain before adding it to `TD_ALLOWED_ORIGINS`.
 
-- `vercel.json`: builds `frontend/` into `frontend/dist`, and rewrites every `/api/...` request to the function.
-- `api/index.py`: the function's entry point; it loads `backend/app/main.py` (`TD_LOAD_ENV_FILE=0`, so no `.env` file is read).
-- `pyproject.toml`: the libraries the function installs (keep the pins in step with `backend/requirements.txt`).
-- `.vercelignore`: what the CLI must not upload. It replaces `.gitignore` for deploys, so the secret files are listed again there.
+`VITE_API_BASE` is public by design. Never use a `VITE_` variable for keys, passwords, `TD_CASE_SECRET`, or any private setting.
 
-Deploy from the repository root (first run: `npx vercel login`, then `npx vercel link --project trend-detective`):
+## Smoke-test checklist
 
-```bash
-npx vercel deploy --prod --yes
-```
+- [ ] Page loads from the Porkbun HTTPS URL with no CORS errors in browser developer tools.
+- [ ] A location/metric trend loads and produces a case signature.
+- [ ] A two-location comparison uses both selected locations.
+- [ ] Globe overlay/timeline interactions still work.
+- [ ] News context handles an empty provider response cleanly.
+- [ ] `/api/live-weather` reports `available` with Meteomatics credentials, or an honest `unconfigured`/`unavailable` state without them.
+- [ ] The “Why?” button returns a labelled curated fallback unless both OpenAI settings are intentionally configured.
+- [ ] `/api/health/details` contains no credential values.
 
-Set `OPENAI_API_KEY`, `METEOMATICS_USERNAME` etc. as Vercel project environment variables if you want those optional features.
+## Troubleshooting
 
-Things that differ from the one-process hosts above:
+| Symptom | Check |
+| --- | --- |
+| Browser reports CORS or fetch failure | Rebuild the frontend with the exact `VITE_API_BASE`; set the exact `https://` Porkbun origin(s) in `TD_ALLOWED_ORIGINS`; redeploy Vercel. |
+| API works locally but fails on Vercel | Check Vercel function logs and `pyproject.toml`; do not upload `backend/.venv` or `backend/.env`. |
+| Live weather says unconfigured | Verify both Meteomatics variable names in Vercel, then redeploy. |
+| Explanations always use the fallback | This is expected without both `OPENAI_API_KEY` and `OPENAI_EXPLANATION_MODEL`. |
+| Explanations report invalid signature after a cold start | Set a stable `TD_CASE_SECRET` in Vercel and redeploy. |
 
-- **Each request can run in a fresh process.** The in-memory caches and rate limits are per instance, so they help less and a cold request fetches NASA POWER again.
-- **A request is cut off after 60 seconds** (`maxDuration` in `vercel.json`). The first trend ledger or world survey can take close to that.
-- **New projects are private by default** (Vercel Authentication). Turn that off under Project Settings, Deployment Protection, for the public to see the site.
-
-## What to expect on a free tier
-
-- **Cold starts.** Free services sleep when idle, so the first request after a pause is slow.
-- **First load of each place is slow.** The app asks NASA POWER live. Results are cached in memory, but the cache is lost whenever
-  the service restarts, so the first trend ledger or world survey after a wake-up can take about a minute.
-- **No secrets are required.** The core app uses only keyless public data sources. If you turn on the optional OpenAI explanations or Meteomatics weather, set `OPENAI_API_KEY`, `OPENAI_EXPLANATION_MODEL`, `METEOMATICS_USERNAME` and `METEOMATICS_PASSWORD` as the host's environment variables (Azure: App Service application settings). Never put values in the repository, and never upload `backend/.env` (it is excluded from Git and from the Docker image; the host's variables always win over it).
-- **Public means public.** Anyone with the URL can use it, and every request calls NASA POWER from the host's IP address. Keep
-  an eye on the rate limits if it gets heavy use.
-
-## Checklist before announcing the link
-
-- [ ] Open the URL on a phone and on a laptop; try the guided cases and the ledger.
-- [ ] Confirm the footer credits (NASA POWER, GISTEMP, NOAA, NSIDC) are visible.
-- [ ] Put the URL in the README and the competition submission.
+The core NASA/NOAA/NSIDC trend features use public keyless sources. Vercel/serverless cold starts can still make a first live request slower because in-memory caches are per instance.

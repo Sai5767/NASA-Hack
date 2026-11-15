@@ -1,192 +1,186 @@
-TREND DETECTIVE - DATA SOURCES, API CALLS AND AI MODELS
+TREND DETECTIVE — DATA SOURCES, APIs, AND MODELS
+NASA Space Apps Challenge submission inventory
+Updated: 15 November 2026
 
-Final V2 inventory, written by the integration agent on 2026-11-15 from the code in this folder (backend/app, frontend/src,
-frontend/package.json, backend/.env.example). It lists what the code actually calls or bundles, not a wish list.
+PURPOSE
+-------
 
-Categories used below:
-  ACTIVELY USED        the default build calls or bundles it with no key or account.
-  OPTIONAL/CONFIGURED  the code is implemented, but it only runs when the owner sets server-side settings; without them the
-                       app shows an intentional "not configured" state.
-  PLANNED, NOT BUILT   discussed for later; no code calls it. Do not claim it as a feature.
-  REFERENCE ONLY       cited or linked for reading; never fetched as data.
+This is the source-of-truth inventory for the submitted application. Each entry states exactly how it is used.
+“Used at runtime” means the deployed backend can request it. “Bundled” means a derived asset is shipped with the
+front end. “Reference only” means it is cited in explanations but never treated as application data.
 
-Note: the final browser walkthrough (live UI labels on every screen) has not been done yet. The UI labels below are the
-ones written in the code.
+The project deliberately keeps measured climate data, forecast data, news context, map geometry, and AI explanations
+separate. No optional third-party weather or AI result is included in a NASA POWER trend calculation.
 
-====================================================================
-1. ACTIVELY USED - EARTH-SCIENCE AND CLIMATE DATA
-====================================================================
+1. EARTH-SYSTEM DATA USED AT RUNTIME
+------------------------------------
 
-NASA POWER (monthly point API)
-  Provider: NASA Langley Research Center (LaRC) POWER Project
-  Endpoint family: https://power.larc.nasa.gov/api/temporal/monthly/point (server-side only, backend/app/nasa_power.py)
-  Kind: reanalysis/model blended with satellite and ground observations (not a street-level measurement)
-  Purpose: every local trend (/api/trend, /api/sweep, /api/grid, /api/duel), the world sample-site survey (/api/world,
-    /api/ledger, /api/archetypes), the local 1x1-3x3 monthly grid on the globe (/api/monthly-frames) and the inputs to
-    both internal forecasts (/api/forecast, /api/monthly-forecast).
-  UI label: "Observed/reanalysis, NASA POWER"; the globe field carries the local-grid caveat ("coarse local NASA POWER
-    grid", not a global map); world dots say "Sample sites, not a complete global map".
-  Credit shown: "NASA Langley Research Center (LaRC) POWER Project, funded through the NASA Earth Science/Applied Science
-    Program".
+NASA POWER — Prediction Of Worldwide Energy Resources
+  Official API documentation: https://power.larc.nasa.gov/docs/services/api/
+  Runtime endpoint:            https://power.larc.nasa.gov/api/temporal/monthly/point
+  Provider: NASA Langley Research Center (LaRC) POWER Project.
+  Authentication: none.
+  Used for: monthly point time series and derived annual values for 19 variables:
+    T2M, T2M_MAX, T2M_MIN, T2M_RANGE, TS;
+    PRECTOTCORR, RH2M, QV2M, TQV;
+    EVLAND, GWETROOT, GWETTOP, PRECSNOLAND;
+    ALLSKY_SFC_SW_DWN, CLRSKY_SFC_SW_DWN, ALLSKY_SFC_LW_DWN, CLOUD_AMT;
+    WS2M, PS.
+  Application use: place trends, comparison, regional scan, world survey, monthly frames, and forecasts.
+  Credit: “Data obtained from the NASA Langley Research Center (LaRC) POWER Project funded through the NASA Earth
+          Science/Applied Science Program.”
 
-NASA GISS GISTEMP v4
-  Endpoint family: data.giss.nasa.gov/gistemp/tabledata_v4 (GLB.Ts, ZonAnn.Ts), backend/app/streams.py
-  Kind: observed (station + ocean analysis)
-  Purpose: Explore > Vitals global and latitude-band temperature anomalies. UI: "NASA GISS GISTEMP".
+NASA GISS GISTEMP v4 — global and zonal surface-temperature anomalies
+  Dataset information: https://data.giss.nasa.gov/gistemp/
+  Global CSV requested: https://data.giss.nasa.gov/gistemp/tabledata_v4/GLB.Ts+dSST.csv
+  Zonal CSV requested:  https://data.giss.nasa.gov/gistemp/tabledata_v4/ZonAnn.Ts+dSST.csv
+  Authentication: none.
+  Used for: global temperature vital sign and the independent temperature cross-check.
 
-NOAA Global Monitoring Laboratory - Mauna Loa CO2
-  Endpoint family: gml.noaa.gov/webdata/ccgg/trends/co2 (co2_mm_mlo.csv)
-  Kind: observed
-  Purpose: Explore > Vitals CO2 series. UI: "NOAA GML".
+NOAA Global Monitoring Laboratory — Mauna Loa monthly CO2
+  Dataset landing page: https://gml.noaa.gov/ccgg/trends/
+  CSV requested:        https://gml.noaa.gov/webdata/ccgg/trends/co2/co2_mm_mlo.csv
+  Authentication: none.
+  Used for: atmospheric CO2 planet vital.
 
-NSIDC Sea Ice Index (G02135)
-  Endpoint family: noaadata.apps.nsidc.org/NOAA/G02135
-  Kind: observed (satellite passive microwave)
-  Purpose: Explore > Vitals Arctic and Antarctic sea-ice extent. UI: "NSIDC Sea Ice Index".
+NOAA@NSIDC Sea Ice Index, Version 4 (G02135)
+  Dataset page: https://nsidc.org/data/g02135/versions/4
+  Data archive: https://noaadata.apps.nsidc.org/NOAA/G02135/
+  DOI: https://doi.org/10.7265/a98x-0f50
+  Authentication: none for the files requested by this application.
+  Used for: Arctic and Antarctic monthly sea-ice extent planet vitals.
+  Note: the app attempts Version 4 files and legacy-compatible file names to make the stream resilient to a version
+        transition. The current source record is Version 4.
 
-NOAA Climate Prediction Center and NCEI climate indices
-  Endpoint families: cpc.ncep.noaa.gov (ONI, NAO tables), ncei.noaa.gov (ERSST v5 PDO index)
-  Kind: observed indices
-  Purpose: ENSO/PDO/NAO context in Vitals and the ENSO-adjusted check in the case file. UI: "NOAA CPC and NCEI".
+NOAA Climate Prediction Center (CPC) — Oceanic Niño Index and North Atlantic Oscillation
+  CPC climate-index directory: https://www.cpc.ncep.noaa.gov/data/indices/
+  ONI file requested:           https://www.cpc.ncep.noaa.gov/data/indices/oni.ascii.txt
+  NAO file requested:           https://www.cpc.ncep.noaa.gov/products/precip/CWlink/pna/norm.nao.monthly.b5001.current.ascii.table
+  Authentication: none.
+  Used for: climate-rhythm context, detrended correlation checks, and optional ENSO-adjusted local trends.
+  Interpretation: correlation is not presented as causation.
 
-====================================================================
-2. ACTIVELY USED - NEWS CONTEXT (keyless default)
-====================================================================
+NOAA National Centers for Environmental Information (NCEI) — ERSSTv5 PDO index
+  ERSSTv5 product page: https://www.ncei.noaa.gov/products/extended-reconstructed-sst
+  File requested:        https://www.ncei.noaa.gov/pub/data/cmb/ersst/v5/index/ersst.v5.pdo.dat
+  Authentication: none.
+  Used for: Pacific Decadal Oscillation climate-rhythm context.
 
-GDELT DOC 2.0 API
-  Endpoint family: https://api.gdeltproject.org/api/v2/doc/doc (server-side, backend/app/news.py GdeltNewsProvider)
-  Kind: news context (not scientific evidence)
-  Capital-city popups (not a service): frontend/src/lib/capitals.js is a hand-written list of the 193 UN member states'
-    capitals with approximate positions (static geography, bundled, no request). The popups show derived details and a few
-    fixed facts only.
-  When it runs: automatically on Main once onboarding is finished (never before), for the user's saved places first and
-    then the capitals (frontend/src/lib/capitalNews.js): batches of at most five, one batch at a time, eight seconds
-    apart, main countries first, at most 24 batches (120 capitals) per visit, a 60 second back-off when rate-limited and a
-    stop after three failed batches in a row, through the same cached and rate-limited /api/news flow. Only the fixed
-    capital list is ever requested, never arbitrary coordinates. NEWS_PROVIDER=disabled turns it off.
-  UI label: every item says "news context, not scientific evidence"; green/amber/red is an attention label from
-    transparent keyword rules, not an official warning; items whose host is not on the verified-publisher list
-    (publisher_verified: false) are shown as "Unverified news context".
+2. BUNDLED DERIVED DATA AND MAP MATERIAL
+----------------------------------------
 
-====================================================================
-3. OPTIONAL / CONFIGURED ONLY
-====================================================================
+Coarse global climate preview assets
+  Source: NASA POWER monthly point API (link above).
+  Files: frontend/public/coarse/T2M.json, PRECTOTCORR.json, CLOUD_AMT.json, manifest.json.
+  Construction: 15-degree point grid, 264 locations, monthly values from 2023-01 to 2025-12; values are quantised
+                for a light-weight visual overview.
+  Used for: immediate, approximate global temperature/rainfall/cloud patterns while detailed local data loads.
+  Not used for: point values, statistics, p-values, trend conclusions, or forecast claims.
+  Rebuild script: tools/coarse_preview/build.py.
 
-Meteomatics Weather API (live point weather)
-  Endpoint family: https://api.meteomatics.com/{validdatetime}/{parameters}/{location}/json (server-side only)
-  Kind: operational weather forecast/nowcast, 1-72 hours, one point
-  Parameters: t_2m:C, precip_1h:mm, total_cloud_cover:p, wind_speed_10m:ms
-  Settings: METEOMATICS_USERNAME, METEOMATICS_PASSWORD (+ optional METEOMATICS_BASE_URL, METEOMATICS_TIMEOUT_SECONDS,
-    METEOMATICS_CACHE_TTL_SECONDS, METEOMATICS_RATE_LIMIT_MAX, METEOMATICS_RATE_LIMIT_WINDOW_SECONDS,
-    METEOMATICS_GLOBAL_RATE_LIMIT_MAX, METEOMATICS_GLOBAL_RATE_LIMIT_WINDOW_SECONDS)
-  Without credentials: /api/live-weather returns status "unconfigured" and the card says so.
-  UI label: Meteomatics source, valid/fetch time, stale state and "not NASA trend data"; it is separate from NASA POWER
-    history and from the app's own monthly forecast.
-  Status: real-account path tested only against in-memory fakes; the owner's one-call smoke test is still pending.
+Natural Earth map data through world-atlas
+  Natural Earth: https://www.naturalearthdata.com/
+  world-atlas package: https://www.npmjs.com/package/world-atlas
+  topojson-client package: https://www.npmjs.com/package/topojson-client
+  d3-geo package: https://www.npmjs.com/package/d3-geo
+  Used for: land and border geometry on the canvas globe. The map data are not a climate data source.
+  Licence/status: Natural Earth data are public domain.
 
-OpenAI Responses API with the web_search tool (manual "Why might this be happening?")
-  Endpoint family: OpenAI Responses API (server-side only, backend/app/explanations.py), tool "web_search" with
-    filters.allowed_domains = the science allow-list
-  Kind: AI-generated possible explanations with citations (context, not proof)
-  When it runs: only when the user presses the Why button after a completed analysis; answers cached 24 h.
-  Settings: OPENAI_API_KEY and OPENAI_EXPLANATION_MODEL (both required; no model name is hard-coded) + optional
-    OPENAI_BASE_URL, OPENAI_TIMEOUT_SECONDS, OPENAI_WEB_SEARCH, OPENAI_WEB_SEARCH_CONTEXT_SIZE, OPENAI_MAX_TOOL_CALLS,
-    OPENAI_MAX_OUTPUT_TOKENS, EXPLANATION_CACHE_TTL_SECONDS, EXPLANATION_RATE_LIMIT_MAX,
-    EXPLANATION_RATE_LIMIT_WINDOW_SECONDS
-  Without key or model: status "no_key" with the curated literature fallback, shown as such.
-  UI label: "These are possible explanations, not proof that one cause created this local trend."
-  Runtime model: none chosen yet (owner step). Status: tested only against fakes; owner smoke test pending.
+Project-maintained city/place catalogue
+  File: backend/app/places.py and front-end capital/location utilities.
+  Used for: sample places, saved-location validation, and locations for contextual news markers.
+  Nature: curated approximate place centroids; it is not an authoritative boundary or geocoding service.
 
-Configurable JSON news feed
-  NEWS_PROVIDER=json_feed (or azure/custom) with NEWS_API_URL and NEWS_API_KEY. Not configured by default; any provider
-  needs a terms review. Optional: NEWS_TIMEOUT_SECONDS, NEWS_CACHE_TTL_SECONDS.
+3. OPTIONAL OPERATIONAL CONTEXT (SEPARATE FROM TREND ANALYSIS)
+----------------------------------------------------------------
 
-====================================================================
-4. INTERNAL ANALYSIS AND FORECAST MODELS (run in the backend, no external AI)
-====================================================================
+Meteomatics Weather API
+  Product/API page: https://www.meteomatics.com/en/weather-api/
+  Runtime API base: https://api.meteomatics.com/
+  Authentication: HTTP Basic authentication, supplied server-side only through METEOMATICS_USERNAME and
+                  METEOMATICS_PASSWORD.
+  Used for: optional hourly live-weather panel at a selected location, via GET /api/live-weather.
+  Not used for: historical trend statistics, p-values, NASA POWER values, or the coarse global preview.
+  Failure behaviour: returns an explicit “unconfigured” or “unavailable” state and leaves core analysis working.
 
-Trend statistics (backend/app/stats.py, analysis.py): Theil-Sen slope and interval, Mann-Kendall test, OLS t-test,
-  serial-correlation adjustment, Benjamini-Hochberg false-discovery control, Pettitt change point, emergence year and the
-  evidence verdict (evidence_trace). Audited in docs/STATS_AUDIT.md. The browser never computes these.
-Annual forecast lab (backend/app/forecast.py, ml.py): naive baselines, trend models, ridge regression and an ensemble,
-  backtested; replays are labelled "illustration, in-sample".
-Monthly forecast (backend/app/monthly.py): 1-3 months for T2M, PRECTOTCORR and CLOUD_AMT on the local grid; seasonal-naive,
-  harmonic/damped-trend and regularised autoregressive candidates; frames appear only when eligible is true.
-  UI label: "Forecast - not observed data", hatched, after an observed/forecast divider.
-Archetypes (backend/app/archetypes.py): clustering of sample-site fingerprints.
-Spatial pattern (backend/app/morans.py): Moran's I for Explore > Scan.
+GDELT 2.0 DOC API
+  Project: https://www.gdeltproject.org/
+  Runtime endpoint: https://api.gdeltproject.org/api/v2/doc/doc
+  Authentication: none for the default adapter.
+  Used for: optional current news context around saved locations and a fixed global rotation of locations.
+  Safeguards: environmental-topic filtering, URL/title de-duplication, cache, stale-on-error response, and deterministic
+              green/amber/red labels. The labels are editorial triage, not emergency-alert levels.
+  Not used for: data analysis, statistical significance, or proof of a scientific claim.
 
-====================================================================
-5. MAP, IMAGERY AND UI ASSETS (bundled at build time)
-====================================================================
+4. AI, STATISTICS, AND FORECAST MODELS
+---------------------------------------
 
-Natural Earth via world-atlas (npm world-atlas, topojson-client, d3-geo): land and border geometry for the canvas globe.
-  Public domain. Map geometry only, not Earth-system data.
-Fonts: Space Grotesk and JetBrains Mono, bundled from Fontsource (@fontsource-variable packages, SIL Open Font
-  Licence). No web-font CDN is called.
-Satellite imagery: none. The globe's atmosphere, halo, starfield and radar sweep are decorative procedural drawing and
-  never imitate a live satellite product. No NASA logo is used.
-Curated in-app content: guided cases (frontend/src/lib/cases.js), notable events (frontend/src/lib/events.js) and the
-  curated literature used by the Why fallback (backend/app/explanations.py) are hand-written with source links.
+OpenAI Responses API (optional)
+  Documentation: https://platform.openai.com/docs/guides/responses
+  Web-search tool guide: https://platform.openai.com/docs/guides/tools-web-search
+  Runtime endpoint default: https://api.openai.com/v1/responses
+  Authentication: OPENAI_API_KEY on the backend only.
+  Model: selected by the owner via OPENAI_EXPLANATION_MODEL; no OpenAI model name is hard-coded in this repository.
+  Used for: optional “Why might this be happening?” explanation after a server-verified case is computed.
+  Safeguards: NASA/NOAA/NSIDC and other science-domain allow-list, source validation, limited tool calls, output
+              validation, rate limiting, caching, and a sourced curated fallback when unavailable.
+  Not used for: calculating any statistics, forecasts, p-values, or severity labels.
 
-====================================================================
-6. REFERENCE ONLY (linked or cited; never fetched as data)
-====================================================================
+Internal statistical methods (no external AI/ML service)
+  Implemented in: backend/app/stats.py, analysis.py, forecast.py, monthly.py, ml.py, archetypes.py, morans.py.
+  Used for: Theil-Sen slope and confidence interval; Mann-Kendall trend test; OLS regression test; autocorrelation
+            adjustment; Benjamini-Hochberg correction; Pettitt change-point test; emergence analysis; spatial Moran’s I;
+            short-horizon forecast selection and backtesting; ridge-regression, clustering, and similarity features.
+  Audit: docs/STATS_AUDIT.md.
+  Important: these are explanatory statistical tools and short-horizon forecasts, not formal climate projections.
 
-Peer-reviewed papers and assessments cited in curated context and the Why fallback (for example IPCC AR6 WG1, AMAP,
-  Global Carbon Project, Nature/AGU/AMS/PNAS papers).
-NASA POWER, GISTEMP, NOAA GML and NSIDC documentation pages linked from About & credits.
+Curated “Why?” fallback sources
+  IPCC AR6 Working Group I: https://www.ipcc.ch/report/ar6/wg1/
+  Global Carbon Project: https://globalcarbonproject.org/
+  AMAP: https://www.amap.no/
+  Additional peer-reviewed URLs are embedded and source-validated in backend/app/explanations.py.
+  Used only when explaining possible mechanisms; never fetched as primary time-series data by the app.
 
-====================================================================
-7. PLANNED OR CONSIDERED, NOT IMPLEMENTED (do not claim)
-====================================================================
+5. INTERFACE ASSETS AND DEVELOPMENT TOOLS
+------------------------------------------
 
-A true global monthly raster on the globe (needs its own backend/data phase; today the globe shows a local 1x1-3x3 grid
-  and sample-site dots only).
-A gridded Meteomatics layer (only point weather is implemented).
-NASA/GES DISC Giovanni, NASA AppEEARS, NASA Hydrology Time Series, NOAA Climate Data Online, KNMI Climate Explorer,
-  CSA RADARSAT Constellation Mission, CSA SWOT, Geo.ca, SeaWiFS chlorophyll series and CSA SAR tutorials: considered or
-  read during planning; no code calls them.
+Fonts
+  Space Grotesk: https://fonts.google.com/specimen/Space+Grotesk
+  JetBrains Mono: https://www.jetbrains.com/lp/mono/
+  Bundled using the Fontsource packages in frontend/package.json; no font CDN is required at runtime.
 
-====================================================================
-8. DEVELOPMENT ASSISTANTS (not runtime app APIs)
-====================================================================
+Development assistants (not runtime services and not sources of scientific results)
+  Gemini Argon 4 — backend implementation work, as recorded by the project owner.
+  Claude Opus/Sonnet and Fable — front-end implementation, review, and visual direction, as recorded by the project owner.
+  Codex — repository review, documentation, testing support, and deployment/configuration guidance.
 
-Claude (Anthropic): original development; V2 backend repair, statistics and news/streams fixes, app shell, globe and
-  timeline, evidence/Why/Explore and integration agents (Claude Opus 5.5 and Claude Sonnet 5.5).
-Gemini Argon 4: V2 backend implementation (as recorded by the owner).
-Fable: V2 visual direction and design specification (docs/V2_FABLE_VISUAL_SPEC.md).
+6. PLANNED OR CONSULTED RESOURCES — NOT CLAIMED AS INTEGRATED
+--------------------------------------------------------------
 
-====================================================================
-9. SETTING NAMES (names only; never put values here)
-====================================================================
+The following were considered during planning but the current code does not fetch them as application data. They should
+not be claimed as runtime integrations in the submission:
 
-Secrets: OPENAI_API_KEY, METEOMATICS_USERNAME, METEOMATICS_PASSWORD, NEWS_API_KEY, TD_CASE_SECRET
-Feature settings: OPENAI_EXPLANATION_MODEL, OPENAI_BASE_URL, OPENAI_TIMEOUT_SECONDS, OPENAI_WEB_SEARCH,
-  OPENAI_WEB_SEARCH_CONTEXT_SIZE, OPENAI_MAX_TOOL_CALLS, OPENAI_MAX_OUTPUT_TOKENS, EXPLANATION_CACHE_TTL_SECONDS,
-  EXPLANATION_RATE_LIMIT_MAX, EXPLANATION_RATE_LIMIT_WINDOW_SECONDS, METEOMATICS_BASE_URL, METEOMATICS_TIMEOUT_SECONDS,
-  METEOMATICS_CACHE_TTL_SECONDS, METEOMATICS_RATE_LIMIT_MAX, METEOMATICS_RATE_LIMIT_WINDOW_SECONDS,
-  METEOMATICS_GLOBAL_RATE_LIMIT_MAX, METEOMATICS_GLOBAL_RATE_LIMIT_WINDOW_SECONDS, NEWS_PROVIDER, NEWS_API_URL,
-  NEWS_TIMEOUT_SECONDS, NEWS_CACHE_TTL_SECONDS, NASA_POWER_TIMEOUT_SECONDS, NASA_POWER_CACHE_TTL_SECONDS,
-  NASA_POWER_MAX_CONCURRENCY, STREAMS_TIMEOUT_SECONDS, STREAMS_CACHE_TTL_SECONDS
-Server settings: TD_ALLOWED_ORIGINS, TD_TRUSTED_PROXY_HOPS, TD_LOAD_ENV_FILE, TD_VERSION
+- NASA Giovanni — https://giovanni.gsfc.nasa.gov/
+- NASA Hydrology Time Series — https://disc.gsfc.nasa.gov/information/tools?title=Hydrology%20Time%20Series
+- NASA AppEEARS — https://appeears.earthdatacloud.nasa.gov/
+- NOAA Climate Data Online — https://www.ncei.noaa.gov/cdo-web/
+- KNMI Climate Explorer — https://climexp.knmi.nl/
+- Canadian Space Agency RADARSAT Constellation Mission — https://donnees-data.asc-csa.gc.ca/en/dataset/rcm
+- Geo.ca — https://geo.ca/
+- CSA SWOT Mission information — https://www.asc-csa.gc.ca/eng/satellites/swot/
+- CSA Synthetic Aperture Radar Python tutorial — https://github.com/asc-csa/Synthetic_Aperture_Radar_Tutorial
 
-Real values belong only in backend/.env for local development (Git-ignored) or Azure App Service application settings.
-They are never committed, sent to browser code, returned by the API or written in this file.
+7. REPRODUCIBILITY AND CREDITS
+------------------------------
 
-==========================================================================================
-Coarse preview asset (static, bundled; added 15 Nov 2026 by the Globe agent)
-==========================================================================================
-What: frontend/public/coarse/T2M.json (38,056 bytes), PRECTOTCORR.json (34,965 bytes), CLOUD_AMT.json (38,743 bytes),
-      manifest.json (1,115 bytes). Served from the page's own origin; no request to NASA when a variable is chosen.
-Source: NASA POWER monthly point API, https://power.larc.nasa.gov/api/temporal/monthly/point
-        (community RE, parameters T2M, PRECTOTCORR, CLOUD_AMT in one request per point).
-Grid: 15 degrees, latitudes -75..75, longitudes -180..165 (264 points); months 2023-01 .. 2025-12 (36 months).
-Retrieved: 2026-11-15 (0 failed points). Built by tools/coarse_preview/build.py (httpx, at most 4 concurrent
-        requests, retries with backoff). Values quantised to integers (scale 0.1 / 0.01 / 0.1).
-Licence/terms: NASA POWER data are freely available; acknowledge "Data obtained from the NASA Langley Research
-        Center (LaRC) POWER Project funded through the NASA Earth Science/Applied Science Program."
-Use: the globe's "Coarse global preview · approximate pattern" layer only (soft, low-resolution orientation).
-        Never used for trends, p-values, forecasts, exact values or local conclusions. Detailed local data
-        (/api/monthly-frames) always draws on top. Rebuild: python tools/coarse_preview/build.py
-Base Earth: procedural (Natural Earth 110m land/borders via world-atlas, public domain); no imagery is bundled.
+All live source URLs used by backend code are listed above. The source code identifies the exact runtime endpoints in:
+
+- backend/app/nasa_power.py
+- backend/app/streams.py
+- backend/app/news.py
+- backend/app/meteomatics.py
+- backend/app/explanations.py
+
+For the submission, credit NASA LaRC POWER, NASA GISS, NOAA GML/CPC/NCEI, NOAA@NSIDC, Natural Earth, GDELT, and
+Meteomatics as applicable. Mark Meteomatics, GDELT, and OpenAI as optional context features rather than sources of the
+trend evidence.
