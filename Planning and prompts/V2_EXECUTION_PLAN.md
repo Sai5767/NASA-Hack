@@ -174,7 +174,7 @@ NASA POWER remains the shipped, keyless source for point/monthly V2 trend and fo
 
 - Start from a clean branch prefixed `codex/`.
 - Run the existing backend tests, frontend tests, and production build before any V2 work.
-- Read `README.md`, `HANDOFF.md`, `docs/REQUIREMENTS.md`, `docs/STATS_AUDIT.md`, and `docs/V2_DATA_SOURCE_REGISTRY.md`.
+- Read `README.md`, `HANDOFF.md`, `docs/REQUIREMENTS.md`, `docs/STATS_AUDIT.md`, and `Planning and prompts/V2_DATA_SOURCE_REGISTRY.md`.
 - Add the API/schema and failure-mode documents before implementation.
 
 **Exit gate:** baseline results recorded; no existing API response is broken; no secret is committed.

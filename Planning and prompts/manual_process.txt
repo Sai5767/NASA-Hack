@@ -84,8 +84,8 @@ STEP 4 - CHECK THE BACKEND BEFORE CLAUDE STARTS
 
 Ask Gemini to confirm all backend tests pass. Then check that these files exist:
 
-  Planning and prompts/V2_API_CONTRACT.md
-  Planning and prompts/V2_BACKEND_HANDOFF.md or V2_METEOMATICS_HANDOFF.md
+  docs/V2_API_CONTRACT.md
+  docs/V2_BACKEND_HANDOFF.md or V2_METEOMATICS_HANDOFF.md
 
 Read the API contract. It tells Claude exactly what the backend returns.
 

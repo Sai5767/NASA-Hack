@@ -86,9 +86,9 @@ Implement these deliverables in order.
 - Do not alter existing statistical reference values.
 
 4. Documentation and handoff
-- Update `Planning and prompts/V2_API_CONTRACT.md` (create it if absent) with the exact route schema, query limits, cache semantics, and unavailable/stale behaviour.
+- Update `docs/V2_API_CONTRACT.md` (create it if absent) with the exact route schema, query limits, cache semantics, and unavailable/stale behaviour.
 - Update README and HANDOFF.md with the two environment-variable names only, source credit, and the clear distinction between Meteomatics live weather and NASA climate analysis.
-- Add `Planning and prompts/V2_METEOMATICS_HANDOFF.md` with changed files, fixtures, API examples using placeholders only, test commands/results, and known subscription/horizon limitations.
+- Add `docs/V2_METEOMATICS_HANDOFF.md` with changed files, fixtures, API examples using placeholders only, test commands/results, and known subscription/horizon limitations.
 - Run the backend test suite and report results. Do not deploy or configure Azure yourself.
 
 Definition of done

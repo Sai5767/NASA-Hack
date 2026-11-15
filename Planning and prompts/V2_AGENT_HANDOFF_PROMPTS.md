@@ -5,7 +5,7 @@ Use the backend prompt first. Do not begin the frontend prompt until the backend
 ## Shared acceptance context
 
 - Repository: Trend Detective, Python/FastAPI backend in `backend/`; React/Vite frontend in `frontend/`.
-- Start by reading `README.md`, `HANDOFF.md`, `docs/REQUIREMENTS.md`, `docs/STATS_AUDIT.md`, `docs/V2_EXECUTION_PLAN.md`, and `docs/V2_DATA_SOURCE_REGISTRY.md`.
+- Start by reading `README.md`, `HANDOFF.md`, `docs/REQUIREMENTS.md`, `docs/STATS_AUDIT.md`, `Planning and prompts/V2_EXECUTION_PLAN.md`, and `Planning and prompts/V2_DATA_SOURCE_REGISTRY.md`.
 - Preserve the existing NASA POWER trend engine, audits, local profile approach, custom canvas globe, and public source credits.
 - Current baseline commands:
 
@@ -35,8 +35,8 @@ Read these first, in full:
 - HANDOFF.md
 - docs/REQUIREMENTS.md
 - docs/STATS_AUDIT.md
-- docs/V2_EXECUTION_PLAN.md
-- docs/V2_DATA_SOURCE_REGISTRY.md
+- Planning and prompts/V2_EXECUTION_PLAN.md
+- Planning and prompts/V2_DATA_SOURCE_REGISTRY.md
 
 Core constraints:
 1. Preserve FastAPI, the audited hand-written trend statistics, existing public-data behaviour, and backwards-compatible existing API fields.
@@ -112,8 +112,8 @@ Read these first, in full:
 - README.md
 - HANDOFF.md
 - docs/REQUIREMENTS.md
-- docs/V2_EXECUTION_PLAN.md
-- docs/V2_DATA_SOURCE_REGISTRY.md
+- Planning and prompts/V2_EXECUTION_PLAN.md
+- Planning and prompts/V2_DATA_SOURCE_REGISTRY.md
 - docs/V2_API_CONTRACT.md
 - docs/V2_BACKEND_HANDOFF.md
 
