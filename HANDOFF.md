@@ -55,8 +55,16 @@ Environment gotchas: Windows PowerShell 5.1 (no `&&`); git pushes work with the 
 - [x] 10. Colour scheme: new violet "Nebula" default plus the original as "Classic", switched live from the header (`td-theme`). CSS colours are tokens in `styles/theme.css` (`:root` and `:root[data-theme="classic"]`); other CSS points at them. JS-drawn colours (map dots, pins, globe, stars) come from `lib/theme.js`; the globe and starfield remount on change. Tests: `frontend/tests/theme.test.mjs`.
 - [x] 11. Forecast headline in Overview (ForecastHeadline in Overview.jsx; all ML runs locally in pure Python)
 - [x] 12. Hosting config and docs (NOT published; needs the owner's account): `backend/app/deploy.py` (CORS origins from `TD_ALLOWED_ORIGINS`, serves `frontend/dist` at `/`), `Dockerfile`, `.dockerignore`, `render.yaml`, `docs/DEPLOY.md`; `frontend/src/api.js` is same-origin in production. One-process mode was run and verified on port 8010; the Docker image has NOT been built (no Docker here). Tests: `backend/tests/test_deploy.py`.
-- [ ] 13. Final: all tests green, README updated, branch pushed, merge-ready summary
+- [x] 13. Final: 199 backend and 60 front-end tests pass, production build passes, README and docs updated, branch pushed. **The branch is ready to merge into `main`** once the owner agrees (not merged yet).
 
 ## Notes for the next agent
 
-(Add dated notes here: decisions, surprises, anything half-done.)
+2026-11-15, end of the To Do pass (branch `feature/todo-list`, 12 commits on top of `main` at `b9acd82`):
+
+- **Nothing is half-done.** Every To Do item is implemented, tested and pushed. Hosting is *prepared* but deliberately not published.
+- **Not verified, be honest about it:** the `Dockerfile` has never been built (no Docker on the dev machine); the one-process mode it relies on was run and checked (page, assets, API and docs from one server on port 8010). Phone-width layout was checked for horizontal overflow only, not by eye. The wizard modal's width on a phone was not conclusively measured.
+- **Decisions you might otherwise undo:** a Cape Town drought event was removed because the POWER grid barely captures it; replaced by Hurricane Harvey. The ledger offers three orders (p-value, signal vs noise, size) because curved records like CO2 get very cautious p-values (see `docs/STATS_AUDIT.md`). The explainer is deliberately a curated knowledge base with no AI model or network call.
+- **Statistics were changed on purpose** (bias-corrected, ungated serial-correlation adjustment; effective degrees of freedom in the regression; corrected Sen interval rank; Welch duel test). p-values for persistent series moved up slightly. Any new test that hard-codes an old p-value should be regenerated with `tools/stats_audit/`.
+- **Things the owner still decides** (do not do these unasked): merge to `main`; make the repository public (it is private); add a licence; remove `Test_yuvraj.txt` (a teammate's test file); publish on free hosting (needs their account); the competition submission itself (video with English subtitles, slides, form, rules page never read).
+- **Untracked file left alone:** `AI-usage-report.pdf` (the model and token report the owner asked for).
+- **Ideas not done** (from an earlier list, the owner said to set them aside): persistent disk cache so restarts are fast, daily-data extremes, a CI workflow, cross-platform start script.
