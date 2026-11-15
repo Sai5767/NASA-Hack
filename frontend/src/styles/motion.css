@@ -56,3 +56,38 @@
   }
   .draw { stroke-dashoffset: 0; }
 }
+
+/* ---------- V2 shell motion (spec 4.6, 4.7) ---------- */
+
+@keyframes flipInFwd { from { opacity: 0; transform: translateX(12px); } to { opacity: 1; transform: none; } }
+@keyframes flipInBack { from { opacity: 0; transform: translateX(-12px); } to { opacity: 1; transform: none; } }
+@keyframes cardSwap { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes drawerInRight { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: none; } }
+@keyframes sheetUp { from { transform: translateY(100%); } to { transform: none; } }
+@keyframes scrimIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes scanPulse { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
+
+.page-flip-forward { animation: flipInFwd var(--dur-base) var(--ease-standard) both; }
+.page-flip-back { animation: flipInBack var(--dur-base) var(--ease-standard) both; }
+.page-fade { animation: fade var(--dur-page) var(--ease-standard) both; }
+.card-swap { animation: cardSwap var(--dur-base) var(--ease-standard) both; }
+.dash-rise { animation: cardSwap var(--dur-base) var(--ease-standard) both; animation-delay: var(--d, 0ms); }
+
+/* The in-app "Reduce motion" preference (Account ▸ Preferences) sets data-motion="reduced" on <html>; it does exactly what
+   the operating-system setting does. Canvas code reads the same flag (lib/theme.js motionReduced()). */
+:root[data-motion="reduced"] *,
+:root[data-motion="reduced"] *::before,
+:root[data-motion="reduced"] *::after {
+  animation-duration: 0.001ms !important;
+  animation-delay: 0ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
+}
+:root[data-motion="reduced"] { scroll-behavior: auto; }
+:root[data-motion="reduced"] .draw { stroke-dashoffset: 0; }
+:root[data-motion="reduced"] .starfield i { animation: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .starfield i { animation: none !important; }
+}

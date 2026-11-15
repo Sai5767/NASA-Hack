@@ -114,3 +114,49 @@ def test_the_app_starts_and_every_optional_feature_degrades_when_no_key_is_set(f
     trend = client.get("/api/trend", params={"variable": "T2M", "lat": 70, "lon": -150, "start_year": 1981, "end_year": 2024}).json()
     why = client.post("/api/explanations", json={"case_signature": trend["case_signature"]})
     assert why.status_code == 200 and why.json()["status"] in ("no_key", "no_evidence")
+
+
+
+def test_backend_env_is_loaded_before_any_module_that_reads_settings_at_import():
+    # A13: main.py used to import version.py (which reads TD_VERSION at import) before calling load_local_env().
+    import ast
+
+    tree = ast.parse((BACKEND / "app" / "main.py").read_text(encoding="utf-8"))
+    body = [n for n in tree.body if not (isinstance(n, ast.Expr) and isinstance(getattr(n, "value", None), ast.Constant))]
+    body = [n for n in body if not (isinstance(n, ast.ImportFrom) and n.module == "__future__")]
+    first_import, first_call = body[0], body[1]
+    assert isinstance(first_import, ast.ImportFrom) and first_import.module == "env_file"
+    assert isinstance(first_call, ast.Expr) and getattr(first_call.value.func, "id", None) == "load_local_env"
+    later_app_imports = [n for n in body[2:] if isinstance(n, ast.ImportFrom) and n.level == 1]
+    assert any(n.module == "version" for n in later_app_imports)
+
+
+def test_td_version_from_the_env_file_reaches_the_version_report(tmp_path, monkeypatch):
+    # A13 end to end in a fresh interpreter: TD_VERSION only in a .env file, no git -> /api/version shows it.
+    import subprocess
+    import sys
+
+    env_file = _write(tmp_path, "TD_VERSION=from-dot-env-77\n")
+    code = (
+        "import sys, pathlib; sys.path.insert(0, %r)\n"
+        "import app.env_file as ef; ef.ENV_FILE_PATH = pathlib.Path(%r)\n"
+        "import app.main as m\n"
+        "print(m.VERSION['version'])\n"
+    ) % (str(BACKEND), str(env_file))
+    env = {k: v for k, v in os.environ.items() if k not in ("TD_VERSION", "PATH")}
+    env["PATH"] = ""  # no git on PATH (like the Docker image), so the version must come from TD_VERSION
+    env["TD_LOAD_ENV_FILE"] = "1"
+    done = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, env=env, timeout=60, cwd=str(BACKEND))
+    assert done.returncode == 0, done.stderr[-2000:]
+    assert done.stdout.strip().splitlines()[-1] == "from-dot-env-77"
+
+
+def test_the_test_suite_cannot_reach_the_network():
+    # Phase 0 item D: tests/conftest.py refuses every non-loopback connection, so a test that forgets to mock NASA POWER,
+    # OpenAI, Meteomatics or GDELT fails immediately instead of silently waiting on the network.
+    import socket
+
+    with pytest.raises(OSError, match="offline"):
+        socket.getaddrinfo("power.larc.nasa.gov", 443)
+    with pytest.raises(OSError, match="offline"):
+        socket.create_connection(("93.184.216.34", 443), timeout=1)

@@ -537,6 +537,19 @@ def _conformal_quantile(abs_errors: list[float], coverage: float = NOMINAL_COVER
     return sorted(abs_errors)[k - 1]
 
 
+def _empty_calibration(horizons: int) -> dict:
+    """The calibration object when no backtest ran. Same keys as a scored one (A10), with nothing measured."""
+    return {
+        "nominal_coverage": NOMINAL_COVERAGE,
+        "empirical_coverage": None,
+        "min_required_coverage": MIN_EMPIRICAL_COVERAGE,
+        "n_test_origins": 0,
+        "n_test_pairs": 0,
+        "interval_half_width_by_horizon": [None] * int(horizons),
+        "passed": False,
+    }
+
+
 def evaluate_monthly_series(
     ym: list[tuple[int, int]],
     values: list[float],
@@ -557,7 +570,7 @@ def evaluate_monthly_series(
             "selected_model_label": None,
             "baseline_model": "seasonal_naive",
             "models": [],
-            "calibration": {"nominal_coverage": NOMINAL_COVERAGE, "empirical_coverage": None, "n_test": 0, "passed": False},
+            "calibration": _empty_calibration(horizons),
             "training_range": (
                 {"start_month": _format_ym(*ym[0]), "end_month": _format_ym(*ym[-1]), "n_months": n}
                 if ym
@@ -575,11 +588,14 @@ def evaluate_monthly_series(
             "selected_model_label": None,
             "baseline_model": "seasonal_naive",
             "models": [],
-            "calibration": {"nominal_coverage": NOMINAL_COVERAGE, "empirical_coverage": None, "n_test": 0, "passed": False},
+            "calibration": _empty_calibration(horizons),
             "training_range": {"start_month": _format_ym(*ym[0]), "end_month": _format_ym(*ym[-1]), "n_months": n},
             "forecasts": [],
         }
 
+    # A11: defensive only. With MIN_FORECAST_MONTHS = 120 and horizons <= 3, n - 72 - horizons >= 45 > BACKTEST_ORIGINS, so
+    # this branch cannot be reached with today's constants. It is kept (and its reason_code stays in the contract) so that
+    # lowering MIN_FORECAST_MONTHS or raising the horizon can never silently run a backtest with too few origins.
     max_origins = min(BACKTEST_ORIGINS, n - 72 - horizons)
     if max_origins < MIN_BACKTEST_ORIGINS:
         return {
@@ -590,7 +606,7 @@ def evaluate_monthly_series(
             "selected_model_label": None,
             "baseline_model": "seasonal_naive",
             "models": [],
-            "calibration": {"nominal_coverage": NOMINAL_COVERAGE, "empirical_coverage": None, "n_test": 0, "passed": False},
+            "calibration": _empty_calibration(horizons),
             "training_range": {"start_month": _format_ym(*ym[0]), "end_month": _format_ym(*ym[-1]), "n_months": n},
             "forecasts": [],
         }
@@ -675,6 +691,7 @@ def evaluate_monthly_series(
     cut_idx = max(4, math.floor(len(origins) * CALIBRATION_SPLIT))
     cut_origin = origins[min(cut_idx, len(origins) - 2)]
     hits = total_test = 0
+    test_origins: set[int] = set()
     for h, rows in abs_by_h.items():
         q_cal = _conformal_quantile([e for o, e in rows if o <= cut_origin], NOMINAL_COVERAGE)
         if q_cal is None:
@@ -682,6 +699,7 @@ def evaluate_monthly_series(
         for o, e in rows:
             if o > cut_origin:
                 total_test += 1
+                test_origins.add(o)
                 if e <= q_cal:
                     hits += 1
 
@@ -692,7 +710,10 @@ def evaluate_monthly_series(
         "nominal_coverage": NOMINAL_COVERAGE,
         "empirical_coverage": emp_cov,
         "min_required_coverage": MIN_EMPIRICAL_COVERAGE,
-        "n_test_origins": total_test,
+        # n_test_origins = distinct held-out origins; n_test_pairs = scored (origin, horizon) pairs (A10: the old
+        # "n_test_origins" actually counted pairs).
+        "n_test_origins": len(test_origins),
+        "n_test_pairs": total_test,
         "interval_half_width_by_horizon": [
             round(q_full[h], 4) if q_full[h] is not None else None for h in range(1, horizons + 1)
         ],
@@ -817,6 +838,7 @@ async def build_monthly_forecast(
             "models": [],
             "calibration": None,
             "training_range": None,
+            "alignment": None,
             "grid": {"n": n, "size_degrees": size, "total_cells": len(grid_meta)},
             "provenance": _provenance_block(variable, start_year, end_year, is_forecast=True),
             "cells": [],
@@ -860,6 +882,7 @@ async def build_monthly_forecast(
             "models": [],
             "calibration": None,
             "training_range": None,
+            "alignment": None,
             "grid": {"n": n, "size_degrees": size, "total_cells": len(grid_meta)},
             "provenance": _provenance_block(variable, start_year, end_year, is_forecast=True),
             "cells": [
@@ -885,6 +908,23 @@ async def build_monthly_forecast(
             }
         )
 
+    # A2: every cell must forecast the SAME calendar months. Each cell's series ends at its own last valid month, so trim
+    # all of them to the earliest common last month before any backtest; otherwise a frame labelled "2025-01" could hold
+    # some cells' 2024-12 forecast.
+    ends = [c["ym"][-1] for c in cell_records if c["ym"]]
+    common_end = min(ends) if ends else None
+    trimmed_cells = 0
+    if common_end is not None:
+        for c in cell_records:
+            if c["ym"] and c["ym"][-1] > common_end:
+                keep = sum(1 for ym_pair in c["ym"] if ym_pair <= common_end)
+                c["ym"], c["vals"] = c["ym"][:keep], c["vals"][:keep]
+                trimmed_cells += 1
+    alignment = {
+        "common_end_month": _format_ym(*common_end) if common_end else None,
+        "cells_trimmed_to_common_end": trimmed_cells,
+    }
+
     sparse_cells = [
         c for c in cell_records if len(c["vals"]) < MIN_FORECAST_MONTHS or c["missing_fraction"] > MAX_MISSING_FRACTION
     ]
@@ -908,6 +948,7 @@ async def build_monthly_forecast(
             "models": [],
             "calibration": None,
             "training_range": None,
+            "alignment": alignment,
             "grid": {"n": n, "size_degrees": size, "total_cells": len(grid_meta)},
             "provenance": _provenance_block(variable, start_year, end_year, is_forecast=True),
             "cells": [
@@ -926,8 +967,12 @@ async def build_monthly_forecast(
             "frames": [],
         }
 
-    # Evaluate each cell with rolling-origin backtests
-    cell_evals = [evaluate_monthly_series(c["ym"], c["vals"], variable, horizons=horizons) for c in cell_records]
+    # Evaluate each cell with rolling-origin backtests. This is pure-Python CPU work (over a second for a 3 x 3 grid), so it
+    # runs in a worker thread (A5): the event loop keeps serving other requests, health checks included, meanwhile.
+    def _evaluate_all() -> list[dict]:
+        return [evaluate_monthly_series(c["ym"], c["vals"], variable, horizons=horizons) for c in cell_records]
+
+    cell_evals = await asyncio.to_thread(_evaluate_all)
     center_idx = len(cell_records) // 2
     primary_eval = cell_evals[center_idx]
 
@@ -946,9 +991,12 @@ async def build_monthly_forecast(
             "selected_model": None,
             "selected_model_label": None,
             "baseline_model": "seasonal_naive",
-            "models": failed_ev["models"] or primary_eval["models"],
-            "calibration": failed_ev["calibration"] or primary_eval["calibration"],
-            "training_range": failed_ev["training_range"] or primary_eval["training_range"],
+            # A10: the scoreboard, calibration and training range all describe the cell that failed (failed_cell_id),
+            # never the centre cell's numbers next to another cell's reason.
+            "models": failed_ev["models"],
+            "calibration": failed_ev["calibration"],
+            "training_range": failed_ev["training_range"],
+            "alignment": alignment,
             "failed_cell_id": failed_cell["cell_id"],
             "grid": {"n": n, "size_degrees": size, "total_cells": len(grid_meta)},
             "provenance": _provenance_block(variable, start_year, end_year, is_forecast=True),
@@ -965,6 +1013,39 @@ async def build_monthly_forecast(
                     "reason": ev["reason"],
                 }
                 for c, ev in zip(cell_records, cell_evals)
+            ],
+            "frames": [],
+        }
+
+    # Defensive second check for A2: after trimming, every cell's forecast months must match the reference cell's.
+    ref_months = [fc["month"] for fc in primary_eval["forecasts"]]
+    misaligned = [
+        c["cell_id"] for c, ev in zip(cell_records, cell_evals) if [fc["month"] for fc in ev["forecasts"]] != ref_months
+    ]
+    if misaligned:
+        return {
+            "variable": {"id": variable, **info},
+            "location": {"lat": lat, "lon": lon},
+            "supported_variables": list(FORECAST_VARIABLES),
+            "eligible": False,
+            "reason_code": "misaligned_cells",
+            "reason": (
+                "Forecast withheld: local grid cells would forecast different calendar months "
+                f"({', '.join(misaligned)} differ from the centre cell), so frames cannot be labelled honestly."
+            ),
+            "horizons_requested": horizons,
+            "selected_model": None,
+            "selected_model_label": None,
+            "baseline_model": "seasonal_naive",
+            "models": [],
+            "calibration": None,
+            "training_range": None,
+            "alignment": alignment,
+            "grid": {"n": n, "size_degrees": size, "total_cells": len(grid_meta)},
+            "provenance": _provenance_block(variable, start_year, end_year, is_forecast=True),
+            "cells": [
+                {"cell_id": c["cell_id"], "row": c["row"], "col": c["col"], "lat": c["lat"], "lon": c["lon"], "ok": True}
+                for c in cell_records
             ],
             "frames": [],
         }
@@ -1030,6 +1111,7 @@ async def build_monthly_forecast(
         "models": primary_eval["models"],
         "calibration": primary_eval["calibration"],
         "training_range": primary_eval["training_range"],
+        "alignment": alignment,
         "grid": {"n": n, "size_degrees": size, "total_cells": len(grid_meta)},
         "provenance": _provenance_block(variable, start_year, end_year, is_forecast=True),
         "cells": [

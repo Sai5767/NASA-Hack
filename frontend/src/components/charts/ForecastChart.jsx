@@ -71,7 +71,7 @@ export default function ForecastChart({ lab, replay, units }) {
       <ul className="legend">
         <li><i className="sw line" style={{ background: "var(--accent)" }} />recorded</li>
         <li><i className="sw line" style={{ background: "var(--amber)" }} />forecast and its 80% band</li>
-        {replay && <li><i className="sw line" style={{ background: "var(--pin-b)" }} />replay from {replay.origin_year}</li>}
+        {replay && <li><i className="sw line" style={{ background: "var(--pin-b)" }} />replay from {replay.origin_year}{replay.band_basis === "in_sample" ? " (in-sample illustration)" : ""}</li>}
         {replay && <li><i className="sw dot" style={{ background: "#fff" }} />what actually happened</li>}
       </ul>
       <div ref={wrapRef} className="chart-wrap">

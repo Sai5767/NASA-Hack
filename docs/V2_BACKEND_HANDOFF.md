@@ -2,7 +2,7 @@
 
 For whoever builds the V2 frontend (`codex/v2-frontend`). Full request and response schemas, with example payloads, are in [V2_API_CONTRACT.md](V2_API_CONTRACT.md); this file covers how to call each route, the saved fixtures, the server settings, how every route degrades, and what the UI must not assume.
 
-Every statement here was checked against the running code and live responses (2026-11-15). Where this file and `V2_API_CONTRACT.md` ever disagree, the code wins: report the mismatch.
+Every statement here was checked against the running code and live responses (2026-11-15), and updated for the Phase 0 repair (see [V2_BACKEND_REPAIR_HANDOFF.md](V2_BACKEND_REPAIR_HANDOFF.md)). Where this file and `V2_API_CONTRACT.md` ever disagree, the code wins: report the mismatch.
 
 ---
 
@@ -81,17 +81,20 @@ Use them for frontend unit tests and while the API is unavailable. The `explanat
 
 All optional. With none set, the app runs fully: trends, monthly frames and forecast, curated explanations, and news (GDELT needs no key).
 
-**Where to set them:** real environment variables first; anything still unset is filled in from the optional local file ackend/.env (copy ackend/.env.example; it lists names only). The file is ignored by Git and Docker, blank lines leave a feature off, only the names in this table are read from it, and values are never logged or returned. On Azure use application settings, which always win; do not upload the file.
+**Where to set them:** real environment variables first; anything still unset is filled in from the optional local file `backend/.env` (copy `backend/.env.example`; it lists names only). The file is ignored by Git and Docker, blank lines leave a feature off, only the names in this table are read from it, and values are never logged or returned. On Azure use application settings, which always win; do not upload the file.
 
 | Name | Default | Effect |
 | --- | --- | --- |
 | `OPENAI_API_KEY` | unset | Turns on live AI explanations. Unset: `/api/explanations` answers from the curated text (`status: "no_key"`). |
-| `OPENAI_EXPLANATION_MODEL` | `gpt-4o-mini` | Model name sent to the Responses API. |
+| `OPENAI_EXPLANATION_MODEL` | unset (no built-in model) | Model name sent to the Responses API. Live AI needs both this and the key; without it `/api/explanations` answers from the curated text (`status: "no_key"`, `fallback_reason: "missing_model"`). The owner picks a current low-cost model that supports the `web_search` tool. |
 | `OPENAI_BASE_URL` | `https://api.openai.com/v1/responses` | Full Responses API URL. |
 | `OPENAI_TIMEOUT_SECONDS` | `20` (2 to 45) | Timeout for one OpenAI call. |
-| `OPENAI_WEB_SEARCH` | `true` | Lets the model search the web; its citations must come from what it retrieved. |
+| `OPENAI_WEB_SEARCH` | `true` | Lets the model search the web with the Responses API `web_search` tool, restricted by `filters.allowed_domains` to the science allow-list; its citations must come from what it retrieved. |
+| `OPENAI_WEB_SEARCH_CONTEXT_SIZE` | `low` | `low`, `medium` or `high`: how much retrieved text the search may add to the model's context (cost). |
+| `OPENAI_MAX_TOOL_CALLS` | `3` (0 to 10) | Most web searches per explanation; `0` leaves the limit out of the request. |
+| `OPENAI_MAX_OUTPUT_TOKENS` | `1400` (300 to 8000) | Output budget per explanation. A reply cut short by it is not used (curated fallback). |
 | `EXPLANATION_CACHE_TTL_SECONDS` | `86400` | Cache of verified explanations, per case and question. |
-| `EXPLANATION_RATE_LIMIT_MAX` / `EXPLANATION_RATE_LIMIT_WINDOW_SECONDS` | `15` / `300` | Live AI calls allowed per client address per window. |
+| `EXPLANATION_RATE_LIMIT_MAX` / `EXPLANATION_RATE_LIMIT_WINDOW_SECONDS` | `15` / `300` | Live AI calls allowed per visitor per window (cached answers are free). |
 | `NEWS_PROVIDER` | `gdelt` | `gdelt`, `json_feed` (also `azure`, `custom`), or `disabled`. |
 | `NEWS_API_URL`, `NEWS_API_KEY` | GDELT URL, unset | Endpoint and optional key for a `json_feed` provider. |
 | `NEWS_TIMEOUT_SECONDS` | `12` (2 to 30) | Timeout for one news request. The whole `/api/news` call also has a fixed 20-second budget. |
@@ -99,8 +102,11 @@ All optional. With none set, the app runs fully: trends, monthly frames and fore
 | `METEOMATICS_USERNAME`, `METEOMATICS_PASSWORD` | unset | Turns on `/api/live-weather`. Both are required. |
 | `METEOMATICS_BASE_URL` | `https://api.meteomatics.com` | Provider URL. |
 | `METEOMATICS_TIMEOUT_SECONDS` / `METEOMATICS_CACHE_TTL_SECONDS` | `10` / `900` | Timeout and cache for live weather. |
+| `METEOMATICS_RATE_LIMIT_MAX` / `METEOMATICS_RATE_LIMIT_WINDOW_SECONDS` | `30` / `300` | Live Meteomatics fetches allowed per visitor per window (cache hits are free). |
+| `METEOMATICS_GLOBAL_RATE_LIMIT_MAX` / `METEOMATICS_GLOBAL_RATE_LIMIT_WINDOW_SECONDS` | `300` / `3600` | Live Meteomatics fetches allowed for the whole server per window. Set it below your plan's quota. |
+| `TD_TRUSTED_PROXY_HOPS` | `0` (0 to 5) | How many reverse proxies in front of the app append to `X-Forwarded-For`. `0`: the header is ignored and the socket peer is the visitor. Azure App Service: `1`. Never set it higher than the real number of proxies, or visitors can choose their own rate-limit identity. |
 | `NASA_POWER_TIMEOUT_SECONDS` | `30` (2 to 60) | Timeout per NASA POWER request. |
-| `NASA_POWER_MAX_CONCURRENCY` | `3` (1 to 8) | Parallel NASA requests. |
+| `NASA_POWER_MAX_CONCURRENCY` | `3` (1 to 8) | Parallel NASA requests for the whole server process (all routes and visitors share it). |
 | `NASA_POWER_CACHE_TTL_SECONDS` | `21600` | NASA series cache (a stale entry is used only if a refresh fails). |
 | `STREAMS_TIMEOUT_SECONDS` / `STREAMS_CACHE_TTL_SECONDS` | `30` / `43200` | Planet streams (GISTEMP, CO₂, sea ice, climate rhythms). |
 | `TD_CASE_SECRET` | random per process | Signs `case_signature`. Set it on any host that restarts or runs more than one instance. |
@@ -114,14 +120,16 @@ All optional. With none set, the app runs fully: trends, monthly frames and fore
 | --- | --- |
 | NASA POWER slow or down | `/api/trend` and friends return HTTP 502 with a short, non-secret `detail` string, unless every series needed is still in the cache, in which case the older cached data is used silently. |
 | `/api/monthly-frames`: a cell fails or has gaps | HTTP 200. Failed or missing cells and months are `missing: true` with `value: null`; `coverage` says how many cells succeeded. Nothing is interpolated. |
-| `/api/monthly-forecast` not earned | HTTP 200 with `eligible: false`, a `reason_code`, a plain `reason`, `frames: []`. Reasons: unsupported variable, too little history, constant series, too few backtest origins, too many gaps, a grid cell failed, no skill over seasonal-naive, or poor interval coverage. |
+| `/api/monthly-forecast` not earned | HTTP 200 with `eligible: false`, a `reason_code`, a plain `reason`, `frames: []`. Reasons: unsupported variable, too little history, constant series, too few backtest origins (defensive, cannot occur with current thresholds), too many gaps, a grid cell failed, no skill over seasonal-naive, poor interval coverage, or misaligned cells (defensive). Cells whose latest month is missing are first trimmed to the common last month (`alignment`), so all cells forecast the same months. |
 | No OpenAI key | `/api/explanations` returns HTTP 200, `status: "no_key"`, curated drivers and citations. |
 | AI call failed, or the answer failed validation | HTTP 200, `status: "fallback"`, curated text. `fallback_reason` is a code such as `timeout`, `rate_limited`, `invalid_json`, `http_500`, `validation_failed`. |
 | Too many AI calls | HTTP 200, `status: "rate_limited"`, `retry_after_seconds`, curated text. (Not HTTP 429.) |
+| Key set but no `OPENAI_EXPLANATION_MODEL` | HTTP 200, `status: "no_key"`, `fallback_reason: "missing_model"`, curated text. |
 | Trend not significant | HTTP 200, `status: "no_evidence"`, `drivers: []`. The AI is never asked to invent reasons for a trend that is not there. |
 | News provider slow or failing | HTTP 200. `items` may be empty or partial; `partial_failures` lists each location with a code (`timeout`, `rate_limited`, …); `stale: true` with the last good items if the cache holds some; otherwise `empty_reason`. Never placeholder headlines. |
 | No Meteomatics credentials | HTTP 200, `available: false`, `status: "unconfigured"`. |
-| Meteomatics fails | `status: "stale"` with the last good series, or `status: "unavailable"` with a plain `reason`. |
+| Meteomatics fails | `status: "stale"` with the last good series (trimmed to start at the current hour), or `status: "unavailable"` with a plain `reason`. |
+| Too many live-weather requests (one visitor, or the whole server) | HTTP 200, `status: "rate_limited"`, `retry_after_seconds`, no series; or `status: "stale"` with the cached series for that place. Meteomatics is not called. |
 | Place or period cannot be analysed (too few complete years, land-only variable over ocean) | HTTP 422 with a plain `detail` message. |
 | Bad parameters | HTTP 422 (FastAPI validation of types and ranges), HTTP 400 for an invalid or too-short year range, HTTP 404 for an unknown variable. |
 
@@ -139,8 +147,8 @@ All optional. With none set, the app runs fully: trends, monthly frames and fore
 - **Live weather is not NASA data and not the monthly forecast.** Show its `label` and `source_note`. `available: false` is a normal state.
 - **Do not send statistics to `/api/explanations`.** Only `case_signature` (or variable, place and years) and an optional `question`.
 - **Use the server's verdict.** `evidence_trace.verdict.label` is one of "Strong evidence of a trend", "Some evidence — investigate carefully", "No clear evidence yet", "Not enough data to tell"; `evidence_trace.verdict.ladder` lists all four. When the server cannot analyse a place (too few complete years of data, a land-only variable over ocean, a variable that does not vary) `/api/trend` returns HTTP 422 with a plain `detail` message, not a verdict: show it as "Not enough data to tell" with that message. A year range shorter than 20 years is HTTP 400.
-- **Rate limiting is per client address as the server sees it.** Behind a proxy that does not forward the visitor's address, all visitors share one allowance.
-- **Not run against the real services:** the live OpenAI call and the Meteomatics call have only been tested against offline fakes (no keys were available). Before a demo, run each once with a real key and check the result. Developers report that combining OpenAI's web-search tool with structured or JSON output can cut the JSON short or leave the citation list empty; the server validates everything and falls back to the curated text in those cases, so the feature degrades instead of breaking, but you may see `fallback_reason: "validation_failed"` more than expected.
+- **Rate limiting is per visitor.** The visitor is the socket peer address unless the owner sets `TD_TRUSTED_PROXY_HOPS` (Azure App Service: `1`), in which case it is the `X-Forwarded-For` entry written by the trusted proxy. With the default `0` behind a proxy, all visitors share one allowance (safe, but strict).
+- **Not run against the real services:** the live OpenAI call and the Meteomatics call have only been tested against offline fakes (no keys were available). Before a demo, run each once with a real key and check the result (checklist: `docs/V2_BACKEND_REPAIR_HANDOFF.md`). Developers report that combining OpenAI's web-search tool with structured or JSON output can cut the JSON short or leave the citation list empty; the server validates everything and falls back to the curated text in those cases, so the feature degrades instead of breaking, but you may see `fallback_reason: "validation_failed"` more than expected.
 - **Forecast model choice has a mild optimism bias:** the best of four candidate models is picked and then tested against the baseline on the same backtest. The safeguards (must win at every horizon, 1.5% margin, held-out coverage) reduce it; they do not remove it.
 
 ---

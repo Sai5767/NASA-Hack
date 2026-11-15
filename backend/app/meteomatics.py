@@ -25,11 +25,16 @@ import httpx
 from .resilience import (
     BoundedTTLCache,
     HEALTH_REGISTRY,
+    LoopBoundSemaphore,
+    SlidingWindowRateLimiter,
     UpstreamRateLimitError,
     UpstreamResponseError,
     UpstreamServiceError,
     UpstreamTimeoutError,
+    decoded_headers,
     load_config,
+    parse_retry_after,
+    read_capped_body,
     redact_secrets,
     utc_now_iso,
 )
@@ -78,7 +83,14 @@ PARAMETER_DETAILS: dict[str, dict[str, str]] = {
 }
 
 _SENTINEL_VALUES = {-999.0, -666.0, -9999.0}
-_CONCURRENCY_SEMAPHORE = asyncio.Semaphore(4)
+# Process-wide cap on parallel Meteomatics requests, safe across event loops (a bare module-level asyncio.Semaphore binds
+# to the first loop that waits on it).
+_CONCURRENCY = LoopBoundSemaphore(lambda: 4)
+# Public-quota protection (Phase 0 item B). Only requests that would reach Meteomatics are counted: cache hits are free.
+# Both limiters are bounded (LRU of at most max_keys visitor buckets, each holding at most `limit` timestamps).
+_VISITOR_LIMITER = SlidingWindowRateLimiter(max_requests=30, window_seconds=300, max_keys=2000)
+_GLOBAL_LIMITER = SlidingWindowRateLimiter(max_requests=300, window_seconds=3600, max_keys=1)
+_GLOBAL_KEY = "__all_visitors__"
 _WEATHER_CACHE: BoundedTTLCache[tuple[float, float, int], dict] = BoundedTTLCache(
     name="meteomatics_live_weather",
     max_entries=128,
@@ -275,6 +287,25 @@ class MeteomaticsProvider:
     def __repr__(self) -> str:
         return f"MeteomaticsProvider(base_url={self.base_url!r}, timeout_seconds={self.timeout_seconds})"
 
+    async def _stream_get(self, url: str, headers: dict, auth: httpx.BasicAuth) -> httpx.Response:
+        """GET with the body streamed and refused as soon as it passes MAX_RESPONSE_BYTES (never fully downloaded first).
+
+        An error reply's body is never read: it is not used, and it is never passed on to the client.
+        """
+        async with httpx.AsyncClient(timeout=self.timeout_seconds, follow_redirects=False) as client:
+            async with client.stream("GET", url, headers=headers, auth=auth) as streamed:
+                if streamed.status_code >= 400:
+                    return httpx.Response(
+                        streamed.status_code, headers=decoded_headers(streamed.headers), request=streamed.request
+                    )
+                body = await read_capped_body(streamed, SERVICE_NAME, MAX_RESPONSE_BYTES)
+                return httpx.Response(
+                    streamed.status_code,
+                    headers=decoded_headers(streamed.headers),
+                    content=body,
+                    request=streamed.request,
+                )
+
     async def fetch_hourly(
         self,
         lat: float,
@@ -285,7 +316,19 @@ class MeteomaticsProvider:
     ) -> tuple[list[dict], dict, str, str]:
         start_dt = _utc_hour_floor(now_utc)
         end_dt = start_dt + timedelta(hours=hours)
-        url = build_meteomatics_url(self.base_url, start_dt, end_dt, lat, lon)
+        try:
+            url = build_meteomatics_url(self.base_url, start_dt, end_dt, lat, lon)
+        except ValueError as exc:
+            # A9: a bad METEOMATICS_BASE_URL is a server setup problem, reported as "unavailable", never as HTTP 500.
+            err = UpstreamServiceError(
+                SERVICE_NAME,
+                "misconfigured",
+                "Live weather is unavailable because the server's Meteomatics address setting is invalid.",
+                retryable=False,
+                status_code=None,
+            )
+            HEALTH_REGISTRY.record_failure(SERVICE_NAME, err.code)
+            raise err from exc
         basic_auth = httpx.BasicAuth(self._username, self._password)
         headers = {"Accept": "application/json"}
 
@@ -294,7 +337,7 @@ class MeteomaticsProvider:
 
         for attempt in range(len(retry_delays) + 1):
             try:
-                async with _CONCURRENCY_SEMAPHORE:
+                async with _CONCURRENCY.get():
                     if self._transport_call is not None:
                         resp = await self._transport_call(
                             method="GET",
@@ -304,11 +347,7 @@ class MeteomaticsProvider:
                             timeout=self.timeout_seconds,
                         )
                     else:
-                        async with httpx.AsyncClient(
-                            timeout=self.timeout_seconds,
-                            follow_redirects=False,
-                        ) as client:
-                            resp = await client.get(url, headers=headers, auth=basic_auth)
+                        resp = await self._stream_get(url, headers, basic_auth)
 
                 status = resp.status_code
                 if status in (502, 503, 504) and attempt < len(retry_delays):
@@ -330,6 +369,7 @@ class MeteomaticsProvider:
                     err = UpstreamRateLimitError(
                         SERVICE_NAME,
                         "Meteomatics rate limit or subscription quota reached.",
+                        retry_after_seconds=parse_retry_after(resp.headers.get("retry-after")),
                     )
                     HEALTH_REGISTRY.record_failure(SERVICE_NAME, err.code)
                     raise err
@@ -434,6 +474,7 @@ def _unavailable_payload(
     end_iso: str,
     status: str,
     reason: str,
+    retry_after_seconds: int | None = None,
 ) -> dict:
     return {
         "available": False,
@@ -454,9 +495,69 @@ def _unavailable_payload(
         "fetched_at": utc_now_iso(),
         "stale": False,
         "reason": redact_secrets(reason),
+        "retry_after_seconds": retry_after_seconds,
         "source_note": SOURCE_NOTE,
         "provider_metadata": {},
     }
+
+
+def _serve_cached(
+    entry,
+    *,
+    lat: float,
+    lon: float,
+    start_iso: str,
+    stale: bool,
+    reason: str | None,
+    retry_after_seconds: int | None = None,
+) -> dict | None:
+    """A cached payload re-based on the current UTC hour, for the current caller (A8).
+
+    Rows before the current hour are dropped, so `series[0]`, `current` and `request.start` always describe the current
+    hour as contract section 7 promises. `location` is the current caller's rounded coordinates, not the first caller's.
+    Returns None when no row at or after the current hour is left.
+    """
+    payload = dict(entry.value)
+    series = [
+        row for row in payload.get("series") or [] if isinstance(row, dict) and str(row.get("time", "")) >= start_iso
+    ]
+    if not series:
+        return None
+    request = dict(payload.get("request") or {})
+    request["start"] = start_iso
+    payload.update(
+        {
+            "available": True,
+            "status": "stale" if stale else "available",
+            "stale": stale,
+            "location": {"lat": round(float(lat), 4), "lon": round(float(lon), 4)},
+            "request": request,
+            "series": series,
+            "current": series[0],
+            "fetched_at": entry.fetched_at,
+            "reason": reason,
+            "retry_after_seconds": retry_after_seconds,
+        }
+    )
+    return payload
+
+
+def _check_quota(client_key: str) -> tuple[bool, int]:
+    """Per-visitor first, then the whole-server budget. Returns (allowed, retry_after_seconds)."""
+    cfg = load_config()
+    ok, retry_after, _ = _VISITOR_LIMITER.check(
+        client_key,
+        max_requests=cfg.meteomatics_rate_limit_max,
+        window_seconds=cfg.meteomatics_rate_limit_window_seconds,
+    )
+    if not ok:
+        return False, retry_after
+    ok, retry_after, _ = _GLOBAL_LIMITER.check(
+        _GLOBAL_KEY,
+        max_requests=cfg.meteomatics_global_rate_limit_max,
+        window_seconds=cfg.meteomatics_global_rate_limit_window_seconds,
+    )
+    return ok, (0 if ok else retry_after)
 
 
 async def fetch_live_weather(
@@ -467,8 +568,14 @@ async def fetch_live_weather(
     provider: WeatherProvider | None = None,
     transport_call: Callable | None = None,
     now_utc: datetime | None = None,
+    client_key: str = "anonymous",
 ) -> dict:
-    """Fetch current and short-range hourly weather from Meteomatics with caching and safe fallback."""
+    """Fetch current and short-range hourly weather from Meteomatics with caching, quota protection and safe fallback.
+
+    Order: validate -> fresh cache (free) -> unconfigured -> per-visitor and global quota -> provider. A visitor over quota
+    gets the cached (stale) reply for that place if one exists, otherwise status "rate_limited"; neither ever contains a
+    credential or any upstream body.
+    """
     if not (-90.0 <= float(lat) <= 90.0):
         raise ValueError("lat must be between -90 and 90.")
     if not (-180.0 <= float(lon) <= 180.0):
@@ -486,18 +593,29 @@ async def fetch_live_weather(
     start_iso = _to_iso_utc(start_dt)
     end_iso = _to_iso_utc(end_dt)
 
-    # Check fresh cache first
-    fresh = _WEATHER_CACHE.get_entry(
-        cache_key,
-        allow_stale=False,
-        ttl_override=cfg.meteomatics_cache_ttl_seconds,
-    )
-    if fresh is not None:
-        cached_payload = dict(fresh.value)
-        cached_payload["fetched_at"] = fresh.fetched_at
-        cached_payload["stale"] = False
-        cached_payload["status"] = "available"
-        return cached_payload
+    # Fresh cache first, but only a reply that starts at the current UTC hour counts as fresh (A8): one fetched at 10:55
+    # is refreshed at 11:00 instead of serving the 10:00 row as "current" until 11:10.
+    fresh = _WEATHER_CACHE.get_entry(cache_key, allow_stale=False, ttl_override=cfg.meteomatics_cache_ttl_seconds)
+    if fresh is not None and (fresh.value.get("request") or {}).get("start") == start_iso:
+        served = _serve_cached(fresh, lat=norm_lat, lon=norm_lon, start_iso=start_iso, stale=False, reason=None)
+        if served is not None:
+            return served
+
+    def _stale_or(fallback: dict, reason: str, retry_after: int | None = None) -> dict:
+        stale_entry = _WEATHER_CACHE.get_entry(cache_key, allow_stale=True, ttl_override=cfg.meteomatics_cache_ttl_seconds)
+        if stale_entry is not None:
+            served = _serve_cached(
+                stale_entry,
+                lat=norm_lat,
+                lon=norm_lon,
+                start_iso=start_iso,
+                stale=True,
+                reason=redact_secrets(reason),
+                retry_after_seconds=retry_after,
+            )
+            if served is not None:
+                return served
+        return fallback
 
     # Check if credentials or custom provider are available
     active_provider = provider
@@ -518,6 +636,24 @@ async def fetch_live_weather(
             base_url=cfg.meteomatics_base_url,
             timeout_seconds=cfg.meteomatics_timeout_seconds,
             transport_call=transport_call,
+        )
+
+    allowed, retry_after = _check_quota(client_key)
+    if not allowed:
+        limited = _unavailable_payload(
+            lat=norm_lat,
+            lon=norm_lon,
+            hours=hours,
+            start_iso=start_iso,
+            end_iso=end_iso,
+            status="rate_limited",
+            reason="Live weather is paused for a moment because too many live-weather requests were made. Try again shortly.",
+            retry_after_seconds=retry_after,
+        )
+        return _stale_or(
+            limited,
+            "Serving cached Meteomatics weather because the live-weather request limit was reached.",
+            retry_after,
         )
 
     try:
@@ -546,6 +682,7 @@ async def fetch_live_weather(
             "fetched_at": utc_now_iso(),
             "stale": False,
             "reason": None,
+            "retry_after_seconds": None,
             "source_note": SOURCE_NOTE,
             "provider_metadata": metadata,
         }
@@ -554,23 +691,8 @@ async def fetch_live_weather(
         return payload
 
     except UpstreamServiceError as exc:
-        stale_entry = _WEATHER_CACHE.get_entry(
-            cache_key,
-            allow_stale=True,
-            ttl_override=cfg.meteomatics_cache_ttl_seconds,
-        )
-        if stale_entry is not None:
-            stale_payload = dict(stale_entry.value)
-            stale_payload["available"] = True
-            stale_payload["status"] = "stale"
-            stale_payload["stale"] = True
-            stale_payload["fetched_at"] = stale_entry.fetched_at
-            stale_payload["reason"] = redact_secrets(
-                f"Serving cached Meteomatics weather because the live refresh failed ({exc.message})"
-            )
-            return stale_payload
-
-        return _unavailable_payload(
+        upstream_retry = getattr(exc, "retry_after_seconds", None)
+        unavailable = _unavailable_payload(
             lat=norm_lat,
             lon=norm_lon,
             hours=hours,
@@ -578,11 +700,20 @@ async def fetch_live_weather(
             end_iso=end_iso,
             status="unavailable",
             reason=exc.message,
+            retry_after_seconds=upstream_retry,
+        )
+        return _stale_or(
+            unavailable,
+            f"Serving cached Meteomatics weather because the live refresh failed ({exc.message})",
+            upstream_retry,
         )
 
 
 def clear_meteomatics_cache() -> None:
+    """Clear the weather cache and both quota limiters (used by offline tests)."""
     _WEATHER_CACHE.clear()
+    _VISITOR_LIMITER.clear()
+    _GLOBAL_LIMITER.clear()
 
 
 def meteomatics_health() -> dict:
@@ -604,5 +735,13 @@ def meteomatics_health() -> dict:
         "provider": PROVIDER_LABEL,
         "parameters": list(METEOMATICS_PARAMETERS.values()),
         "cache": cache_stats,
+        "rate_limit": {
+            "per_visitor_max_requests": cfg.meteomatics_rate_limit_max,
+            "per_visitor_window_seconds": cfg.meteomatics_rate_limit_window_seconds,
+            "global_max_requests": cfg.meteomatics_global_rate_limit_max,
+            "global_window_seconds": cfg.meteomatics_global_rate_limit_window_seconds,
+            "tracked_visitors": len(_VISITOR_LIMITER),
+            "trusted_proxy_hops": cfg.trusted_proxy_hops,
+        },
         "telemetry": snap,
     }

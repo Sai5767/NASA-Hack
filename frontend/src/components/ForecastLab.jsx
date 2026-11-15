@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { fetchForecast } from "../api.js";
 import ForecastChart from "./charts/ForecastChart.jsx";
+import { replayBasisText } from "./insight/logic.js";
 import Term from "./Term.jsx";
 
 const KIND_LABEL = { baseline: "baseline", statistical: "statistical", learned: "machine learning", ensemble: "ensemble" };
@@ -28,12 +29,17 @@ function Scoreboard({ models, baselineId }) {
   );
 }
 
-function coverageNote(cov) {
+function coverageNote(cov, models) {
   if (cov.test == null) return "Too few backtests to check the band.";
-  const text = `In backtests on years it was not calibrated on, the 80% band held the true value ${Math.round(cov.test * 100)}% of the time (${cov.n_test} checks).`;
-  if (cov.test < 0.7) return `${text} That is below the 80% target, so treat this band as too narrow.`;
-  if (cov.test > 0.92) return `${text} The band is conservative: wider than it needs to be.`;
-  return `${text} That is close to the 80% target.`;
+  // Backend B3: the coverage check re-runs model choice and band calibration using only years up to
+  // calibration_end_year, then scores later years. That model can differ from today's winner.
+  const chosen = cov.model ? models.find((m) => m.id === cov.model)?.label ?? cov.model : null;
+  const how = cov.calibration_end_year != null
+    ? `Re-running the whole procedure with data only up to ${cov.calibration_end_year}${chosen ? ` (which picked ${chosen})` : ""}, the 80% band then held the true value ${Math.round(cov.test * 100)}% of the time in later years (${cov.n_test} checks).`
+    : `In backtests on years it was not calibrated on, the 80% band held the true value ${Math.round(cov.test * 100)}% of the time (${cov.n_test} checks).`;
+  if (cov.test < 0.7) return `${how} That is below the 80% target, so treat this band as too narrow.`;
+  if (cov.test > 0.92) return `${how} The band is conservative: wider than it needs to be.`;
+  return `${how} That is close to the 80% target.`;
 }
 
 /** Machine-learning forecast lab: models compete in a backtest; the winner forecasts with a calibrated error band. */
@@ -99,7 +105,7 @@ export default function ForecastLab({ data }) {
 
           <div className="replay">
             <label>
-              <span className="eyebrow">Replay the past</span>
+              <span className="eyebrow">Replay the past <span className="badge">illustration, in-sample</span></span>
               <input
                 type="range"
                 min={0}
@@ -115,13 +121,14 @@ export default function ForecastLab({ data }) {
             </label>
             <p className="small dim">
               {replay
-                ? `Standing in ${replay.origin_year} with only the data up to then, this model forecast the pink line. The white dots are what actually happened.`
+                ? `Standing in ${replay.origin_year}, this model forecast the pink line; the white dots are what actually happened.${replay.band_basis === "in_sample" ? " The band shown is today's band, so this is an illustration, not a test." : ""}`
                 : "Replay is hidden."}{" "}
               <button type="button" className="linklike" onClick={() => setShowReplay((s) => !s)}>{showReplay ? "Hide replay" : "Show replay"}</button>
             </p>
           </div>
 
-          <p className="small">{coverageNote(lab.coverage)} <Term id="conformal">How the band is built.</Term></p>
+          {lab.replays.length > 0 && <p className="small faint">{replayBasisText(replay ?? lab.replays[0], lab)}</p>}
+          <p className="small">{coverageNote(lab.coverage, lab.models)} <Term id="conformal">How the band is built.</Term></p>
 
           <h4 className="sb-title">Model scoreboard <span className="dim small">(error versus the best naive baseline)</span></h4>
           <Scoreboard models={lab.models} baselineId={lab.baseline} />

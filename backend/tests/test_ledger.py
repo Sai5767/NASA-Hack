@@ -39,7 +39,8 @@ def test_the_correction_is_applied_across_every_test_together(fake_power, fake_s
     out = _build(limit=1500)
     rows = out["rows"]
     # rows are sorted by p, and BH is order-independent, so recomputing over the same p-values must agree flag for flag
-    expected = benjamini_hochberg([r["p_value"] for r in rows], 0.05)
+    # (a row with no direction never counts, see test_a_flat_row_never_survives_correction_even_with_a_tiny_p)
+    expected = [f and r["significant"] for f, r in zip(benjamini_hochberg([r["p_value"] for r in rows], 0.05), rows)]
     assert [r["significant_fdr"] for r in rows] == expected
     assert out["counts"]["survive_correction"] == sum(expected)
     assert out["counts"]["survive_correction"] <= out["counts"]["nominal"] <= out["counts"]["tests"]
@@ -139,3 +140,22 @@ def test_every_rule_is_hedged_and_sourced_where_the_claim_is_strong():
             assert sources, f"a well-established claim needs a source: {text[:50]}"
     for stream, rules in PLANET_RULES.items():
         assert all(sources for _, _, _, sources in rules), stream
+
+
+def test_a_flat_row_never_survives_correction_even_with_a_tiny_p(fake_power, fake_streams, monkeypatch):
+    """Review item B1: a zero median slope (sign "flat") is not a trend, whatever its p-value."""
+    real = ledger_module.analyze_many
+
+    async def with_a_flat_row(variables, lat, lon, *args, **kwargs):
+        out = await real(variables, lat, lon, *args, **kwargs)
+        if lat == PLACES[0]["lat"] and lon == PLACES[0]["lon"]:
+            res = out["T2M"]
+            out["T2M"] = {**res, "stats": {**res["stats"], "p_value": 1e-12, "significant": False, "sign": "flat", "slope_per_decade": 0.0}}
+        return out
+
+    monkeypatch.setattr(ledger_module, "analyze_many", with_a_flat_row)
+    out = _build(limit=1500)
+    flat = next(r for r in out["rows"] if r["id"] == f"{PLACES[0]['id']}:T2M")
+    assert flat["p_value"] == 1e-12              # still listed, with its p-value unchanged
+    assert flat["significant_fdr"] is False and flat["reason"] is None
+    assert all(r["sign"] in ("up", "down") for r in out["rows"] if r["significant_fdr"])

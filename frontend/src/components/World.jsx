@@ -36,6 +36,7 @@ export default function World({ data, onOpen, lapse, lapseYears, onLapse }) {
           {counts.nominal_only > 0 ? ` and ${counts.nominal_only} are significant only before correction` : ""}. Hover the dots on the map
           (switch to <b>Map</b> to see all of them) and click one to open its case file.
         </p>
+        <p className="world-sample-note">Sample sites, not a complete global map</p>
         <p className="faint small">{data.note}</p>
         <div className="chips">
           <button type="button" className="chip" onClick={() => downloadText(`trend-detective_world_${variable.id}.csv`, worldCsv(data))}>⤓ CSV</button>

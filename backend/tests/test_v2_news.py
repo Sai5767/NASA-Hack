@@ -235,3 +235,67 @@ def test_news_returns_honest_empty_result_on_cold_failure_never_synthetic():
     assert cold_resp["stale"] is False
     assert cold_resp["empty_reason"] is not None
     assert len(cold_resp["partial_failures"]) == len(all_ids)
+
+
+def test_inflected_headlines_are_relevant_and_evacuated_is_red():
+    # Review item B5: these three used to be dropped.
+    for title in (
+        "Flooding swamps Delhi streets after record downpour",
+        "Storm Ciaran batters London with 90mph winds",
+        "Flooded homes evacuated in Sydney suburbs",
+    ):
+        assert news_module.is_environmentally_relevant(title), title
+    assert news_module.classify_category_and_severity("Flooded homes evacuated in Sydney suburbs")[1] == "red"
+    assert news_module.classify_category_and_severity("Flooding swamps Delhi streets")[1] == "amber"
+    assert news_module.is_environmentally_relevant("Storms lash the coast overnight")
+    # still excluded
+    assert not news_module.is_environmentally_relevant("New floodlights installed at the city stadium")
+    assert not news_module.is_environmentally_relevant("Fans storming the pitch after the final")
+    assert not news_module.is_environmentally_relevant("A brainstorm session for the new campaign")
+
+
+def test_publisher_verified_true_false_and_lookalikes():
+    verify = news_module.is_publisher_verified
+    assert verify("https://www.reuters.com/world/x")
+    assert verify("https://news.bbc.co.uk/a")
+    assert verify("https://climate.nasa.gov/news")
+    assert verify("https://BBC.com:8443/a")
+    assert not verify("https://random-blog.example.com/post")
+    # lookalikes
+    assert not verify("https://reuters.com.evil.example/a")
+    assert not verify("https://notreuters.com/a")
+    assert not verify("https://reuters.com-news.net/a")
+    assert not verify("https://evil.example/reuters.com")
+    assert not verify("https://nasa.gov.example.org/a")
+    assert not verify(None) and not verify("")
+
+
+def test_every_news_item_carries_publisher_verified():
+    provider = FakeNewsProvider(
+        by_location={
+            "delhi": [
+                {"title": "Delhi heatwave pushes power demand to a record high", "url": "https://www.reuters.com/a",
+                 "publisher": "Anything", "seendate": "20261114T120000Z"},
+                {"title": "Delhi drought worsens as reservoirs run low", "url": "https://reuters.com.evil.example/b",
+                 "publisher": "Reuters", "seendate": "20261114T110000Z"},  # claims to be Reuters, host says otherwise
+            ]
+        }
+    )
+    resp = asyncio.run(news_module.fetch_news_context(locations="delhi", provider=provider))
+    flags = {item["canonical_url"]: item["publisher_verified"] for item in resp["items"]}
+    assert flags == {"https://www.reuters.com/a": True, "https://reuters.com.evil.example/b": False}
+    assert all(isinstance(v, bool) for v in flags.values())
+
+
+def test_hsenc_is_stripped_and_ports_and_ipv6_are_handled():
+    norm = news_module.normalize_canonical_url
+    assert norm("https://ex.com/a?_hsenc=abc&id=1") == "https://ex.com/a?id=1"
+    assert norm("https://ex.com/a?_HSENC=abc") == "https://ex.com/a"
+    assert norm("https://ex.com:8443/a?id=1") == "https://ex.com:8443/a?id=1"
+    assert norm("https://ex.com:443/a") == "https://ex.com/a"  # default port is dropped
+    assert norm("http://ex.com:80/a") == "http://ex.com/a"
+    assert norm("https://ex.com:abc/a") is None
+    assert norm("http://[::1]:8000/a") is None
+    assert norm("http://127.0.0.1/a") is None
+    assert norm("http://10.0.0.5/a") is None
+    assert norm("http://[2606:4700::1111]:8080/a") == "http://[2606:4700::1111]:8080/a"

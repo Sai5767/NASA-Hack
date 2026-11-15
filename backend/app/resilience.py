@@ -14,9 +14,11 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import hmac
+import ipaddress
 import os
 import re
 import time
+import weakref
 from collections import OrderedDict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -92,10 +94,16 @@ class AppConfig:
     streams_timeout_seconds: float
     streams_cache_ttl_seconds: int
     openai_api_key: str | None = field(repr=False)
-    openai_explanation_model: str = "gpt-4o-mini"
+    # No model name is hard-coded: the owner chooses one (OPENAI_EXPLANATION_MODEL). Without it live AI stays off.
+    openai_explanation_model: str | None = None
     openai_base_url: str = "https://api.openai.com/v1/responses"
     openai_timeout_seconds: float = 20.0
     openai_web_search_enabled: bool = True
+    # How much retrieved web text the web_search tool may put in the model's context: "low" | "medium" | "high".
+    openai_search_context_size: str = "low"
+    openai_max_output_tokens: int = 1400
+    # Upper bound on built-in tool calls (web searches) per explanation; 0 leaves the parameter out of the request.
+    openai_max_tool_calls: int = 3
     explanation_cache_ttl_seconds: int = 86400
     explanation_rate_limit_max: int = 15
     explanation_rate_limit_window_seconds: int = 300
@@ -109,11 +117,27 @@ class AppConfig:
     meteomatics_base_url: str = "https://api.meteomatics.com"
     meteomatics_timeout_seconds: float = 10.0
     meteomatics_cache_ttl_seconds: int = 900
+    # Per-visitor and whole-server bounds on live Meteomatics fetches (cache hits are never counted).
+    meteomatics_rate_limit_max: int = 30
+    meteomatics_rate_limit_window_seconds: int = 300
+    meteomatics_global_rate_limit_max: int = 300
+    meteomatics_global_rate_limit_window_seconds: int = 3600
+    # How many reverse proxies in front of the app append to X-Forwarded-For (Azure App Service: 1). 0 = ignore the header.
+    trusted_proxy_hops: int = 0
     case_signing_secret: str = field(default=_PROCESS_EPHEMERAL_SECRET, repr=False)
 
     @property
-    def openai_configured(self) -> bool:
+    def openai_key_present(self) -> bool:
         return bool(self.openai_api_key and self.openai_api_key.strip())
+
+    @property
+    def openai_model_present(self) -> bool:
+        return bool(self.openai_explanation_model and self.openai_explanation_model.strip())
+
+    @property
+    def openai_configured(self) -> bool:
+        """Live AI needs both a key and an owner-chosen model."""
+        return self.openai_key_present and self.openai_model_present
 
     @property
     def news_enabled(self) -> bool:
@@ -133,7 +157,10 @@ def load_config() -> AppConfig:
     """Read current configuration from environment variables."""
     raw_openai_key = os.environ.get("OPENAI_API_KEY", "").strip() or None
     raw_news_key = os.environ.get("NEWS_API_KEY", "").strip() or None
-    raw_model = os.environ.get("OPENAI_EXPLANATION_MODEL", "").strip() or "gpt-4o-mini"
+    raw_model = os.environ.get("OPENAI_EXPLANATION_MODEL", "").strip()[:80] or None
+    raw_context = os.environ.get("OPENAI_WEB_SEARCH_CONTEXT_SIZE", "").strip().lower()
+    if raw_context not in ("low", "medium", "high"):
+        raw_context = "low"
     raw_openai_url = os.environ.get("OPENAI_BASE_URL", "").strip() or "https://api.openai.com/v1/responses"
     raw_provider = (os.environ.get("NEWS_PROVIDER", "").strip() or "gdelt").lower()
     raw_news_url = os.environ.get("NEWS_API_URL", "").strip() or "https://api.gdeltproject.org/api/v2/doc/doc"
@@ -153,6 +180,9 @@ def load_config() -> AppConfig:
         openai_base_url=raw_openai_url,
         openai_timeout_seconds=_env_float("OPENAI_TIMEOUT_SECONDS", 20.0, 2.0, 45.0),
         openai_web_search_enabled=_env_bool("OPENAI_WEB_SEARCH", True),
+        openai_search_context_size=raw_context,
+        openai_max_output_tokens=_env_int("OPENAI_MAX_OUTPUT_TOKENS", 1400, 300, 8000),
+        openai_max_tool_calls=_env_int("OPENAI_MAX_TOOL_CALLS", 3, 0, 10),
         explanation_cache_ttl_seconds=_env_int("EXPLANATION_CACHE_TTL_SECONDS", 24 * 3600, 60, 7 * 86400),
         explanation_rate_limit_max=_env_int("EXPLANATION_RATE_LIMIT_MAX", 15, 1, 500),
         explanation_rate_limit_window_seconds=_env_int("EXPLANATION_RATE_LIMIT_WINDOW_SECONDS", 300, 10, 86400),
@@ -166,6 +196,13 @@ def load_config() -> AppConfig:
         meteomatics_base_url=raw_mm_url,
         meteomatics_timeout_seconds=_env_float("METEOMATICS_TIMEOUT_SECONDS", 10.0, 2.0, 30.0),
         meteomatics_cache_ttl_seconds=_env_int("METEOMATICS_CACHE_TTL_SECONDS", 900, 60, 86400),
+        meteomatics_rate_limit_max=_env_int("METEOMATICS_RATE_LIMIT_MAX", 30, 1, 1000),
+        meteomatics_rate_limit_window_seconds=_env_int("METEOMATICS_RATE_LIMIT_WINDOW_SECONDS", 300, 10, 86400),
+        meteomatics_global_rate_limit_max=_env_int("METEOMATICS_GLOBAL_RATE_LIMIT_MAX", 300, 1, 100000),
+        meteomatics_global_rate_limit_window_seconds=_env_int(
+            "METEOMATICS_GLOBAL_RATE_LIMIT_WINDOW_SECONDS", 3600, 60, 86400
+        ),
+        trusted_proxy_hops=_env_int("TD_TRUSTED_PROXY_HOPS", 0, 0, 5),
         case_signing_secret=raw_case_secret,
     )
 
@@ -274,8 +311,42 @@ class UpstreamTimeoutError(UpstreamServiceError):
 
 
 class UpstreamRateLimitError(UpstreamServiceError):
-    def __init__(self, service: str, message: str = "The upstream service rate-limited the request.") -> None:
+    """The provider said 429. Never retried immediately (that only spends more quota); Retry-After is kept when given."""
+
+    def __init__(
+        self,
+        service: str,
+        message: str = "The upstream service rate-limited the request.",
+        *,
+        retry_after_seconds: int | None = None,
+    ) -> None:
+        # retryable=True keeps its meaning "a later attempt may succeed"; request_with_resilience still never retries it.
         super().__init__(service, "rate_limited", message, retryable=True, status_code=429)
+        self.retry_after_seconds = retry_after_seconds
+
+    def to_dict(self) -> dict:
+        return {**super().to_dict(), "retry_after_seconds": self.retry_after_seconds}
+
+
+def parse_retry_after(value: str | None, *, cap_seconds: int = 3600) -> int | None:
+    """Seconds from a Retry-After header (delta-seconds or HTTP date), bounded to [1, cap]; None if absent or unreadable."""
+    if not value:
+        return None
+    text = value.strip()
+    if text.isdigit():
+        return max(1, min(cap_seconds, int(text)))
+    try:
+        from email.utils import parsedate_to_datetime
+
+        when = parsedate_to_datetime(text)
+    except (TypeError, ValueError, IndexError):
+        return None
+    if when is None:
+        return None
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=timezone.utc)
+    delta = (when - datetime.now(timezone.utc)).total_seconds()
+    return max(1, min(cap_seconds, int(round(delta))))
 
 
 class UpstreamResponseError(UpstreamServiceError):
@@ -322,7 +393,8 @@ class BoundedTTLCache(Generic[K, V]):
         mono_ts, epoch_ts, val = item
         age = max(0.0, time.monotonic() - mono_ts)
         ttl = self.ttl_seconds if ttl_override is None else float(ttl_override)
-        is_stale = age > ttl
+        # A TTL of zero (or less) means "nothing is fresh", whatever the clock resolution (Windows ticks every 15.6 ms).
+        is_stale = ttl <= 0 or age > ttl
         if is_stale and not allow_stale:
             self.misses += 1
             return None
@@ -365,11 +437,13 @@ class BoundedTTLCache(Generic[K, V]):
     def stats(self, *, ttl_override: float | None = None) -> dict:
         now = time.monotonic()
         ttl = self.ttl_seconds if ttl_override is None else float(ttl_override)
-        ages = [max(0.0, now - mono) for mono, _, _ in self._store.values()]
-        fresh_count = sum(1 for a in ages if a <= ttl)
+        # Snapshot first (one C-level copy), then iterate the copy: health reads must never trip over a concurrent write.
+        entries = list(self._store.values())
+        ages = [max(0.0, now - mono) for mono, _, _ in entries]
+        fresh_count = sum(1 for a in ages if ttl > 0 and a <= ttl)
         stale_count = len(ages) - fresh_count
         return {
-            "entries": len(self._store),
+            "entries": len(entries),
             "fresh_entries": fresh_count,
             "stale_entries": stale_count,
             "max_entries": self.max_entries,
@@ -391,20 +465,27 @@ class SlidingWindowRateLimiter:
     def __init__(self, max_requests: int = 15, window_seconds: int = 300, max_keys: int = 2000) -> None:
         self.max_requests = max_requests
         self.window_seconds = window_seconds
-        self.max_keys = max_keys
+        self.max_keys = max(1, max_keys)
         self._buckets: OrderedDict[str, list[float]] = OrderedDict()
 
     def check(self, client_key: str, *, max_requests: int | None = None, window_seconds: int | None = None) -> tuple[bool, int, int]:
-        """Return (allowed, retry_after_seconds, remaining_in_window)."""
-        limit = self.max_requests if max_requests is None else max_requests
-        window = float(self.window_seconds if window_seconds is None else window_seconds)
+        """Return (allowed, retry_after_seconds, remaining_in_window).
+
+        Memory is bounded: at most `max_keys` buckets (least recently used dropped first), and each bucket holds at most
+        `limit` timestamps. A limit of 0 or less denies everything without crashing.
+        """
+        limit = int(self.max_requests if max_requests is None else max_requests)
+        window = max(1.0, float(self.window_seconds if window_seconds is None else window_seconds))
         now = time.monotonic()
         cutoff = now - window
 
-        key = (client_key or "anonymous").strip()[:120]
+        key = (client_key or "anonymous").strip()[:120] or "anonymous"
+        if limit <= 0:
+            return False, max(1, int(round(window))), 0
         timestamps = [ts for ts in self._buckets.get(key, []) if ts > cutoff]
 
         if len(timestamps) >= limit:
+            timestamps = timestamps[-limit:]
             self._buckets[key] = timestamps
             self._buckets.move_to_end(key)
             retry_after = max(1, int(round(timestamps[0] + window - now)))
@@ -419,6 +500,85 @@ class SlidingWindowRateLimiter:
 
     def clear(self) -> None:
         self._buckets.clear()
+
+    def __len__(self) -> int:
+        return len(self._buckets)
+
+
+# --------------------------------------------------------------------------- visitor identity behind a proxy
+
+
+def _parse_ip(text: str | None) -> "ipaddress.IPv4Address | ipaddress.IPv6Address | None":
+    """An IP address from a socket peer or one X-Forwarded-For entry ("1.2.3.4", "1.2.3.4:5678", "[2001:db8::1]:443")."""
+    if not text:
+        return None
+    raw = text.strip().strip('"')
+    if raw.startswith("["):  # [IPv6]:port
+        raw = raw[1:].split("]", 1)[0]
+    elif raw.count(":") == 1:  # IPv4:port (Azure App Service appends the client port)
+        raw = raw.split(":", 1)[0]
+    try:
+        return ipaddress.ip_address(raw)
+    except ValueError:
+        return None
+
+
+def _ip_bucket(addr: "ipaddress.IPv4Address | ipaddress.IPv6Address") -> str:
+    """IPv4 per address; IPv6 per /64, because one household or phone normally holds a whole /64 and can rotate inside it."""
+    if isinstance(addr, ipaddress.IPv6Address):
+        if addr.ipv4_mapped is not None:
+            return str(addr.ipv4_mapped)
+        return str(ipaddress.ip_network(f"{addr}/64", strict=False))
+    return str(addr)
+
+
+def client_identity(peer_host: str | None, forwarded_for: str | None, *, trusted_hops: int | None = None) -> str:
+    """The rate-limit key for one visitor.
+
+    Proxy assumption (documented in docs/V2_BACKEND_REPAIR_HANDOFF.md): X-Forwarded-For is trusted ONLY when the owner sets
+    TD_TRUSTED_PROXY_HOPS to the number of reverse proxies in front of the app that append to it (Azure App Service: 1).
+    Each trusted proxy appends the address it received the connection from, so the client is the entry `hops` places from
+    the right; anything further left was written by the client and is ignored, which stops a visitor from choosing their
+    own key by sending a fake header. With the default 0 the header is never read and the socket peer is used. A missing,
+    short or unparseable header also falls back to the socket peer.
+    """
+    hops = load_config().trusted_proxy_hops if trusted_hops is None else max(0, int(trusted_hops))
+    if hops > 0 and forwarded_for:
+        entries = [e.strip() for e in forwarded_for.split(",") if e.strip()]
+        if len(entries) >= hops:
+            addr = _parse_ip(entries[-hops])
+            if addr is not None:
+                return _ip_bucket(addr)
+    peer = _parse_ip(peer_host)
+    if peer is not None:
+        return _ip_bucket(peer)
+    return (peer_host or "anonymous").strip()[:120] or "anonymous"
+
+
+# --------------------------------------------------------------------------- loop-safe shared concurrency limit
+
+
+class LoopBoundSemaphore:
+    """One process-wide concurrency limit that also works when several event loops exist (tests, TestClient portals).
+
+    asyncio.Semaphore binds to the first loop that waits on it; using it from another loop raises RuntimeError. This keeps
+    one semaphore per running loop (weakly referenced, so closed loops are dropped) and sizes it lazily from `size_fn`.
+    """
+
+    def __init__(self, size_fn: Callable[[], int]) -> None:
+        self._size_fn = size_fn
+        self._by_loop: "weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, tuple[int, asyncio.Semaphore]]" = (
+            weakref.WeakKeyDictionary()
+        )
+
+    def get(self) -> asyncio.Semaphore:
+        loop = asyncio.get_running_loop()
+        size = max(1, int(self._size_fn()))
+        current = self._by_loop.get(loop)
+        if current is None or current[0] != size:
+            current = (size, asyncio.Semaphore(size))
+            self._by_loop[loop] = current
+        return current[1]
 
 
 # --------------------------------------------------------------------------- service health telemetry
@@ -463,17 +623,51 @@ HEALTH_REGISTRY = ServiceHealthRegistry()
 # --------------------------------------------------------------------------- resilient HTTP helper
 
 
-RETRYABLE_HTTP_STATUS = {408, 429, 500, 502, 503, 504}
+# 429 is deliberately absent: an immediate retry after a rate limit only spends more of the provider's quota (A15).
+RETRYABLE_HTTP_STATUS = {408, 500, 502, 503, 504}
 MAX_RESPONSE_BYTES = 4 * 1024 * 1024  # no upstream reply used by V2 is anywhere near this; anything larger is refused
+
+# Headers that describe the wire encoding of the body. aiter_bytes() has already decoded it, so these must not travel with
+# the decoded bytes, or httpx would decode them a second time (A1: every gzip reply failed with DecodingError).
+_WIRE_ENCODING_HEADERS = ("content-encoding", "content-length", "transfer-encoding")
 
 
 def _too_large(service: str) -> "UpstreamResponseError":
+    HEALTH_REGISTRY.record_failure(service, "response_too_large")
     return UpstreamResponseError(
         service,
         f"{service} returned a response larger than the allowed size.",
         code="response_too_large",
         retryable=False,
     )
+
+
+def decoded_headers(headers: httpx.Headers) -> httpx.Headers:
+    """A copy of response headers without the wire-encoding ones, for a body that is already decoded."""
+    clean = httpx.Headers(headers)
+    for name in _WIRE_ENCODING_HEADERS:
+        if name in clean:
+            del clean[name]
+    return clean
+
+
+async def read_capped_body(streamed: httpx.Response, service: str, max_bytes: int) -> bytes:
+    """Read a streamed body, refusing it as soon as it passes `max_bytes`.
+
+    The cap counts DECODED bytes (aiter_bytes decompresses), so a small gzip "zip bomb" is refused too. A declared
+    Content-Length above the cap is refused before anything is read; it is only a hint, so the running count still applies.
+    """
+    declared = streamed.headers.get("content-length", "")
+    if declared.isdigit() and int(declared) > max_bytes:
+        raise _too_large(service)
+    chunks: list[bytes] = []
+    total = 0
+    async for chunk in streamed.aiter_bytes():
+        total += len(chunk)
+        if total > max_bytes:
+            raise _too_large(service)
+        chunks.append(chunk)
+    return b"".join(chunks)
 
 
 async def request_with_resilience(
@@ -504,20 +698,18 @@ async def request_with_resilience(
         # Streamed so that an oversized reply is refused as soon as it passes the limit instead of being fully downloaded.
         async with httpx.AsyncClient(timeout=timeout_seconds, follow_redirects=True) as client:
             async with client.stream(method, url, params=params, json=json_body, headers=headers) as streamed:
-                declared = streamed.headers.get("content-length", "")
-                if declared.isdigit() and int(declared) > MAX_RESPONSE_BYTES:
-                    raise _too_large(service)
-                chunks: list[bytes] = []
-                total = 0
-                async for chunk in streamed.aiter_bytes():
-                    total += len(chunk)
-                    if total > MAX_RESPONSE_BYTES:
-                        raise _too_large(service)
-                    chunks.append(chunk)
+                if streamed.status_code >= 400:
+                    # The body of an error reply is never used (and may echo request details): do not download it.
+                    return httpx.Response(
+                        status_code=streamed.status_code,
+                        headers=decoded_headers(streamed.headers),
+                        request=streamed.request,
+                    )
+                body = await read_capped_body(streamed, service, MAX_RESPONSE_BYTES)
                 return httpx.Response(
                     status_code=streamed.status_code,
-                    headers=streamed.headers,
-                    content=b"".join(chunks),
+                    headers=decoded_headers(streamed.headers),
+                    content=body,
                     request=streamed.request,
                 )
 
@@ -532,14 +724,19 @@ async def request_with_resilience(
             else:
                 resp = await _do_attempt()
 
+            if resp.status_code == 429:
+                # Never retried here; Retry-After (if any) travels with the error so callers can tell the user when.
+                err = UpstreamRateLimitError(
+                    service,
+                    f"{service} rate-limited the request (HTTP 429).",
+                    retry_after_seconds=parse_retry_after(resp.headers.get("retry-after")),
+                )
+                HEALTH_REGISTRY.record_failure(service, err.code)
+                raise err
+
             if resp.status_code in RETRYABLE_HTTP_STATUS and attempt < len(retry_delays):
                 await asyncio.sleep(retry_delays[attempt])
                 continue
-
-            if resp.status_code == 429:
-                err = UpstreamRateLimitError(service, f"{service} rate-limited the request (HTTP 429).")
-                HEALTH_REGISTRY.record_failure(service, err.code)
-                raise err
 
             if resp.status_code >= 400:
                 err = UpstreamResponseError(
@@ -556,6 +753,8 @@ async def request_with_resilience(
             return resp
 
         except asyncio.CancelledError:
+            raise
+        except UpstreamRateLimitError:
             raise
         except UpstreamServiceError as exc:
             last_error = exc

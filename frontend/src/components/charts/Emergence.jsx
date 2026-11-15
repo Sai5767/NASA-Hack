@@ -9,7 +9,7 @@ const Z_CRIT = 1.96;
  * How the evidence builds as years are added. The line is the Mann-Kendall z-score of the record
  * from the first year up to each end year; beyond +/-1.96 the trend is significant.
  */
-export default function Emergence({ series, year }) {
+export default function Emergence({ series, year, significant }) {
   const wrapRef = useRef(null);
   const width = useWidth(wrapRef, 360);
   const height = 230;
@@ -59,8 +59,10 @@ export default function Emergence({ series, year }) {
       </svg>
       <p className="fp-note">
         {year
-          ? `Seen on its own, the record first became — and stayed — significant in ${year}. (Descriptive only: each point reuses the earlier years.)`
-          : "The record has not yet become significant. More years of data could change that."}
+          ? `Seen on its own, the record first became — and stayed — significant in ${year}. (Descriptive only: each point reuses the earlier years; the z-scores are adjusted for year-to-year correlation.)`
+          : significant === false
+            ? "The overall trend is not significant, so no emergence year is given. More years of data could change that."
+            : "The record has not yet become significant. More years of data could change that."}
       </p>
     </div>
   );

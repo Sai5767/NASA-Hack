@@ -1,0 +1,212 @@
+/* ---------- V2 globe layers, timeline rail, live weather, news (Agent 3). Tokens: spec 2.2. ---------- */
+
+/* Overlays positioned per frame by Globe.jsx (transform = projected point). */
+.gl-markers { list-style: none; margin: 0; padding: 0; position: absolute; inset: 0; pointer-events: none; z-index: var(--z-globe-tip, 5); }
+.gl-marker-anchor, .gl-live-anchor { position: absolute; left: 0; top: 0; width: 0; height: 0; pointer-events: none; }
+.gl-marker-anchor[data-hidden="true"], .gl-live-anchor[data-hidden="true"] { visibility: hidden; }
+.gl-live-anchor { z-index: 4; }
+
+.gl-marker {
+  pointer-events: auto;
+  position: absolute; left: -14px; top: -44px; /* 8px leader above the anchor */
+  width: 28px; height: 28px; padding: 0;
+  display: grid; place-items: center;
+  border-radius: 8px; border: var(--news-border-width, 2px) solid var(--news-green);
+  background: color-mix(in srgb, var(--surface-2, #152038) 92%, transparent);
+  color: var(--news-green);
+  font: 700 13px/1 var(--font-mono);
+  cursor: pointer;
+  animation: gl-pop var(--dur-fast, 160ms) var(--ease-standard, ease-out) 1;
+}
+.gl-marker::before { content: ""; position: absolute; left: 50%; top: 100%; width: 1px; height: 10px; background: currentColor; opacity: 0.7; }
+.gl-marker::after { content: ""; position: absolute; inset: -8px; } /* 44px hit area */
+.gl-marker--amber { border-color: var(--news-amber); color: var(--news-amber); }
+.gl-marker--red { border-color: var(--news-red); color: var(--news-red); }
+.gl-marker--unverified {
+  width: 24px; height: 24px; left: -12px; top: -40px;
+  border: 1.5px dashed var(--news-unverified); color: var(--news-unverified);
+  background: color-mix(in srgb, var(--surface-1, #0e1524) 80%, transparent);
+}
+.gl-marker.is-open { box-shadow: 0 0 0 2px #fff; }
+.gl-marker:focus-visible { outline: var(--focus-ring-width, 2px) solid var(--focus-ring, #fff); box-shadow: var(--focus-halo); }
+.gl-marker-count { position: absolute; right: -8px; top: -8px; min-width: 16px; height: 16px; padding: 0 3px; border-radius: 999px; background: var(--surface-3, #1c2a47); color: var(--text); font-size: 10px; line-height: 16px; }
+.gl-marker-stale { position: absolute; left: -8px; top: -8px; font-size: 10px; color: var(--state-stale); }
+@keyframes gl-pop { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
+
+.gl-card-anchor { position: absolute; z-index: var(--z-globe-tip, 5); pointer-events: none; animation: gl-rise var(--dur-fast, 160ms) var(--ease-standard, ease-out) 1; }
+@keyframes gl-rise { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@media (max-width: 767.98px) { .gl-card-anchor { display: none; } }
+
+.gl-rotate { white-space: nowrap; }
+
+.gl-forecast-pill { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: var(--z-globe-hud, 3); background: var(--surface-2, #152038); border-radius: 999px; padding: 2px; }
+@container globe (max-width: 560px) { .gl-forecast-pill { top: 104px; } }
+
+/* Live weather glyph (Meteomatics): the only --live coloured thing on the globe. */
+.gl-live { position: absolute; left: 0; top: 0; }
+.gl-live-svg { position: absolute; left: 0; bottom: 0; overflow: visible; }
+.gl-live-leader { stroke: var(--live); stroke-width: 1; }
+.gl-live-point { fill: none; stroke: var(--live); stroke-width: 1.5; }
+.gl-live-disc { fill: color-mix(in srgb, var(--surface-2, #152038) 88%, transparent); stroke: none; }
+.gl-live-track { fill: none; stroke: rgba(255, 255, 255, 0.12); stroke-width: 4; stroke-linecap: round; }
+.gl-live-track.is-null { stroke-dasharray: 2 3; }
+.gl-live-value { fill: none; stroke: var(--live); stroke-width: 4; stroke-linecap: round; }
+.gl-live--sweep .gl-live-value { stroke-dasharray: 1; stroke-dashoffset: 1; animation: gl-sweep var(--dur-slow, 360ms) var(--ease-standard, ease-out) forwards; }
+@keyframes gl-sweep { to { stroke-dashoffset: 0; } }
+.gl-live.is-stale .gl-live-value { opacity: 0.5; }
+.gl-live-temp { fill: var(--text); font: 700 15px var(--font-mono); text-anchor: middle; }
+.gl-live-word { fill: var(--live); font: 700 9px var(--font-mono); text-anchor: middle; letter-spacing: 0.12em; }
+.gl-live-chip { position: absolute; left: 44px; top: 6px; white-space: nowrap; font-size: 11px; padding: 2px 8px; border: 1px solid var(--live); border-radius: 999px; background: var(--surface-2, #152038); color: var(--live); }
+@media (max-width: 767.98px) { .gl-live-svg { transform: scale(0.78); transform-origin: 0 100%; } }
+
+/* Legend */
+.gl-legend { font-size: 11px; }
+.gl-legend-key { display: none; }
+.gl-legend-body { display: grid; gap: 4px; padding: 10px 12px; border-radius: 10px; background: color-mix(in srgb, var(--surface-2, #152038) 88%, transparent); border: 1px solid var(--line-strong); max-width: 360px; }
+.gl-legend-title { color: var(--text-dim); letter-spacing: 0.04em; }
+.gl-legend-ramp { display: flex; align-items: center; gap: 3px; }
+.gl-legend-ramp i { width: 18px; height: 10px; border-radius: 2px; display: inline-block; }
+.gl-legend-ramp span { color: var(--text-dim); white-space: nowrap; }
+.gl-legend-words { display: flex; justify-content: space-between; gap: 8px; color: var(--text-faint); }
+.gl-legend-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; color: var(--text-dim); }
+.gl-legend-note, .gl-legend-line { color: var(--text-faint); }
+.gl-sw-missing, .gl-sw-forecast { width: 16px; height: 10px; display: inline-block; border-radius: 2px; }
+.gl-sw-missing { background: var(--missing-pattern), var(--missing-bg); border: 1px dotted var(--missing-fg); }
+.gl-sw-forecast { background: var(--forecast-hatch), rgba(247, 127, 53, 0.55); border: 1px dashed var(--forecast-line); }
+.gl-sw-live { color: var(--live); }
+@container globe (max-width: 560px) {
+  .gl-legend-key { display: inline-flex; }
+  .gl-legend .gl-legend-body { display: none; }
+  .gl-legend.is-open .gl-legend-body { display: grid; margin-top: 6px; }
+}
+
+/* ---------- Timeline rail ---------- */
+.rail { display: grid; gap: 8px; min-width: 0; }
+.rail-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.rail-play { min-width: 44px; min-height: 44px; }
+.rail-month { font-size: var(--fs-24, 1.5rem); letter-spacing: 0.02em; }
+.rail-month.is-forecast { text-decoration: underline dashed var(--forecast-line); text-underline-offset: 6px; }
+.rail-mean { color: var(--text-dim); font-size: var(--fs-13); }
+.rail-spacer { flex: 1; }
+.rail-trackrow { display: grid; gap: 2px; }
+.rail-zones { display: flex; justify-content: space-between; font: 600 10px var(--font-mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-faint); }
+.rail-zone-label.is-forecast { color: var(--forecast-line); }
+.rail-trackwrap { display: flex; gap: 12px; align-items: stretch; }
+.rail-track {
+  position: relative; flex: 1; display: grid; gap: 1px; height: 48px; min-width: 0;
+  border: 1px solid var(--line-control); border-radius: 8px; padding: 0 2px; cursor: pointer; touch-action: none;
+}
+.rail-bar { position: relative; display: block; height: 100%; }
+.rail-bar i { position: absolute; left: 10%; right: 10%; display: block; border-radius: 1px; }
+.rail-bar i.up { bottom: 50%; }
+.rail-bar i.down { top: 50%; }
+.rail-bar.is-missing { background: var(--missing-pattern), var(--missing-bg); }
+.rail-bar.is-forecast { background: var(--forecast-zone-bg); }
+.rail-bar.is-forecast i { opacity: 0.6; }
+.rail-bar.is-forecast::after { content: ""; position: absolute; inset: 0; background: var(--forecast-hatch); opacity: 0.6; border-top: 1px dashed var(--forecast-line); }
+.rail-track::before { content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: var(--line-strong); pointer-events: none; }
+.rail-divider { width: 0; justify-self: center; border-left: 2px dashed var(--forecast-line); height: 100%; }
+.rail-thumb {
+  position: absolute; top: -4px; bottom: -4px; width: 3px; margin-left: -1.5px; background: #fff; border-radius: 2px; pointer-events: none;
+  transition: left var(--rail-step, 0ms) linear;
+}
+.rail-thumb::after { content: ""; position: absolute; left: 50%; bottom: -8px; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; background: #fff; }
+.rail-slider { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; pointer-events: none; }
+.rail-track:has(.rail-slider:focus-visible) .rail-thumb::after { box-shadow: var(--focus-halo); outline: 2px solid var(--focus-ring); }
+.rail-track:has(.rail-slider:focus-visible) { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.rail-fc-slot { flex: 0 0 auto; display: grid; place-items: center; min-width: 120px; border: 1px dashed var(--forecast-line); border-radius: 8px; background: var(--forecast-zone-bg); padding: 0 8px; }
+.rail-fc-btn { background: none; border: 0; color: var(--forecast-line); font: 600 var(--fs-12) var(--font-mono); cursor: pointer; min-height: 44px; }
+.rail-fc-btn.is-withheld { color: var(--text-dim); }
+.rail-fc-note { font: var(--fs-12) var(--font-mono); color: var(--text-faint); }
+.rail-years { position: relative; height: 14px; font-size: 10px; color: var(--text-faint); }
+.rail-years span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+.rail-caption { justify-content: space-between; }
+.rail-about summary, .rail-table summary { font-size: var(--fs-12); color: var(--text-dim); }
+.rail-reason { max-width: 640px; }
+.rail-skeleton { height: 48px; border-radius: 8px; border: 1px dashed var(--line-control); background: repeating-linear-gradient(90deg, transparent 0 10px, rgba(var(--line-rgb, 125,160,230), 0.06) 10px 11px); }
+.rail--forecast .rail-track { border-color: var(--forecast-line); }
+.gl-table { border-collapse: collapse; font-size: var(--fs-12); margin-top: 6px; }
+.gl-table th, .gl-table td { border: 1px solid var(--line-strong); padding: 4px 8px; text-align: left; vertical-align: top; }
+.gl-table td.is-missing { background: var(--missing-pattern), var(--missing-bg); color: var(--text-dim); }
+@media (max-width: 767.98px) {
+  .rail-speed, .rail-range { flex-wrap: wrap; }
+  .rail-month { font-size: var(--fs-20, 1.25rem); }
+  .rail-steps button { min-width: 44px; min-height: 44px; }
+}
+
+/* ---------- Forecast status card ---------- */
+.fc-body { display: grid; gap: 8px; }
+.fc-available { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.fc-facts { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: var(--fs-13); }
+.fc-facts dt { color: var(--text-faint); }
+
+/* ---------- Live weather card ---------- */
+.lw { border-left: 3px solid var(--live); padding-left: 10px; display: grid; gap: 6px; }
+.lw-toggle { background: none; border: 0; color: inherit; font: inherit; cursor: pointer; padding: 0; min-height: var(--hit-min, 32px); }
+.lw-label { color: var(--live); }
+.lw-body { display: grid; gap: 8px; }
+.lw-now { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin: 0; }
+.lw-now dd { margin: 0; font-size: var(--fs-17); }
+.lw-now.is-stale dd { opacity: 0.7; }
+.lw-hours { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.lw-chart { margin: 0; }
+.lw-chart svg { width: 100%; height: auto; display: block; }
+.lw-line { fill: none; stroke: var(--live); stroke-width: 1.5; }
+.lw-rain { fill: var(--data-water); }
+.lw-nowline { stroke: var(--text-faint); stroke-dasharray: 2 2; }
+.lw-tick { fill: var(--text-faint); font: 9px var(--font-mono); text-anchor: middle; }
+.lw-show { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: var(--fs-13); min-height: var(--hit-min, 32px); }
+.lw-show.is-disabled { color: var(--text-faint); }
+@media (max-width: 400px) { .lw-now { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* ---------- News ---------- */
+.news-slot { display: grid; gap: 8px; }
+.news-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.news-card {
+  display: flex; gap: 8px; align-items: flex-start; text-align: left; width: 100%;
+  padding: 8px 10px; border-radius: 10px; background: var(--surface-2, #152038); color: var(--text);
+  border: var(--news-border-width, 2px) solid var(--news-green); font: inherit;
+}
+button.news-card { cursor: pointer; }
+.news-card--amber { border-color: var(--news-amber); }
+.news-card--red { border-color: var(--news-red); }
+.news-card--green .news-glyph { color: var(--news-green); }
+.news-card--amber .news-glyph { color: var(--news-amber); }
+.news-card--red .news-glyph { color: var(--news-red); }
+.news-card--unverified { border: 1.5px dashed var(--news-unverified); background: var(--surface-1, #0e1524); }
+.news-card--unverified .news-glyph { color: var(--news-unverified); font-size: 9px; }
+.news-card--unverified .news-headline { color: var(--text-dim); font-weight: 500; }
+.news-card.is-compact { width: 260px; box-shadow: var(--shadow-2); }
+.news-card--unverified.is-compact { width: 240px; }
+.news-text { display: grid; gap: 2px; min-width: 0; }
+.news-headline { font-size: var(--fs-13); font-weight: 700; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.news-headline.full { display: block; -webkit-line-clamp: unset; }
+.news-meta, .news-overview { font-size: var(--fs-12); color: var(--text-dim); }
+.news-label { font-size: 11px; color: var(--text-faint); }
+.news-unverified { font-size: 11px; color: var(--news-unverified); }
+.news-skeleton { display: grid; gap: 6px; }
+.news-skeleton i { display: block; height: 44px; border-radius: 10px; border: 1px dashed var(--line-control); opacity: 0.5; }
+.news-panel { display: grid; gap: 10px; }
+.news-panel-label { position: sticky; top: 0; background: var(--surface-2, #152038); color: var(--text-dim); padding: 4px 0; font-size: var(--fs-12); z-index: 1; }
+.news-panel-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.news-entry { display: flex; gap: 8px; padding-left: 10px; border-left: 2px solid var(--news-green); }
+.news-entry--amber { border-left-color: var(--news-amber); }
+.news-entry--red { border-left-color: var(--news-red); }
+.news-entry--green .news-glyph { color: var(--news-green); }
+.news-entry--amber .news-glyph { color: var(--news-amber); }
+.news-entry--red .news-glyph { color: var(--news-red); }
+.news-entry--unverified { border-left: 1.5px dashed var(--news-unverified); }
+.news-entry--unverified .news-glyph { color: var(--news-unverified); }
+.news-entry--unverified .news-headline { color: var(--text-dim); font-weight: 500; }
+.news-sub { font-size: var(--fs-13); color: var(--news-unverified); margin: 4px 0 0; }
+
+/* World mode (Explore > World): the sample-site caption. */
+.world-sample-note { font-family: var(--font-mono); font-size: var(--fs-12); color: var(--text-faint); }
+
+@media (prefers-reduced-motion: reduce) {
+  .gl-marker, .gl-card-anchor, .gl-live--sweep .gl-live-value { animation: none; stroke-dashoffset: 0; }
+  .rail-thumb { transition: none; }
+}
+:root[data-motion="reduced"] .gl-marker, :root[data-motion="reduced"] .gl-card-anchor { animation: none; }
+:root[data-motion="reduced"] .gl-live--sweep .gl-live-value { animation: none; stroke-dashoffset: 0; }
+:root[data-motion="reduced"] .rail-thumb { transition: none; }

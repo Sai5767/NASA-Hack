@@ -81,6 +81,18 @@ ALLOWED_SCIENCE_DOMAINS = (
     "royalsocietypublishing.org",
 )
 
+
+
+def _collapse_subdomains(domains: tuple[str, ...]) -> list[str]:
+    """The allow-list without entries already covered by a parent domain (the web_search filter includes subdomains)."""
+    ordered = list(dict.fromkeys(d.strip().lower() for d in domains if d.strip()))
+    return [d for d in ordered if not any(d != p and d.endswith("." + p) for p in ordered)]
+
+
+# Sent to the Responses API web_search tool as filters.allowed_domains, so the search itself can only retrieve from these
+# sites (first defence). Server-side citation validation (is_allowed_science_url + provenance) stays the second defence.
+WEB_SEARCH_ALLOWED_DOMAINS: list[str] = _collapse_subdomains(ALLOWED_SCIENCE_DOMAINS)
+
 # Canonical URLs for the curated literature sources in `reasons.py`
 CURATED_SOURCE_URLS: dict[str, tuple[str, str]] = {
     "IPCC AR6 WG1": ("https://www.ipcc.ch/report/ar6/wg1/", "IPCC Sixth Assessment Report (WG1)"),
@@ -225,9 +237,16 @@ def explanation_health() -> dict:
     return {
         "status": status,
         "configured": cfg.openai_configured,
+        "key_present": cfg.openai_key_present,
         "model": cfg.openai_explanation_model,
+        "model_configured": cfg.openai_model_present,
         "web_search_enabled": cfg.openai_web_search_enabled,
+        "web_search_tool": "web_search",
+        "search_context_size": cfg.openai_search_context_size,
+        "max_tool_calls": cfg.openai_max_tool_calls or None,
+        "max_output_tokens": cfg.openai_max_output_tokens,
         "allowed_domains_count": len(ALLOWED_SCIENCE_DOMAINS),
+        "search_filter_domains_count": len(WEB_SEARCH_ALLOWED_DOMAINS),
         "fallback_available": True,
         "fallback_source": "curated_literature_rules (reasons.py)",
         "rate_limit_max_requests": cfg.explanation_rate_limit_max,
@@ -361,6 +380,16 @@ def trusted_curated_urls(trend_res: dict) -> set[str]:
     return {k for k in keys if k}
 
 
+def _sig(value: float | None, digits: int = 4) -> float | None:
+    """Round to significant digits, not decimal places, so a tiny but real slope never prints as 0 (B11)."""
+    if value is None:
+        return None
+    try:
+        return float(f"{float(value):.{digits}g}")
+    except (TypeError, ValueError):
+        return None
+
+
 def _build_measured_facts(trend_res: dict) -> dict:
     s = trend_res["stats"]
     v = trend_res["variable"]
@@ -374,12 +403,12 @@ def _build_measured_facts(trend_res: dict) -> dict:
         "direction": s["direction"],
         "sign": s["sign"],
         "significant": s["significant"],
-        "slope_per_decade": round(s["slope_per_decade"], 4),
-        "ci_low_per_decade": round(s["ci_low_per_decade"], 4),
-        "ci_high_per_decade": round(s["ci_high_per_decade"], 4),
-        "total_change": round(s["total_change"], 4),
-        "p_value": round(s["p_value"], 6),
-        "raw_p_value": round(s["p_naive"], 6),
+        "slope_per_decade": _sig(s["slope_per_decade"]),
+        "ci_low_per_decade": _sig(s["ci_low_per_decade"]),
+        "ci_high_per_decade": _sig(s["ci_high_per_decade"]),
+        "total_change": _sig(s["total_change"]),
+        "p_value": _sig(s["p_value"]),
+        "raw_p_value": _sig(s["p_naive"]),
         "grade": trend_res["grade"],
         "verdict": trend_res["evidence_trace"]["verdict"]["label"],
     }
@@ -416,6 +445,7 @@ def _build_curated_fallback(
             "generated_at": utc_now_iso(),
             "fallback": True,
             "fallback_reason": "no_significant_trend",
+            "retry_after_seconds": None,
             "case_signature": case_signature,
             "measured_facts": facts,
             "cached": False,
@@ -425,8 +455,10 @@ def _build_curated_fallback(
     is_default_unknown = curated["text"] == DEFAULT_REASON[0] or not curated.get("sources")
 
     if is_default_unknown:
+        # No curated literature for this case: keep the caller's status (no_key, rate_limited, fallback) so the UI can say
+        # why the AI was not used, with no drivers.
         return {
-            "status": "no_evidence" if status == "ok" else status,
+            "status": status,
             "summary": (
                 f"{SUMMARY_PREFIX} The data establish a {s['direction']} trend in {facts['variable_label']} "
                 f"({facts['slope_per_decade']:+.3g} {facts['units']}/decade, p = {s['p_value']:.3g}), "
@@ -438,7 +470,7 @@ def _build_curated_fallback(
             "citations": [],
             "generated_at": utc_now_iso(),
             "fallback": True,
-            "fallback_reason": fallback_reason if fallback_reason != "curated_fallback" else "no_curated_match",
+            "fallback_reason": fallback_reason,
             "retry_after_seconds": retry_after_seconds,
             "case_signature": case_signature,
             "measured_facts": facts,
@@ -503,12 +535,11 @@ def _build_curated_fallback(
         "generated_at": utc_now_iso(),
         "fallback": True,
         "fallback_reason": fallback_reason,
+        "retry_after_seconds": retry_after_seconds,
         "case_signature": case_signature,
         "measured_facts": facts,
         "cached": False,
     }
-    if retry_after_seconds is not None:
-        out["retry_after_seconds"] = retry_after_seconds
     return out
 
 
@@ -573,11 +604,17 @@ def validate_and_normalize_ai_output(
         raw_citations = []
 
     # Merge any hosted web_search URL annotations returned by the OpenAI Responses API
+    # (Only url_citation annotations become citations; "source" entries, the pages the search consulted, are provenance only.)
     if url_annotations:
         for idx, ann in enumerate(url_annotations, start=1):
+            if ann.get("kind") == "source":
+                continue
             ann_url = ann.get("url")
             ann_title = ann.get("title") or ann_url or f"Source {idx}"
-            if ann_url and not any(c.get("url") == ann_url for c in raw_citations if isinstance(c, dict)):
+            ann_key = url_match_key(ann_url)
+            if ann_url and not any(
+                url_match_key(c.get("url")) == ann_key for c in raw_citations if isinstance(c, dict)
+            ):
                 raw_citations.append(
                     {
                         "id": f"web_{idx}",
@@ -592,7 +629,10 @@ def validate_and_normalize_ai_output(
         provenance = set(trusted_urls) | {k for k in (url_match_key(a.get("url")) for a in (url_annotations or [])) if k}
 
     valid_citations: dict[str, dict] = {}
-    seen_urls: set[str] = set()
+    # Deduplicated on the comparable URL (B11): "...?utm_source=openai" and the plain link are one citation. A later
+    # duplicate's id is mapped onto the first one so drivers that cite either id still resolve.
+    id_for_key: dict[str, str] = {}
+    alias: dict[str, str] = {}
     for idx, item in enumerate(raw_citations, start=1):
         if not isinstance(item, dict):
             continue
@@ -607,6 +647,14 @@ def validate_and_normalize_ai_output(
             continue
         if provenance is not None and url_match_key(url) not in provenance:
             continue  # not retrieved and not supplied: an invented citation, however official the domain looks
+        key = url_match_key(url) or url
+        if key in id_for_key:
+            if cid not in valid_citations:
+                alias[cid] = id_for_key[key]
+            continue
+        if cid in valid_citations:
+            continue  # a second citation reusing an id: keep the first
+        id_for_key[key] = cid
         valid_citations[cid] = {
             "id": cid,
             "title": title[:200],
@@ -614,7 +662,6 @@ def validate_and_normalize_ai_output(
             "domain": domain,
             "source_label": source_label[:120],
         }
-        seen_urls.add(url)
 
     # Validate drivers; remove any unsubstantiated driver or driver with invalid evidence_type/causal overclaim
     raw_drivers = data.get("drivers")
@@ -622,7 +669,6 @@ def validate_and_normalize_ai_output(
         raise ValueError("AI output missing drivers list.")
 
     substantiated_drivers: list[dict] = []
-    used_citation_ids: set[str] = set()
     for drv in raw_drivers:
         if not isinstance(drv, dict):
             continue
@@ -643,12 +689,16 @@ def validate_and_normalize_ai_output(
         if not isinstance(cit_ids, list):
             continue
 
-        resolved_ids = [str(cid).strip() for cid in cit_ids if str(cid).strip() in valid_citations]
+        resolved_ids: list[str] = []
+        for raw_id in cit_ids:
+            rid = str(raw_id).strip()
+            rid = alias.get(rid, rid)
+            if rid in valid_citations and rid not in resolved_ids:
+                resolved_ids.append(rid)
         if not resolved_ids:
             # Unsubstantiated driver: remove rather than display!
             continue
 
-        used_citation_ids.update(resolved_ids)
         substantiated_drivers.append(
             {
                 "title": title[:140],
@@ -672,10 +722,13 @@ def validate_and_normalize_ai_output(
     if not limitations:
         limitations = list(default_limitations or analysis.BASE_CAVEATS)
 
+    kept_drivers = substantiated_drivers[:4]
+    # Citations are computed from the drivers actually returned, so none outlives a dropped driver (B11).
+    used_citation_ids = {cid for d in kept_drivers for cid in d["citation_ids"]}
     ordered_citations = [c for cid, c in valid_citations.items() if cid in used_citation_ids]
     return {
         "summary": summary,
-        "drivers": substantiated_drivers[:4],
+        "drivers": kept_drivers,
         "limitations": limitations[:6],
         "citations": ordered_citations,
     }
@@ -692,10 +745,26 @@ def _extract_responses_api_content(api_json: dict) -> tuple[str | dict, list[dic
     if isinstance(api_json.get("output_text"), str) and api_json["output_text"].strip():
         text_chunks.append(api_json["output_text"].strip())
 
-    for item in api_json.get("output", []):
+    if api_json.get("status") == "incomplete":
+        # Cut off (for example by max_output_tokens): the JSON is unlikely to be whole, so do not try to use it.
+        raise ValueError("OpenAI Responses API returned an incomplete response.")
+
+    output_items = api_json.get("output", [])
+    if not isinstance(output_items, list):
+        output_items = []
+    for item in output_items:
         if not isinstance(item, dict):
             continue
-        for content in item.get("content", []):
+        if item.get("type") == "web_search_call":
+            action = item.get("action") if isinstance(item.get("action"), dict) else {}
+            for src in action.get("sources") or []:
+                if isinstance(src, dict) and isinstance(src.get("url"), str) and src["url"].strip():
+                    annotations.append({"url": src["url"].strip(), "title": src.get("title") or src["url"], "kind": "source"})
+            continue
+        contents = item.get("content", [])
+        if not isinstance(contents, list):
+            continue
+        for content in contents:
             if not isinstance(content, dict):
                 continue
             if isinstance(content.get("text"), str) and content["text"].strip():
@@ -715,6 +784,38 @@ def _extract_responses_api_content(api_json: dict) -> tuple[str | dict, list[dic
     return text_chunks[0], annotations
 
 
+def build_openai_request_body(cfg, user_payload: dict) -> dict:
+    """The Responses API request. The model is whatever the owner configured; nothing here names one.
+
+    Web search uses the current `web_search` tool (not the deprecated `web_search_preview`) with
+    `filters.allowed_domains`, so retrieval itself is restricted to the science allow-list. `search_context_size` and
+    `max_tool_calls` bound how much retrieved text and how many searches one explanation can spend, and
+    `include: web_search_call.action.sources` returns every page the search consulted, which the validator accepts as
+    provenance for a citation (it is still checked against the domain allow-list).
+    """
+    body: dict = {
+        "model": cfg.openai_explanation_model,
+        "instructions": EXPLANATION_SYSTEM_PROMPT,
+        "input": json.dumps(user_payload),
+        "text": {"format": {"type": "json_object"}},
+        "max_output_tokens": cfg.openai_max_output_tokens,
+        "store": False,
+    }
+    if cfg.openai_web_search_enabled:
+        body["tools"] = [
+            {
+                "type": "web_search",
+                "filters": {"allowed_domains": list(WEB_SEARCH_ALLOWED_DOMAINS)},
+                "search_context_size": cfg.openai_search_context_size,
+            }
+        ]
+        body["tool_choice"] = "auto"
+        body["include"] = ["web_search_call.action.sources"]
+        if cfg.openai_max_tool_calls:
+            body["max_tool_calls"] = cfg.openai_max_tool_calls
+    return body
+
+
 async def _call_openai_responses(
     trend_res: dict,
     question: str | None,
@@ -723,8 +824,10 @@ async def _call_openai_responses(
 ) -> tuple[str | dict, list[dict]]:
     """Invoke the OpenAI Responses API on the server with authoritative trend facts."""
     cfg = load_config()
-    if not cfg.openai_configured or not cfg.openai_api_key:
+    if not cfg.openai_key_present or not cfg.openai_api_key:
         raise UpstreamServiceError("openai_explanations", "missing_api_key", "OPENAI_API_KEY is not configured.")
+    if not cfg.openai_model_present:
+        raise UpstreamServiceError("openai_explanations", "missing_model", "OPENAI_EXPLANATION_MODEL is not configured.")
 
     facts = _build_measured_facts(trend_res)
     curated = reason_for(
@@ -752,14 +855,7 @@ async def _call_openai_responses(
         "allowed_citation_domains": list(ALLOWED_SCIENCE_DOMAINS),
     }
 
-    request_body: dict = {
-        "model": cfg.openai_explanation_model,
-        "instructions": EXPLANATION_SYSTEM_PROMPT,
-        "input": json.dumps(user_payload),
-        "text": {"format": {"type": "json_object"}},
-    }
-    if cfg.openai_web_search_enabled:
-        request_body["tools"] = [{"type": "web_search_preview"}]
+    request_body = build_openai_request_body(cfg, user_payload)
 
     if openai_caller is not None:
         raw_resp = await openai_caller(request_body, cfg)
@@ -808,8 +904,9 @@ async def generate_explanation(
     trend_res = await analysis.analyze_point(variable, lat, lon, start_year, end_year, detail=True)
     canonical_sig = trend_res.get("case_signature") or case_sig
 
-    # 3. If the trend is not statistically significant, never ask the LLM to invent reasons
-    if not trend_res["stats"]["significant"]:
+    # 3. If the trend is not statistically significant (or has no direction), never ask the LLM to invent reasons.
+    #    Same rule as _build_curated_fallback, so the two can never disagree (B1).
+    if not trend_res["stats"]["significant"] or trend_res["stats"]["sign"] not in ("up", "down"):
         no_ev = _build_curated_fallback(
             trend_res,
             canonical_sig,
@@ -819,15 +916,15 @@ async def generate_explanation(
         _explanation_cache.put(cache_key, no_ev)
         return no_ev
 
-    # 4. If OPENAI_API_KEY is not configured, return curated fallback immediately
+    # 4. If OPENAI_API_KEY or OPENAI_EXPLANATION_MODEL is not configured, return curated fallback immediately.
+    #    (No model name is built in: live AI is off until the owner picks one.)
     if not cfg.openai_configured and openai_caller is None:
-        no_key_resp = _build_curated_fallback(
+        return _build_curated_fallback(
             trend_res,
             canonical_sig,
             status="no_key",
-            fallback_reason="missing_api_key",
+            fallback_reason="missing_api_key" if not cfg.openai_key_present else "missing_model",
         )
-        return no_key_resp
 
     # 5. Check per-client rate limiter before making a live AI request
     allowed, retry_after, _ = _rate_limiter.check(
@@ -856,13 +953,14 @@ async def generate_explanation(
             trusted_urls=trusted_curated_urls(trend_res),
         )
     except (UpstreamServiceError, ValueError, KeyError, TypeError) as exc:
-        HEALTH_REGISTRY.record_failure("openai_explanations", redact_secrets(type(exc).__name__))
         reason_code = exc.code if isinstance(exc, UpstreamServiceError) else "validation_failed"
+        HEALTH_REGISTRY.record_failure("openai_explanations", redact_secrets(reason_code))
         return _build_curated_fallback(
             trend_res,
             canonical_sig,
             status="fallback",
             fallback_reason=reason_code,
+            retry_after_seconds=getattr(exc, "retry_after_seconds", None),
         )
 
     response = {
@@ -875,6 +973,7 @@ async def generate_explanation(
         "generated_at": utc_now_iso(),
         "fallback": False,
         "fallback_reason": None,
+        "retry_after_seconds": None,
         "case_signature": canonical_sig,
         "measured_facts": _build_measured_facts(trend_res),
         "cached": False,

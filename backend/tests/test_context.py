@@ -143,3 +143,49 @@ def test_a_failing_stream_is_reported_not_fatal(world, monkeypatch):
     assert any("ENSO" in e for e in ctx["errors"])
     assert next(s for s in ctx["suspects"] if s["id"] == "pdo")["ok"]  # others unaffected
     assert ctx["amplification"] is not None
+
+
+# ---- review item B6: the ENSO coefficient is a partial regression (y ~ t + ONI) --------------------------------------
+
+
+def test_enso_adjustment_does_not_credit_shared_drift_to_enso():
+    from app.context import _enso_adjusted
+
+    rng = random.Random(4)
+    years = list(range(1981, 2025))
+    oni = {y: 0.015 * (y - 1981) + rng.gauss(0, 0.8) for y in years}  # an index that drifts a little with time
+    local = {y: 0.03 * (y - 1981) for y in years}                     # local trend with NO ENSO dependence at all
+    out = _enso_adjusted(VARIABLES["T2M"], local, oni)
+    # Holding time fixed, ONI explains nothing, so removing "ENSO" must leave the trend untouched.
+    assert out["enso_share"] == pytest.approx(0.0, abs=1e-6)
+    assert out["slope_after"] == pytest.approx(out["slope_before"], rel=1e-9)
+
+
+def test_enso_adjustment_matches_the_three_term_regression():
+    from app.context import _enso_adjusted
+
+    rng = random.Random(9)
+    years = list(range(1981, 2025))
+    oni = {y: 0.02 * (y - 1981) + rng.gauss(0, 0.8) for y in years}
+    local = {y: 0.03 * (y - 1981) + 0.5 * oni[y] + rng.gauss(0, 0.2) for y in years}
+    # Solve y = a + c*t + b*oni by the normal equations, independently of the app's code.
+    t = [float(y - 1981) for y in years]
+    d = [oni[y] for y in years]
+    yv = [local[y] for y in years]
+    cols = [[1.0] * len(t), t, d]
+    xtx = [[sum(p * q for p, q in zip(ci, cj)) for cj in cols] for ci in cols]
+    xty = [sum(p * q for p, q in zip(ci, yv)) for ci in cols]
+    m = [row[:] + [rhs] for row, rhs in zip(xtx, xty)]
+    for i in range(3):  # Gauss-Jordan elimination
+        piv = m[i][i]
+        m[i] = [v / piv for v in m[i]]
+        for k in range(3):
+            if k != i:
+                f = m[k][i]
+                m[k] = [a - f * b for a, b in zip(m[k], m[i])]
+    b = m[2][3]
+    d_mean = sum(d) / len(d)
+    expected = annual_core(VARIABLES["T2M"], years, [v - b * (x - d_mean) for v, x in zip(yv, d)])["stats"]
+    out = _enso_adjusted(VARIABLES["T2M"], local, oni)
+    assert out["slope_after"] == pytest.approx(expected["slope_per_decade"], rel=1e-9)
+    assert out["p_after"] == pytest.approx(expected["p_value"], rel=1e-6)

@@ -3,13 +3,17 @@ import { caseFileCsv, downloadText } from "../lib/csv.js";
 import { eventsNear } from "../lib/events.js";
 import { arrow, formatP, formatPlace, signed } from "../lib/format.js";
 import { noiseSentence, shapeSub, shapeWord } from "../lib/words.js";
-import { Count, Metric, Verdict } from "./CaseParts.jsx";
+import { Count, Metric } from "./CaseParts.jsx";
 import Emergence from "./charts/Emergence.jsx";
 import Fingerprint from "./charts/Fingerprint.jsx";
 import Stripes from "./charts/Stripes.jsx";
 import TrendChart from "./charts/TrendChart.jsx";
 import ForecastLab from "./ForecastLab.jsx";
 import InView from "./InView.jsx";
+import EvidenceDrawer from "./insight/EvidenceDrawer.jsx";
+import { HOW_BUTTON, WHY_BUTTON } from "./insight/logic.js";
+import VerdictCard from "./insight/VerdictCard.jsx";
+import WhyPanel from "./insight/WhyPanel.jsx";
 import Overview from "./Overview.jsx";
 import Suspects from "./Suspects.jsx";
 import Term from "./Term.jsx";
@@ -39,7 +43,40 @@ function Fold({ id, title, hint, open, onToggle, children }) {
   );
 }
 
-export default function CaseFile({ data, view, onView, onGo, onEvent, watched, onToggleWatch, focusSection }) {
+/**
+ * The V2 evidence verdict with its two opt-in expansions, inline in the case file: "How did we test this?" (the
+ * backend's evidence_trace, step by step) and "Why might this be happening?" (manual, cited, hedged; the request is
+ * sent only when the button is pressed). Shared by the Overview and the Detail view.
+ */
+function InsightBlock({ data, technical, onTrendRefreshed }) {
+  const [how, setHow] = useState(false);
+  const [why, setWhy] = useState(false);
+  return (
+    <div className="cf-insight">
+      <VerdictCard data={data} eyebrow="Verdict" onHowTested={() => setHow((o) => !o)} onWhy={() => setWhy((o) => !o)} whyOpen={why} />
+      {how && (
+        <section className="card cf-how" aria-label={HOW_BUTTON}>
+          <div className="cf-insight-head">
+            <h3>{HOW_BUTTON}</h3>
+            <button type="button" className="btn btn-sm btn-ghost" onClick={() => setHow(false)} aria-label={`Close ${HOW_BUTTON}`}>✕</button>
+          </div>
+          <EvidenceDrawer data={data} defaultView={technical ? "numbers" : "plain"} />
+        </section>
+      )}
+      {why && (
+        <section className="card cf-why why-inline" aria-label={WHY_BUTTON}>
+          <div className="cf-insight-head">
+            <h3>{WHY_BUTTON}</h3>
+            <button type="button" className="btn btn-sm btn-ghost" onClick={() => setWhy(false)} aria-label={`Close ${WHY_BUTTON}`}>✕</button>
+          </div>
+          <WhyPanel data={data} onTrendRefreshed={onTrendRefreshed} />
+        </section>
+      )}
+    </div>
+  );
+}
+
+export default function CaseFile({ data, view, onView, onGo, onEvent, watched, onToggleWatch, focusSection, onTrendRefreshed }) {
   const [play, setPlay] = useState(0);
   const [copied, setCopied] = useState(false);
   const [open, setOpen] = useState(OPEN_AT_FIRST);
@@ -108,7 +145,7 @@ export default function CaseFile({ data, view, onView, onGo, onEvent, watched, o
           </div>
           <div>
             <h3><Term id="emergence">When the evidence emerged</Term></h3>
-            <Emergence series={emergence.series} year={emergence.year} />
+            <Emergence series={emergence.series} year={emergence.year} significant={stats.significant} />
           </div>
         </section>
       </InView>
@@ -226,10 +263,17 @@ export default function CaseFile({ data, view, onView, onGo, onEvent, watched, o
       </div>
 
       {view === "overview" ? (
-        <Overview data={data} onDetail={goDetail} onGo={onGo} events={nearby} onEvent={onEvent} />
+        <Overview
+          data={data}
+          onDetail={goDetail}
+          onGo={onGo}
+          events={nearby}
+          onEvent={onEvent}
+          verdict={<InsightBlock data={data} technical={false} onTrendRefreshed={onTrendRefreshed} />}
+        />
       ) : (
         <>
-          <Verdict data={data} />
+          <InsightBlock data={data} technical onTrendRefreshed={onTrendRefreshed} />
 
           <div className="metrics">
             <Metric term="sens" label="Rate of change" delay={350} tone={tone} sub={<>95% range <b className="mono">{signed(stats.ci_low_per_decade)}</b> to <b className="mono">{signed(stats.ci_high_per_decade)}</b></>}>

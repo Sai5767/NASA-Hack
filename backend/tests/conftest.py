@@ -3,6 +3,7 @@
 import math
 import os
 import random
+import socket
 import zlib
 
 import pytest
@@ -10,6 +11,54 @@ import pytest
 # The suite must not depend on, or pick up, the developer's own backend/.env: it runs with no keys, offline.
 # (tests/test_env_file.py tests the loader directly, on temporary files.) Set before the app is imported.
 os.environ["TD_LOAD_ENV_FILE"] = "0"
+
+# Every automated test is offline (Phase 0 item D). Any attempt to open a connection to, or even resolve, a non-loopback host
+# fails at once with an OSError instead of silently waiting on NASA POWER, OpenAI, Meteomatics or GDELT. Loopback stays
+# allowed because asyncio's event loop on Windows uses a local socket pair; TestClient never opens a socket at all.
+_LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "::1", ""}
+
+
+class NetworkBlockedError(OSError):
+    """Raised when a test tries to reach the real network."""
+
+
+def _is_loopback(host) -> bool:
+    if host is None:
+        return True
+    text = host.decode() if isinstance(host, bytes) else str(host)
+    return text in _LOOPBACK_HOSTS or text.startswith("127.")
+
+
+_real_connect = socket.socket.connect
+_real_connect_ex = socket.socket.connect_ex
+_real_getaddrinfo = socket.getaddrinfo
+
+
+def _refuse(host) -> None:
+    raise NetworkBlockedError(f"A test tried to reach {host!r}; automated tests must stay offline (mock the upstream).")
+
+
+def _guarded_connect(self, address):
+    if isinstance(address, tuple) and address and not _is_loopback(address[0]):
+        _refuse(address[0])
+    return _real_connect(self, address)
+
+
+def _guarded_connect_ex(self, address):
+    if isinstance(address, tuple) and address and not _is_loopback(address[0]):
+        _refuse(address[0])
+    return _real_connect_ex(self, address)
+
+
+def _guarded_getaddrinfo(host, *args, **kwargs):
+    if not _is_loopback(host):
+        _refuse(host)
+    return _real_getaddrinfo(host, *args, **kwargs)
+
+
+socket.socket.connect = _guarded_connect  # type: ignore[method-assign]
+socket.socket.connect_ex = _guarded_connect_ex  # type: ignore[method-assign]
+socket.getaddrinfo = _guarded_getaddrinfo
 
 
 def make_monthly(

@@ -58,13 +58,15 @@ def cluster_places(entries: list[dict], k_range: range = range(2, 7), chosen_k: 
         scores.append({"k": k, "silhouette": silhouette(points, labels)})
     best = max(scores, key=lambda s: s["silhouette"])
     chosen = next((s for s in scores if s["k"] == chosen_k), best)
-    k = chosen["k"]
-    labels, _, _ = kmeans(points, k, seed=SEED)
-    stability = cluster_stability(points, k, seed=SEED)
+    labels, _, _ = kmeans(points, chosen["k"], seed=SEED)
+    k = len(set(labels))  # the actual number of clusters (k-means caps k when there are fewer distinct places)
+    stability = cluster_stability(points, chosen["k"], seed=SEED)
 
     clusters = []
     for c in range(k):
         members = [i for i, lab in enumerate(labels) if lab == c]
+        if not members:
+            continue
         means = [sum(raw[i][v] for i in members) / len(members) for v in range(len(CORE_VARIABLES))]
         ranked = sorted(range(len(CORE_VARIABLES)), key=lambda v: means[v])
         describe = lambda idxs: [  # noqa: E731
@@ -95,6 +97,7 @@ def cluster_places(entries: list[dict], k_range: range = range(2, 7), chosen_k: 
 
     return {
         "k": k,
+        "requested_k": chosen_k,
         "best_k": best["k"],
         "quality": {
             "silhouette": chosen["silhouette"],

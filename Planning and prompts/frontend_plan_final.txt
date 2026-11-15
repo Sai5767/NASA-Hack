@@ -1,291 +1,408 @@
-TREND DETECTIVE V2 - FINAL FRONTEND AND BACKEND-REPAIR BRIEF
+TREND DETECTIVE — QUIET EARTH FINAL IMPLEMENTATION PROMPT
+Updated 15 November 2026
 
-You are the implementation lead for a full V2 rebuild of the Trend Detective user experience. The app is an entry for the NASA Space Apps Challenge. The backend has been built and reviewed, but must pass the Phase 0 repair gate below before optional live features are wired into the public UI.
+ROLE
 
-The desired visual direction is:
+You are the Claude implementation lead for Trend Detective, a NASA Space Apps Challenge project. Deliver a cohesive V3 visual rebuild plus a final backend-integrity check.
 
-- Dark NASA mission-control atmosphere: near-black space background, restrained luminous data colours, precise labels, subtle stars/atmosphere and excellent contrast.
-- Apple Weather–style motion: fluid, calm, layered and useful. Motion must reveal changes over time, never act as decoration that hides data.
-- A globe-first home screen: rotating Earth in the centre, a personal dashboard on the left, an Account/Profile control on the top-right and a bottom timeline rail.
-- The user’s selected places and weather/data interests control what is loaded. Do not precompute or animate unrelated locations.
-- Technical tools remain available under Explore; the main screen stays welcoming for high-school users and the public.
+The owner accepts the rough placement of the product: large Earth in the centre, compact controls on the left, account at top-right, a timeline associated with the Earth, and an Explore area for technical detail. The owner rejects the present treatment: it is too blocky, too colourful, too wordy and too much like a dashboard made of cards.
 
-Read these files before doing anything:
+At this stage, visual quality is the highest priority after scientific honesty. Spend disproportionate care on the dark aesthetic, the realism and elegance of the Earth, the calm presentation of data, and immediately understandable representations of trends and significance. Functional but visually rough work is not an acceptable finish.
 
-- README.md
-- HANDOFF.md
-- docs/REQUIREMENTS.md
-- docs/STATS_AUDIT.md
-- docs/V2_API_CONTRACT.md
-- docs/V2_BACKEND_HANDOFF.md
-- Planning and prompts/V2_EXECUTION_PLAN.md
-- Planning and prompts/V2_DATA_SOURCE_REGISTRY.md
-- Planning and prompts/manual_process.txt
+The goal is a minimal black-space experience a high-school student can understand in seconds:
 
-NON-NEGOTIABLE SCIENCE AND SAFETY RULES
+“Choose a place. Choose what to follow. Move through time. See the Earth change.”
 
-1. Keep the existing audited statistics. The frontend must display backend values; it must never recalculate or alter p-values, slopes, confidence intervals, evidence grades or forecast eligibility.
-2. NASA POWER provides historical/reanalysis trend data. Meteomatics provides current and 1–72 hour operational weather. The app’s internal monthly model provides 1–3 month statistical forecasts. These three sources must never be averaged, merged into one timeline scale without a boundary, or labelled as each other.
-3. News is context, not scientific evidence. Its green/amber/red border is a transparent editorial attention label, not an official emergency warning.
-4. “Why might this be happening?” is manual/opt-in only. It gives possible, cited explanations after a valid trend exists; it never proves a cause.
-5. Profiles, saved locations and preferences stay in browser localStorage only. The opening screen includes a basic email/password sign-in form for the one-account demo, but it is not real authentication: validate the form locally, discard the password immediately, and never save, hash, send or log it. Store only the email/display label and preferences in localStorage. A real account system would require a separately scoped authentication backend.
-6. Never expose OPENAI_API_KEY, Meteomatics credentials, a news-provider key, TD_CASE_SECRET or any other secret to browser code, logs, screenshots, Git or prompts.
-7. Preserve keyboard globe controls, responsive layout, focus visibility and prefers-reduced-motion. Motion must pause while the user drags/interacts with the globe and reduce to non-animated state changes when reduced motion is enabled.
+The app must assume that its first-time user knows nothing about coding, statistics, APIs, satellite data or climate terminology. The first view teaches through the Earth, simple graphs, shapes, motion and short labels—not walls of text. Every visual must be selectable so a curious user can open a clean plain-language explanation of what it shows, where the data came from, what the result means and what it cannot prove.
+
+THIS DOCUMENT OVERRIDES EARLIER FRONT-END ART DIRECTION
+
+Where it conflicts with prior visual specs, use this direction. Retain science, privacy, source boundaries and accessibility, but do not preserve violet, pink, blue-panel, neon, grid, CRT, glass-card or HUD styling merely because it is already implemented.
 
 ====================================================================
-PHASE 0 - REQUIRED BACKEND REPAIR GATE
+1. READ, INSPECT AND PROTECT BEFORE EDITING
 ====================================================================
 
-Assign one dedicated Claude agent to this phase. This agent owns backend files, backend tests and backend documents only. Do not let frontend agents edit these files in parallel.
+Before changing code:
 
-Fix these review findings before frontend integration:
+1. Read README.md, HANDOFF.md, docs/REQUIREMENTS.md, docs/STATS_AUDIT.md, docs/V2_API_CONTRACT.md, docs/V2_BACKEND_HANDOFF.md, docs/V2_BACKEND_REPAIR_HANDOFF.md, docs/V2_FRONTEND_FINAL_HANDOFF.md, backend-review/BACKEND_REVIEW.md, Planning and prompts/V2_EXECUTION_PLAN.md, Planning and prompts/V2_DATA_SOURCE_REGISTRY.md, Planning and prompts/manual_process.txt, and DATA_SOURCES_APIS_AND_AI_MODELS.txt.
+2. Run git status. Preserve all existing user and teammate changes. Never reset, checkout, clean, overwrite or discard an unrelated edit.
+3. Run the current project in a real browser and inspect first-run, onboarding, Main, Explore, account, populated, loading, empty, error and stale states at desktop, tablet and phone widths. Capture before screenshots.
+4. Treat prior source review as evidence, but verify the current state in the browser. Do not declare a visual change complete from a source-code read, server-side render or unit test alone.
 
-A. OpenAI web-search upgrade - P1
+Independent read-only project reviews have already found:
 
-- Replace the deprecated `web_search_preview` request tool in backend/app/explanations.py with the current Responses API `web_search` tool.
-- Apply the science-domain allow-list through the tool’s `filters.allowed_domains`, not merely by telling the model what domains it should prefer. Continue server-side citation validation as a second defence.
-- Keep the response model configurable through OPENAI_EXPLANATION_MODEL. Do not hard-code a model name.
-- The owner wants a cost-conscious choice. Configure the deployment to use a current low-cost model that the owner’s account supports after one controlled smoke test. Keep web search manual only, cache answers by case/question for 24 hours, respect the existing rate limit, and set a practical returned-search-context budget.
-- Preserve the no-key, rate-limited, invalid-response and no-evidence curated fallbacks.
-- Add offline tests for the new request shape/domain filter and one short manual real-key smoke-test checklist. Do not put a key in tests.
-
-B. Meteomatics public-quota protection - P1
-
-- Add a bounded per-visitor rate limiter before the Meteomatics fetch. Reuse the project’s sliding-window limiter; do not create an unbounded data structure.
-- Return a safe, documented unavailable/rate-limited response with no credential or upstream body. Preserve the cached/stale result when it exists.
-- Configure trusted forwarded-header handling deliberately for Azure rather than trusting arbitrary forwarded headers. Document the proxy assumption and test it.
-- Stream provider responses while enforcing the maximum size; do not download an oversize response before rejecting it.
-
-C. News-source trust signal - P1
-
-- Add `publisher_verified: true | false` to every news item. Use a small transparent reputable-publisher/institution allow-list, or mark all other syntactically valid hosts false.
-- The frontend must display unverified stories only as “Unverified news context”, visually less prominent than verified stories. It must never make their severity sound like official advice.
-
-D. Test reliability and documentation - P1/P2
-
-- Every automated backend test must be offline: patch NASA POWER, OpenAI, Meteomatics and GDELT in tests. Fix the environment test that reaches live NASA POWER.
-- Make the suite work in the project’s Docker/Python 3.12 target, and document any Windows/Python 3.15 async-test limitation or repair it. A test run that silently waits on the network is not acceptable.
-- Clean the control character in docs/V2_BACKEND_HANDOFF.md.
-- Run the entire suite in the supported target, not only individual tests. Report exact totals and failures.
-- Do not change existing trend reference values unless a reproducible statistical defect is proven and docs/STATS_AUDIT.md plus reference tests are updated.
-
-Phase 0 exit gate:
-
-- All backend tests pass offline in the supported target.
-- The new API contract/fixtures are updated.
-- One owner-controlled real OpenAI call and one owner-controlled real Meteomatics call have been tested after secrets are configured, with no secret in the response or logs.
-- The backend agent writes docs/V2_BACKEND_REPAIR_HANDOFF.md with changes, tests, remaining limits and any contract change.
+- App.jsx currently shows Starfield plus a CSS welcome-limb, not an actual Earth, on sign-in and onboarding.
+- theme.css and theme.js contain violet interface accents, blue page glows, pink live-weather colour and many coloured interface tokens.
+- The blocky look is structural: Dashboard.jsx and the shared card styles place almost every Main section inside padded, bordered, blurred rounded boxes with decorative brackets.
+- TimelineRail.jsx is a multi-row mini-dashboard of playback, steps, speed, range, bars, source text, badges and disclosures. It is not the requested thin floating time slider.
+- Globe.jsx resumes idle rotation after eight seconds and suppresses spin while data, live glyphs or markers are shown. This conflicts with the desired roughly one-second resume after a drag release.
+- Globe.jsx also retains noisy HUD text such as CURSOR and PIN A, map/zoom control groups, instructions and a scan-line treatment.
+- News currently exists both as globe markers and as a default dashboard list. Marker/callout data handling is a useful base, but the default list must leave Main.
+- Current monthly-frame plumbing already correctly fetches for the active selected place and variable and passes returned cells to the globe. Preserve this source-safe logic while simplifying its presentation.
+- Current sign-in correctly discards the demo password and the two-question preference flow is useful. Preserve that behaviour.
+- The uncommitted backend repair handoff reports 341 passing and 0 failing tests in the supported Docker/Python 3.12 target. Do not redo completed repairs blindly; independently rerun and verify them.
 
 ====================================================================
-AGENT STRUCTURE AND FILE OWNERSHIP
+2. NON-NEGOTIABLE SCIENCE, PRIVACY, LICENSING AND ACCESSIBILITY
 ====================================================================
 
-Use multiple agents to work quickly, but give each agent separate file ownership. The integration lead alone resolves cross-cutting conflicts and runs the final checks. If the execution environment cannot spawn agents, execute these phases in the same order.
-
-MODEL AND AGENT ASSIGNMENT
-
-| Agent | Model/service | Job | Starts when | Must hand off |
-| --- | --- | --- | --- | --- |
-| Agent 0 | Claude Opus 5.5 | Backend repair and API/test security gate | Immediately | `docs/V2_BACKEND_REPAIR_HANDOFF.md` plus passing supported-target test result |
-| Agent 1 | Fable | Visual art direction, wireframes, motion and design-token specification | Immediately; read-only against production source | `docs/V2_FABLE_VISUAL_SPEC.md` |
-| Agent 2 | Claude Opus 5.5 | App shell, dashboard, local-only profile and navigation | After Agent 1 has the basic layout direction | Changed-file list, component tests and responsive checks |
-| Agent 3 | Claude Opus 5.5 | Globe, layers, timeline, Meteomatics/weather cards and news markers | After Agent 0 locks API contract and Agent 1 defines data-layer styles | Changed-file list, component tests and interaction/reduced-motion checks |
-| Agent 4 | Claude Opus 5.5 | Evidence verdict, calculation drawer, manual Why and Explore tools | After Agent 0 locks API contract | Changed-file list, component tests and all degraded-state checks |
-| Agent 5 | Claude Opus 5.5 | Integration, conflict resolution, accessibility, performance, final source inventory and release verification | Only after Agents 0–4 hand off | `docs/V2_FRONTEND_FINAL_HANDOFF.md`, updated root source inventory, build/test totals and smoke-test report |
-
-Use Claude Opus 5.5 for every code-owning agent because this is a connected React/FastAPI application with statistical and security constraints. Use Fable only for visual/system design; Claude converts the approved Fable specification into production React/CSS/canvas code. Do not ask Fable to call APIs, handle secrets or make statistical decisions.
-
-Agent 0 - Claude backend repair owner
-  Owns: backend/, backend/tests/, docs/V2_API_CONTRACT.md, docs/V2_BACKEND_HANDOFF.md.
-  Goal: complete Phase 0 and publish the repair handoff. No frontend redesign.
-
-Agent 1 - Fable visual director
-  Owns: a new frontend design specification only, for example docs/V2_FABLE_VISUAL_SPEC.md. Do not edit production React files in parallel with the implementation agents.
-  Goal: define dark mission-control tokens, typography, spacing, responsive wireframes, globe data-layer styles, motion storyboard, loading/error/stale states and visual hierarchy. It may propose licensed/public assets but must identify source/licence and provide a no-asset fallback.
-
-Agent 2 - Claude application-shell owner
-  Owns: App.jsx, layout/shell components, Account/Profile/Welcome components, profile storage helpers, navigation and their tests/styles.
-  Goal: build the local-only profile flow, main/explore navigation and left dashboard without modifying the globe renderer or data visualisation components owned by Agent 3.
-
-Agent 3 - Claude globe-and-timeline owner
-  Owns: Globe.jsx and new directly related globe/timeline/layer components, their styles and tests. Coordinate public props with the integration lead before altering Globe.jsx.
-  Goal: build the dynamic Earth layers, timeline rail, Meteomatics/weather display and news marker behaviour.
-
-Agent 4 - Claude case-insight-and-explore owner
-  Owns: CaseFile/Overview/evidence/why components, API-state hooks, Explore components and their tests/styles. It does not alter the shell layout or core Globe.jsx.
-  Goal: expose evidence_trace, manual Why, graceful optional-feature states, and move advanced tools into Explore.
-
-Agent 5 - Claude integration/quality owner
-  Owns: final integration changes only after agents 0–4 finish, test wiring, accessibility/performance checks, documentation, the root `DATA_SOURCES_APIS_AND_AI_MODELS.txt` inventory and final handoff. It should not begin conflict resolution until the other owners deliver their handoffs.
-
-Use worktrees or non-overlapping branches where possible. Before integration, every agent provides changed-file list, tests run, known limits and screenshots/recordings where relevant.
-
-Do not start Agent 3 or Agent 4 against an undocumented API shape. They use the repaired `docs/V2_API_CONTRACT.md` and deterministic V2 fixtures. Agent 5 is the only agent allowed to resolve ownership conflicts.
+1. Render backend values exactly. Never calculate, change or infer p-values, slopes, significance, confidence intervals, evidence grades or forecast eligibility in the browser.
+2. Keep data sources separate:
+   - NASA POWER: historical/reanalysis trends.
+   - Meteomatics: current and short-range operational weather, up to 72 hours.
+   - Internal monthly model: 1–3 month statistical forecast only if its quality gate passes.
+   Never average them, blend their timelines or call one another.
+3. News is context, not evidence or an official warning. Red, amber and green are editorial-attention labels only.
+4. Why might this be happening remains a manual, opt-in, source-cited and cautious explanation. It must not claim causation.
+5. This is a local demo profile, not real authentication. Check email/password only in the browser, immediately discard the password, and never save, hash, log or transmit it. Save only display label, locations and interests to localStorage.
+6. Never expose OpenAI, Meteomatics, news-provider, TD_CASE_SECRET or any other secret to browser code, logs, fixtures, screenshots, Git or prompts.
+7. Do not draw a fake global raster. The backend returns a local 1×1–3×3 grid for a chosen place and sample points for world views. Render only returned values; do not smooth, interpolate or call sample coverage a global satellite layer.
+8. Do not use Google Earth imagery, Google map tiles or Google branding. A Google-Earth-like finish means a realistic and elegant Earth, not copied assets.
+9. Any base imagery must be properly licensed, static, credited on screen and recorded in DATA_SOURCES_APIS_AND_AI_MODELS.txt with source URL, licence, file size and retrieval date. It must not be made to look live. If that cannot be done reliably, build a refined procedural Earth instead.
+10. Maintain keyboard canvas controls, accessible HTML equivalents for all canvas data, focus visibility, 200% text zoom, responsive behaviour and prefers-reduced-motion support.
 
 ====================================================================
-FABLE DESIGN SPECIFICATION
+3. NEW VISUAL SYSTEM — BLACK SPACE, WHITE INTERFACE, REAL EARTH
 ====================================================================
 
-Fable should prepare the visual system before implementation. The design output must cover:
+This is a strict token-system redesign, not a palette tweak.
 
-1. Page structure
+A. Interface palette
 
-   OPENING FLOW
-   - First visit opens on a clean dark sign-in page before the globe/dashboard.
-   - Show email and password fields, a Sign in button and a short clear note: “Demo account — your password is not saved or sent.”
-   - After local form validation, immediately show the two preference questions below. Do not show the dashboard until the user finishes or explicitly skips onboarding.
+- Background must be one controlled near-black family only: page black, one slightly lifted black for reading surfaces, and a small neutral-grey scale. There must be no accidental warm/cool black mismatch.
+- Interface text, iconography, rules, buttons, focus states and controls use white, off-white and neutral grey only.
+- Delete or replace all violet, pink, teal, decorative blue, multicolour panel, coloured shadow, coloured grid and stray legacy accent tokens.
+- Do not use gradients in the application chrome. No coloured glow behind panels. No glassmorphism. No translucent blue cards.
+- Use exactly one shared token file as the source of truth. Do not hard-code nearby but different blacks, greys, borders or whites in components.
 
-   TOP BAR
-   - Brand at left.
-   - Compact Account/Profile button at top-right.
-   - Minimal controls only; avoid a crowded navigation strip.
+B. Deliberate and narrow colour exceptions
 
-   MAIN DASHBOARD
-   - Left: personalised dashboard.
-   - Centre/right: dominant interactive globe.
-   - Bottom of globe: timeline and playback controls.
-   - Main content uses the user’s selected data types and saved places first.
+- The physical Earth may use natural ocean blue, land green/brown, white ice/cloud and a subtle realistic blue atmospheric rim inside the globe only.
+- Returned scientific data layers may use a restrained, variable-appropriate scale only on the actual data layer and its legend. It must never tint unrelated panels or controls.
+- Red, amber and green are reserved for verified news-location attention markers and their small marker outlines/glyphs. Never use them to decorate cards, buttons or generic status labels.
+- An unverified story is neutral grey, dashed and labelled Unverified news context. It never receives a red, amber or green severity border.
 
-   EXPLORE PAGE
-   - Holds the “neeky”/advanced tools: Sweep, Scan, Duel, World, Vitals, Ledger, Events, statistical detail and learning resources.
-   - Must be reachable in one clear click and support browser back/forward/history state.
+C. Typography and logo
 
-2. Dark mission-control design tokens
+- Use Space Grotesk, already bundled, for all readable UI text. Use JetBrains Mono only for values, month labels, coordinates and optional technical detail.
+- Avoid tiny dense mono text, all-caps paragraphs, long eyebrow labels and fake mission telemetry.
+- Minimum body text is 15 px. Text must meet contrast requirements on every black surface.
+- Design a new project-owned inline SVG logo: a simple thin white orbital arc around a dot, crossed by one rising trend line. Pair it with a small Trend Detective wordmark. It must be recognisable in monochrome at 20–28 px and have an accessible text label.
+- Do not use any NASA mark, seal, worm, meatball or lookalike.
 
-   - Near-black/navy background; deep ocean blue globe; restrained atmospheric halo.
-   - Data colours must be semantically consistent and colour-blind distinguishable:
-       temperature/positive anomaly: warm amber to red;
-       cooling/negative anomaly: cyan to blue;
-       rainfall/water: blue/teal;
-       cloud: pale slate/white;
-       missing data: patterned neutral, never a data colour;
-       news severity: green, amber, red border only;
-       forecast: a visually distinct dashed/hatched treatment.
-   - Use CSS variables so themes remain consistent across SVG/canvas/HTML.
-   - Maintain strong readable text contrast and avoid red/green as the only severity cue.
+D. Cleanliness rules
 
-3. Animation rules
-
-   - Globe idle rotation: slow, subtle; pause on focus, drag, keyboard input, hidden tab and reduced motion.
-   - Timeline: scrub by month; play/pause; speed choices; accessible keyboard range input; no forced autoplay.
-   - Data layers cross-fade or interpolate only between genuine adjacent frames. Missing cells are a pattern or transparent gap, never smoothed.
-   - Forecast begins at a clear observed/forecast divider. It uses a distinct label, border and legend.
-   - Loading state: show a radar/data-scan feeling without claiming data have arrived.
-
-4. Responsive wireframes
-
-   - Desktop: dashboard left, globe right/centre, timeline underneath globe.
-   - Tablet: dashboard becomes collapsible/drawer; globe remains primary.
-   - Mobile: full-width globe then timeline, dashboard as stacked cards/bottom sheet; no tiny controls.
-
-5. Asset rules
-
-   - When a real NASA/public layer is available and its use/licence/performance are documented, use it with an explicit source/attribution label.
-   - When it is not available, use a clearly decorative procedural atmosphere/cloud/lighting effect. Never imitate an unavailable live satellite product.
-   - No NASA logo and no unlicensed satellite image download.
+- Main must use whitespace, hierarchy and hairlines, not a grid of rounded cards.
+- No thick outlines, nested boxes, corner brackets, redundant shadows, ornamental rules, scan effects, background grid or decorative particles.
+- One visual component gets one radius and one border treatment if it needs either; do not mix subtly different radii, greys, borders or black shades.
+- Default Main at 1440×900 has fewer than 60 visible prose words, excluding short labels, values and button text.
+- Details belong behind a progressive-disclosure action. Do not repeat title, caveat, source badge and explanatory paragraph in every section.
+- Treat every visible pixel as part of one system: inspect colour values, alpha, anti-aliasing, borders, shadows, typography, spacing, transitions and canvas overlays together. A technically correct feature that creates visual clutter, a mismatched shade or an awkward box must be redesigned before release.
 
 ====================================================================
-CLAUDE FRONTEND IMPLEMENTATION REQUIREMENTS
+4. LAYOUT AND INFORMATION ARCHITECTURE
 ====================================================================
 
-1. Local welcome and profile
+Desktop layout:
 
-- First run begins with a basic email/password sign-in page. Email must be syntactically valid and password non-empty, but this is a one-account demo gate only: discard the password immediately after validation and never save or transmit it.
-- After sign-in, ask exactly two required preference questions:
-  1. **Preferred locations** — choose/search/pin up to five places.
-  2. **Data types I care about** — Heat; rain & water; clouds & sunlight; land & plants; wind & atmosphere; ice & oceans.
-- Store a versioned `td-profile-v2` value in localStorage containing only a display-safe email/label, locations, interests, onboarding status and harmless UI preferences. Never include a password or auth token.
-- Migrate old V1 preferences, tolerate corrupted/blocked storage and offer reset/export/import. A reset must remove local profile data and return to the sign-in page.
-- Account button opens an edit panel. It must say “Stored on this device for this demo. This is not a secure online account.”
-- Load only selected locations and selected data interests in the home dashboard. Do not trigger global survey, news or forecasting on initial load.
+1. Top edge
+   - Left: new small monochrome logo and wordmark.
+   - Centre/right: understated Main and Explore switch with a calm cross-fade or slide.
+   - Far right: round monochrome account control.
+   - No theme picker, oversized navigation or coloured header strip.
 
-2. Main versus Explore navigation
+2. Left control rail
+   - Width approximately 272–300 px.
+   - It is a quiet vertical control rail, not stacked cards.
+   - It has three compact groups only: place; subject; one-line snapshot.
+   - Every group uses whitespace or one hairline separator, one concise label and an icon/value. Use a tiny sparkline, directional mark or miniature visual instead of explanatory prose.
+   - Forecast, live weather and evidence details appear only when their short row is selected.
+   - No default news list in this rail.
 
-- Main is the dashboard/globe/data experience.
-- Explore contains advanced tools. Preserve the current capabilities rather than deleting them.
-- Use a clear URL/history-friendly page state, browser back/forward, and accessible tabs or navigation.
-- “Flip between pages” should feel immediate but must not trap focus or lose the current selected place/variable.
+3. Earth stage
+   - The Earth owns the page visually: around 60–72% of available height.
+   - It is not trapped in a rounded card or surrounded by dashboard chrome.
+   - Empty space around it is intentional black space with sparse, static/dim stars.
 
-3. Globe and historical timeline
+4. Focus panel
+   - The right side remains empty at rest.
+   - It opens only for account, full news context, data/evidence details, live weather detail or Why explanation.
+   - It must be a single, calm black reading plane with one close action, not another dashboard stack.
 
-- Reuse the existing custom canvas globe rather than adding a heavy map package.
-- For a selected NASA variable/location, call GET /api/monthly-frames and visualise the local 1x1–3x3 observed grid as a dynamic heatmap/field on Earth.
-- The user can scrub backwards through past months, press play/pause and change speed. Every frame shows the month, source, unit and local-grid caveat.
-- The heatmap must not imply full-world high-resolution satellite coverage. It is a coarse local NASA POWER/reanalysis analysis grid.
-- On a globe-wide world-survey/explore mode, retain the existing sample-site time-lapse and label it as sample sites; do not invent a complete global field.
-- Render missing cells as missing. Do not interpolate or colour them like valid data.
+5. Explore
+   - Explore contains the nerdy material: calculation details, p-values, sources, evidence trace, forecast diagnostics, global sample-site view, comparison tools, glossary and download.
+   - Main shows a simple verdict and one-sentence translation; See how we know leads to details.
+   - Do not place all old panels on one long Explore page. Use a small number of organised, progressive views.
 
-Important current capability boundary: the delivered backend does not provide a high-resolution globe-wide monthly raster. It provides a local 1×1–3×3 NASA POWER grid near the selected location and the existing global sample-site survey. Build a compelling local heatmap on the Earth, and use sample-site dots for the global view. Do not paint a smooth full-Earth “temperature map” from sparse points. A future true global raster requires a separately scoped backend/data-source phase and its own provenance/performance design.
+6. Beginner-first visual learning and navigation
+   - The first Main view is visual-first: the Earth, the selected data layer, a small trend graphic and the time slider carry the meaning before any explanatory paragraph does.
+   - Every chart, map layer, marker, icon and small graph has a clear click/tap target. Selecting it opens one focused explanation with: What am I seeing? What changed? How sure are we? Where did this come from? and What does this not tell us?
+   - Explain each item in ordinary language first. Put formulas, p-values, raw values, API/source details and calculations behind a clearly named Show the details control.
+   - Keep navigation predictable everywhere: logo returns to Main; Main/Explore is always visible; Account stays top-right; back/close always returns the user to the exact prior context; Esc closes an open panel; browser Back/Forward retains useful page and selected-place state.
+   - Use the same icon, wording and placement for the same action everywhere. Do not make users learn a separate navigation pattern for login, Main, Explore and Account.
+   - Empty states must tell users the next simple action, for example Choose a place or Pick something to follow. Error states must say what happened in everyday language and offer one clear retry/recovery action.
 
-4. Three separate data modes on the globe/timeline
+Responsive:
 
-   A. Observed history
-   - NASA POWER monthly local grid from /api/monthly-frames.
-   - Label: Observed/reanalysis, NASA POWER.
-
-   B. Internal climate forecast
-   - /api/monthly-forecast for T2M, PRECTOTCORR and CLOUD_AMT only.
-   - Only render frames when `eligible === true`.
-   - When withheld, leave the historical timeline usable and show the backend reason.
-   - Label exactly as forecast/not observed; surface backtest metrics in a detail drawer.
-
-   C. Meteomatics live weather
-   - /api/live-weather is point-based hourly operational weather for the next 1–72 hours.
-   - Present it as a local weather card and optional point/radial layer near the selected location, not a full global heatmap unless a separately documented gridded Meteomatics endpoint is implemented later.
-   - Show Meteomatics source, valid/fetch time, stale state and distinct `not NASA trend data` label.
-
-5. News markers
-
-- Fetch news lazily only for saved locations plus the selected interest/data category. Do not run a global news feed.
-- Markers appear at approximate saved-location coordinates and rotate with the globe.
-- Each closed marker/card shows: thin green/amber/red border, headline, publisher, date and one-line overview.
-- On click or keyboard activation, expand in place or open a focus-managed panel with the full available summary, source link, location precision, stale state and the fixed “news context, not scientific evidence” label.
-- `publisher_verified: false` stories must say “Unverified news context” and be visually less prominent. Do not claim an official severity level.
-- Handle loading, no stories, stale stories, provider error and slow first response without a blank panel.
-
-6. Evidence and manual Why
-
-- Use evidence_trace.verdict to render the four evidence states: Strong evidence of a trend; Some evidence — investigate carefully; No clear evidence yet; Not enough data to tell.
-- Lead with direction, rate, period, source and uncertainty. Do not lead with raw p-values.
-- Add an expandable “How did we test this?” section that explains each backend evidence_trace step in simple language, then exposes actual values/method names for technical users. It must not pretend calculation occurs in the browser.
-- Only after a valid analysis is complete, show a button: “Why might this be happening?”
-- Call POST /api/explanations with only the documented signed case and optional short question. On HTTP 422 from a stale case signature, refetch the trend then retry once.
-- Render summary, possible drivers, limitations and clickable citations. Always display: “These are possible explanations, not proof that one cause created this local trend.”
-- Support `ok`, `fallback`, `no_key`, `rate_limited` and `no_evidence` states intentionally.
-
-7. Failure, performance and accessibility
-
-- Use AbortController/cancellation for stale selection requests and cache only non-sensitive public responses in the browser.
-- Budget NASA grid requests; do not request a 3x3 grid and forecast for every saved location in the background.
-- Ensure every interactive canvas function has keyboard/ARIA alternate controls and plain-text state information.
-- Test desktop, tablet and mobile; normal, slow and failed API states; no keys; no Meteomatics account; stale weather/news; withheld forecast; missing localStorage; and reduced motion.
+- Globe remains first and dominant on tablet and mobile.
+- The left rail becomes a compact bottom sheet or drawer. It must not become a long stack beneath the globe.
+- One open news callout at a time on phone. No callout covers its point.
+- Timeline remains a touch-friendly slider visually attached to the globe.
 
 ====================================================================
-INTEGRATION AND ACCEPTANCE CHECKLIST
+5. FIRST-RUN EXPERIENCE — REAL SPINNING EARTH BEHIND IT
 ====================================================================
 
-1. Read docs/V2_BACKEND_REPAIR_HANDOFF.md. If API shapes changed, update frontend API helpers, fixtures and tests deliberately.
-2. Build the Fable visual design into React; do not ship mock screenshots instead of working views.
-3. Run the backend suite in the supported target, `npm test`, and `npm run build`.
-4. Run a one-process production-style local smoke test after the frontend build.
-5. In Azure staging, configure secrets only in application settings. Test the real OpenAI and Meteomatics success paths once, then confirm no secret appears in browser tools, source, logs or responses.
-6. Complete this demo journey:
-   a. Welcome/profile → save a location and interest.
-   b. Main globe/dashboard → select a variable.
-   c. Scrub observed NASA history through time.
-   d. Show visual trend verdict and expandable evidence.
-   e. Click manual Why → cited, hedged response or honest fallback.
-   f. Show optional forecast only when eligible.
-   g. Toggle Meteomatics live weather and show it is separate.
-   h. Open a selected-location news marker and show source, severity meaning and context disclaimer.
-   i. Enter Explore and show advanced tabs remain available.
-7. Update the root `DATA_SOURCES_APIS_AND_AI_MODELS.txt` only after verifying the final build. It must be the accurate final inventory, not a wish list:
-   - Separate **actively used**, **optional/configured only**, **planned but not implemented**, and **reference-only** sources.
-   - Include every actual data provider, API endpoint family, map/imagery/asset source, AI runtime model/tool and development assistant used in the final project.
-   - State each source’s purpose, whether it is observed/reanalysis/model/forecast/news/context, and how it is labelled in the UI.
-   - Include NASA POWER, GISTEMP, NOAA sources, NSIDC, Meteomatics, news provider, OpenAI Responses/web search, Natural Earth/world-atlas and fonts when actually used.
-   - List only environment-variable names, never secret values, URLs containing credentials or private account details.
-   - Remove or clearly mark any source that was considered but not integrated. Do not claim AppEEARS, Giovanni, RADARSAT, SWOT, a global raster or a model that the final code does not actually use.
-8. Write docs/V2_FRONTEND_FINAL_HANDOFF.md with changed files, design decisions, test totals, screenshots/recordings, accessibility checks, API contract assumptions and unresolved risks.
+Implement a full-screen Welcome scene using the actual reusable Globe renderer in a base-only, privacy-safe mode.
 
-Do not deploy, merge to main or change Azure secrets without the owner’s explicit approval.
+1. Background
+   - The realistic Earth and sparse stars are visible behind sign-in and both onboarding questions.
+   - Earth rotates slowly from first paint. It must be an actual rendered globe, not a CSS circle, gradient limb or static illustration.
+   - Before onboarding completes, make no personal data, heatmap, live-weather or news request. Render base Earth only.
+   - The Earth remains visibly readable around the content, not hidden by an opaque modal.
+
+2. Sign-in
+   - Centre a compact near-black reading surface with logo, one welcoming sentence, email, password, action and one short demo privacy note.
+   - Use this exact concept, in concise wording: Demo only — your password is discarded and is never sent.
+   - Do not suggest real authentication or cloud account storage.
+
+3. Two-question onboarding
+   - Ask only one clear question at a time:
+       Which places matter to you?
+       What would you like to follow?
+   - Make selected location and data-type actions large, simple and obvious; hide secondary pin/search help behind a small action.
+   - When a location is selected, the globe may gently orient to it, then continues idle rotation.
+   - This must feel airy and calm, not like a boxed wizard.
+
+4. Rotation rule
+   - Earth auto-rotates whenever the user is not interacting.
+   - Mouse/touch drag takes control immediately. On pointer release, resume rotation after approximately 0.75–1.25 seconds with a gentle ramp.
+   - Wheel, keyboard and zoom interactions use the same short resumption rule. Hovering/focusing a marker or reading an expanded callout can pause temporarily.
+   - Keep an explicit accessible pause/resume action.
+   - With reduced motion, Earth is stationary and transitions become instant/non-animated.
+
+====================================================================
+6. EARTH, DATA LAYERS, TIMELINE, NEWS AND MOTION
+====================================================================
+
+A. Base Earth
+
+- Upgrade the current low-detail vector treatment to a convincing lightweight physical Earth: natural land/ocean, soft lighting, depth, non-fluorescent coastlines, subtle blue atmospheric edge and sparse stars beyond the disc.
+- Prefer a documented licensed static NASA/public-domain base asset only if it is technically and legally ready. Otherwise polish the procedural renderer; do not delay the rebuild waiting for an asset.
+- No radar sweeps, CRT scan lines, dense graticules, exaggerated halos or retro HUD.
+- Remove default labels such as CURSOR, PIN A and drag/scroll instruction text. Put help in a small accessible info affordance, shown only on request.
+
+B. Data layers on the Earth
+
+- Selecting temperature, rainfall, cloud cover or another monthly variable places that month’s returned cells directly on the globe surface.
+- The timeline changes the displayed month; moving it cross-fades only actual adjacent returned frames in roughly 150–300 ms. Never fabricate a value between frames.
+- Give the active layer one short plain-language legend, such as Warmer or cooler than this place’s usual month. Put full methodology behind an info action.
+- Missing values use a neutral hatch and accessible No data text, never zero or an arbitrary colour.
+- Forecast data uses an explicit forecast label, divider and hatch/pattern as well as source text. It must not be confused with observed data.
+- Meteomatics remains a single selected-location current/short-range glyph/detail. It is not a world heatmap and never appears on the historical monthly slider.
+- World Explore visualisations show only actual sample-site coverage and clearly identify their sampling limit.
+
+Visual presentation of change and significance
+
+- Trend, direction and confidence must be easy to grasp without reading statistics. Use a small, refined visual language consistently: direction as an arrow/line movement; strength as a simple number of filled marks or line weight; no-clear-change as a calm neutral state.
+- Do not colour ordinary trends red, amber or green, because those colours are reserved for news attention. Use monochrome shape, position, label and optional data-layer legend instead.
+- A student should be able to tell at a glance: going up, going down, no clear change, strong evidence, some evidence or not enough data. A short tappable label explains the evidence level; exact p-values and calculations remain one level deeper.
+- Data layers must look integrated with the curved Earth surface: correct clipping at the limb, consistent opacity, crisp but unobtrusive legends, gentle cross-fades and no rectangular overlay that makes the globe look like a flat map.
+
+C. Thin floating timeline
+
+Replace the multi-row boxed rail with a thin floating media-style scrubber across the lower third of the Earth stage:
+
+previous · play/pause · MAY 2024 · thin draggable line · next
+
+- Its default view contains only month, the real accessible range input and quiet playback/step controls.
+- Advanced range, speed, grid table, source/provenance, coverage and forecast diagnostic details move to a subtle Details disclosure.
+- Use monthly increments. Arrow keys move one month; PageUp/PageDown move 12; Home/End move bounds. Provide descriptive aria-valuetext.
+- Clearly show observed/forecast boundary only when forecast frames exist, using label plus pattern plus divider.
+- Playback is slow and calm by default, stops at end and avoids noisy live announcements.
+
+D. News on locations, not in a sidebar
+
+- After preferences are ready, automatically and boundedly fetch news only for saved/preferred locations. Respect backend cache/rate-limit signals. Never hold up initial render and never query unrelated locations.
+- Place small markers at each approximate source location. Each callout must originate at that exact surface point and point outward from the globe: first a small marker appears on the Earth, then a fine leader line extends away from the curved surface, then the compact callout animates into place at the end of that line.
+- The marker, leader and callout must be projected/repositioned on every animation frame so they stay visually anchored to their location while the Earth rotates. They must disappear or tuck away gracefully as the location passes behind the limb; they must never drift across the screen or point at the wrong part of Earth.
+- Animate callouts with a restrained 150–250 ms opacity/scale/translation reveal along the leader direction. Animation must be subtle, not bouncy or flashy; with reduced motion, show the final anchored state immediately.
+- The closed callout includes only severity glyph, one/two-line headline, publisher and date. The full detail appears only after click/tap in the focus panel.
+- Remove the default dashboard/left-rail news list from Main. Location markers are discovery.
+- Verified items: green low attention, amber medium attention, red high attention. Use colour only on marker outline/glyph/leader, never as callout fill.
+- Unverified items are dashed neutral grey and say Unverified news context. Hide their severity.
+- Cluster/fan markers gracefully at world scale. Never create a forest of overlapping popups.
+- Let the Earth continue its quiet rotation while no marker is focused. When a user hovers, focuses or opens a callout, pause only that reading interaction; resume its normal short idle rotation after it is closed or focus leaves.
+- Expanded news clearly says: News context, not scientific evidence or an official warning.
+
+E. Purposeful motion
+
+Allowed motion is Earth rotation, gentle globe orientation, data-frame cross-fade, callout emergence and page transition.
+
+Prohibited motion is decorative radar, CRT, bouncing boxes, gratuitous pulsing, particle storms, delayed text reveals and unrelated animated glows.
+
+Use requestAnimationFrame responsibly and cancel work when hidden, unmounted or reduced motion is active. Aim for smooth interaction on a typical school laptop and entry-level phone.
+
+====================================================================
+7. HIGH-SCHOOL LANGUAGE AND LOW-TEXT MAIN PAGE
+====================================================================
+
+On Main:
+
+- Prefer Clear change / No clear change yet over bare statistical terminology.
+- Prefer How sure are we? with a simple visual meter. Exact p-values live behind See how we know.
+- Show Why might this be happening? only after an actual trend and only after user intent.
+- Use sentence case and include units on every data value.
+- Avoid provenance, archetype, emergence, metadata, cell-month and signature language on Main.
+
+Every piece of explanation should become one of:
+
+- icon plus 2–5 word label;
+- tiny data visual;
+- one plain line;
+- Learn more / See how we know detail.
+
+Never use fake telemetry, filler copy, fabricated alerts, fabricated coverage or placeholder data.
+
+For every interactive visual, implement this progressive-disclosure ladder:
+
+1. At-a-glance: a recognisable visual, a short label and a plain conclusion.
+2. On click/tap: a compact explanation in ordinary language and the most relevant source/uncertainty note.
+3. On See how we know: a clean evidence view with methods, exact values, calculations, source links and technical terms defined in place.
+
+Users must never need to understand a technical word before they can use the interface. If a specialist term is unavoidable, make it a short clickable term with an immediately understandable definition.
+
+====================================================================
+8. BACKEND REVIEW AND REPAIR GATE
+====================================================================
+
+Assign a dedicated Claude Opus 5.5 backend agent. It owns backend code, backend tests and backend documentation only. It does not redesign React/CSS.
+
+The current repair handoff says major Phase-0 defects are already repaired. Verify and preserve those repairs rather than replacing them:
+
+- gzip/deflate upstream-response handling;
+- monthly-frame/cell alignment;
+- zero Sen-slope/significance consistency;
+- NASA POWER concurrency and health-cache race;
+- supported OpenAI web_search, enforced science-domain filtering, manual invocation, 24-hour cache and no-key fallback;
+- Meteomatics server-side Basic Auth, bounded quota/rate limiting, streamed response cap, trusted Azure proxy handling and stale fallback;
+- news publisher_verified handling;
+- adjusted p-value, forecast-validation, ENSO/grid and ML/news/cache corrections.
+
+The backend agent must:
+
+1. Rerun the entire offline suite in the supported Docker/Python 3.12 target. The active host Python may differ and is not evidence of success.
+2. Confirm automated tests cannot contact NASA POWER, OpenAI, Meteomatics or GDELT/news services.
+3. Compare code, contract, fixtures and repair handoff for drift; fix actual failed tests or contract mismatches without blindly re-implementing prior work.
+4. Recheck input validation, bounded caches/TTLs, rate limits, stream-size caps, safe errors and forwarding/proxy assumptions.
+5. Recheck statistical changes using reproducible tests. Never change reference values unless a defect is proved and docs/STATS_AUDIT.md plus reference tests are updated.
+6. Prepare, but never automate, two owner-run smoke checklists: one controlled OpenAI call and one controlled Meteomatics call after secrets are set locally. No secret may appear in logs, output, screenshots or tests.
+7. Update docs/V2_BACKEND_REPAIR_HANDOFF.md with exact command, test totals, contract changes, remaining safe limitations and owner-only tests.
+
+Known limitations to preserve/document unless a deliberate tested design changes them: forecast result caching, per-process quota scope and the fact that successful live provider calls cannot be proven without owner credentials.
+
+====================================================================
+9. MULTI-AGENT EXECUTION WITH NON-OVERLAPPING OWNERSHIP
+====================================================================
+
+Use agents to maximise quality and speed. The implementation lead receives their reports, resolves conflicts and writes the final plan/handoff. Agents do not overwrite one another.
+
+| Agent | Model | Ownership | Required report to lead |
+| --- | --- | --- | --- |
+| A — current-state visual analyst | Opus 5.5 | Read-only first: current UI screenshots, source/styles and visual defects | Evidence-based report of boxiness, copy density, shade/token mismatches and mobile issues; no code edits |
+| B — interaction/data-flow analyst | Opus 5.5 | Read-only first: first-run, Main, globe, timeline, marker/news flows | What exists, what must be retained, behaviour gaps and API dependencies; no code edits |
+| C — backend integrity analyst | Opus 5.5 | Read-only first: backend, tests, contract and repair handoff | Verified/re-run checklist, current gates, safe limitations; no code edits |
+| D — design-system builder | Opus 5.5 | token/theme files, logo asset, shell visual CSS | One monochrome token source, precise black/white/grey spec, logo and visual regression checklist |
+| E — first-run/shell builder | Opus 5.5 | sign-in/onboarding/account/layout/left rail only | Spinning base-only welcome Earth, two-question flow retained, minimal responsive shell |
+| F — globe/data builder | Opus 5.5 | Globe renderer, base Earth asset/fallback, data layers, timeline, marker callouts only | Surface layers, rapid resume rotation, thin rail and marker-only news discovery |
+| G — evidence/explore builder | Opus 5.5 | evidence summary, Why, Explore organisation and plain-language copy | Progressive disclosure, high-school wording, no browser statistics |
+| H — backend repair owner | Opus 5.5 | backend only | Supported-target offline test result and updated repair handoff |
+| I — integration/quality owner | Sonnet 5.5 for broad test execution, Opus 5.5 for final decisions | Merge, tests, browser QA, accessibility/performance and source inventory | Final screenshots, exact test results, fixed defect list and final handoff |
+
+Agent coordination:
+
+- A, B and C report to the lead before D–H make final implementation choices.
+- D sets tokens before E–G write final UI. F consumes the data contract only after H confirms no API drift.
+- Use isolated worktrees or an explicit file-ownership table. Do not run broad auto-formatting across other agents’ files.
+- I alone resolves integration conflicts. Preserve source-safe existing logic whenever possible.
+- If subagents are unavailable, execute phases in this sequence with the same separation of concerns.
+
+====================================================================
+10. BUILD ORDER
+====================================================================
+
+Phase 1 — Audit and token discipline
+
+1. A, B and C inspect the current project and give reports to the lead.
+2. Lead creates docs/V3_QUIET_EARTH_VISUAL_SPEC.md from those reports. It must list exact interface tokens, Earth/data exceptions, logo construction, responsive wireframe, asset/licence decision and visual tests.
+3. D replaces obsolete visual tokens and removes dead themes/rules after confirming no feature needs them.
+4. Verify every screen has matching blacks, whites, greys, borders and radii before adding new effects.
+
+Phase 2 — Welcome and sparse shell
+
+1. E places a base-only actual rotating globe behind sign-in and both onboarding questions.
+2. E rebuilds Main around a minimal rail, dominant Earth and empty-at-rest right focus panel.
+3. E retains local-only profile behaviour and exactly two onboarding questions.
+4. G moves technical copy out of Main and into Explore/details.
+
+Phase 3 — Earth and time
+
+1. F upgrades the Earth with a documented texture or refined procedural fallback.
+2. F retains existing active-place/active-variable monthly frame plumbing and renders returned local cells on globe surface.
+3. F installs the thin monthly slider and source-safe observed/forecast distinction.
+4. F replaces the eight-second rotation logic with automatic short resume after interaction.
+5. F replaces default news list with automatic saved-location marker/callout discovery.
+
+Phase 4 — Backend gate and safe integration
+
+1. H runs the supported-target backend gate and reports drift before F/G depend on new API shapes.
+2. Integrate real safe responses and honest loading/empty/error/stale states.
+3. Never fake an API response to fill a screenshot. Disabled/missing provider state must be concise and truthful.
+
+Phase 5 — Final quality gate
+
+1. Run frontend tests, production build and supported backend suite after integration.
+2. Test real browser flows at 1440×900, 1024×768 and 375×812:
+   - first visit → sign-in → two questions → Main;
+   - selected place/variable → monthly scrubber → returned local layer;
+   - globe drag/release → idle spin resumes in about one second;
+   - saved-location automatic marker → callout → expanded news detail;
+   - account preferences restrict what loads;
+   - Explore and manual Why flow;
+   - first visual view → select a graph/layer/marker → understand the plain-language explanation → open and close technical detail → return to the same place/month;
+   - logo, Main/Explore, Account, close buttons, Esc and browser Back/Forward navigation from every major view;
+   - loading, empty, stale cache, API error and no-key cases.
+3. Test keyboard globe/timeline controls, focus order, screen-reader equivalents, 200% zoom, reduced motion, low/no-network fallback and colour-blind redundancy.
+4. Perform visual regression review against screenshots. Specifically check for stray accent shades, mismatched black/grey values, inconsistent borders/radii, accidental boxes, text overload and overlapping callouts.
+   - Inspect the Earth and data layer at multiple rotations and zoom levels: a layer must remain convincingly surface-bound; no callout may drift, cross the limb incorrectly or point away from its location.
+   - Inspect trend/evidence visuals with representative strong, some, no-clear and insufficient-data results. The state must be understandable without relying on colour or reading p-values.
+5. Run a performance pass: no unnecessary pre-onboarding requests, no requests for unsaved locations, no false global data coverage and no animation jank.
+6. Update DATA_SOURCES_APIS_AND_AI_MODELS.txt after verification. Separate actively used services/assets, optional configured integrations, planned/not implemented items and reference-only resources. Include source endpoint family, asset licence/attribution, runtime AI model/tool and development agents. Never include secrets.
+7. Write docs/V3_FINAL_HANDOFF.md with changed files, screenshots, exact test commands/results, accessibility/performance notes, known limitations and one judge-demo journey.
+
+====================================================================
+11. ACCEPTANCE CRITERIA
+====================================================================
+
+Do not call this complete until every point is true:
+
+- Interface chrome is a coherent black/white/grey system. There are no violet, pink, blue-panel, neon or accidental shade mismatches.
+- There are no ornamental cards or default stacked boxes making the app look blocky.
+- A real rotating Earth is visible behind sign-in and onboarding, as well as on Main.
+- Earth resumes rotation around one second after manual release unless explicitly paused, hovered/focused for reading or reduced motion is on.
+- Earth is clearly dominant; left rail is minimal; technical content is progressively disclosed.
+- A non-technical first-time user can understand the initial view through visuals and short labels, then open a consistent plain-language explanation for every important graph, layer, marker and result.
+- Navigation is consistent and recoverable across welcome, onboarding, Main, Explore, Account, detail panels and browser history.
+- Timeline is a thin floating monthly scrubber. Month changes animate actual returned data on the Earth surface, not merely a timeline graph.
+- Main has no default news sidebar/list. Saved-place news appears automatically as clean anchored markers/callouts from source locations.
+- Every popup visibly grows outward from its true location as the Earth rotates, remains correctly attached during movement and uses a restrained accessible entrance animation.
+- Trend and significance visuals communicate direction and confidence clearly in monochrome before any technical explanation is opened.
+- Verified green/amber/red marker treatment and neutral unverified treatment are correct, while news remains clearly non-evidence.
+- Only returned local/sample data is drawn; no source blending, fake global raster or fake forecast exists.
+- Secrets remain server-side, demo password is discarded and the source inventory contains no credentials.
+- Frontend tests/build and the supported offline backend suite pass.
+- Real browser screenshots prove desktop, tablet and phone quality; source review alone is not sufficient.
+- Final source/API/AI inventory and final handoff are accurate to the code actually shipped.
+
+When a visual request conflicts with scientific honesty, privacy, licensing, performance or accessibility, implement the safe truthful version and document the constraint rather than faking the effect.

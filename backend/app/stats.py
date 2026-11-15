@@ -275,8 +275,13 @@ def mann_kendall(
     z, p_value = _z_and_p(s, var_s * factor)
     ci_low, ci_high = _sens_confidence_interval(slopes, var_s * factor, alpha)
 
-    significant = p_value < alpha
-    if not significant or sens == 0:
+    # A trend is significant only when the test rejects AND the rate estimate has a direction. With many tied values
+    # (zero-snowfall or zero-rain years) S can be significant while more than half the pairwise slopes are exactly 0, so
+    # Sen's slope is 0 and the 95% interval can be 0 to 0. Calling that "significant" would contradict the direction,
+    # sign, summary and checks, so a zero median slope never counts as a significant trend (docs/STATS_AUDIT.md, B1).
+    # p_value is reported unchanged; `zero_slope_with_low_p` lets callers explain why it did not count.
+    significant = p_value < alpha and sens != 0
+    if not significant:
         direction = "no significant trend"
     else:
         direction = "increasing" if sens > 0 else "decreasing"
@@ -296,6 +301,11 @@ def mann_kendall(
         r1=r1,
         variance_factor=factor,
     )
+
+
+def zero_slope_with_low_p(result: TrendResult, alpha: float = 0.05) -> bool:
+    """True when Mann-Kendall's p is below alpha but Sen's slope is exactly 0 (heavy ties), so no trend is claimed."""
+    return result.p_value < alpha and result.sens_slope == 0
 
 
 # --------------------------------------------------------------------------- least squares
@@ -348,7 +358,18 @@ def ols(
         # should use that many degrees of freedom. (Simulation: false alarms 9.7% -> 6.9% at phi = 0.7.)
         df = max(n / variance_factor - 2.0, 2.0)
 
-    if sse <= 1e-24 * max(syy, 1.0):  # perfect line
+    # Both tests are relative, so the answer does not depend on the units (B10): an absolute floor such as
+    # 1e-24 * max(syy, 1) called noisy data around 1e-14 a perfect line with p = 0.
+    sum_sq = sum(v * v for v in values)
+    if syy <= 1e-28 * sum_sq:  # no variation beyond floating-point rounding (a constant series)
+        slope = 0.0
+        intercept_mean = y_mean
+        se = 0.0
+        t_stat = 0.0
+        p_value = 1.0
+        ci_low = ci_high = 0.0
+        r2 = 0.0
+    elif sse <= 1e-24 * syy:  # perfect line
         se = 0.0
         t_stat = math.inf if slope != 0 else 0.0
         p_value = 0.0 if slope != 0 else 1.0

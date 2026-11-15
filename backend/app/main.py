@@ -10,14 +10,21 @@ endorsed by NASA.
 
 from __future__ import annotations
 
-import asyncio
-import math
-from datetime import date
+# Optional local settings file (backend/.env). Real environment variables win; absent file is fine. See env_file.py.
+# Loaded FIRST, before any other app module is imported (A13): version.py computes VERSION (which may use TD_VERSION) at
+# import time, and CORS origins are read below.
+from .env_file import load_local_env
 
-from fastapi import FastAPI, HTTPException, Query, Request
-from fastapi.middleware.cors import CORSMiddleware
+load_local_env()
 
-from . import streams
+import asyncio  # noqa: E402
+import math  # noqa: E402
+from datetime import date  # noqa: E402
+
+from fastapi import FastAPI, HTTPException, Query, Request  # noqa: E402
+from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
+
+from . import streams  # noqa: E402
 from .analysis import (
     ALPHA,
     FIRST_YEAR,
@@ -31,7 +38,6 @@ from .analysis import (
 from .archetypes import build_archetypes
 from .context import build_context
 from .deploy import allowed_origins, frontend_dist, mount_frontend
-from .env_file import load_local_env
 from .explanations import (
     ExplanationRequest,
     explanation_health,
@@ -62,7 +68,7 @@ from .nasa_power import VARIABLES, PowerError, cache_health as nasa_cache_health
 from .news import fetch_news_context, news_health
 from .places import PLACES
 from .planet import build_vitals
-from .resilience import utc_now_iso
+from .resilience import client_identity, utc_now_iso
 from .stats import benjamini_hochberg, t_critical, t_two_sided_p
 from .version import VERSION
 
@@ -71,10 +77,6 @@ MAX_WORLD_CONCURRENCY = 4
 MAX_GRID_SIDE = 5           # up to 5 x 5 = 25 cells per scan
 MAX_CONCURRENT_FETCHES = 3  # be polite to the NASA POWER service
 GRADE_RANK = {"strong": 3, "moderate": 2, "weak": 1, "none": 0}
-
-# Optional local settings file (backend/.env). Real environment variables win; absent file is fine. See env_file.py.
-# Must run before anything below reads a setting (CORS origins are read on the next lines).
-load_local_env()
 
 app = FastAPI(title="Earth System Trend Detective API", version="0.4.0")
 app.add_middleware(
@@ -86,6 +88,11 @@ app.add_middleware(
 
 
 # --------------------------------------------------------------------------- validation
+
+
+def _default_end_year(end_year: int | None) -> int:
+    """Last complete year, read from today's date on every request (A12: a Query default froze it at import time)."""
+    return date.today().year - 1 if end_year is None else end_year
 
 
 def _check_years(start_year: int, end_year: int) -> None:
@@ -105,8 +112,8 @@ def _check_variable(variable: str) -> None:
 
 
 @app.get("/api/version")
-def version() -> dict:
-    """Which commit this server loaded, from which folder, and when it started. Lets the launcher spot a stale server."""
+async def version() -> dict:
+    """Which commit this server loaded, a fingerprint of its folder (never the path), and when it started. Lets the launcher spot a stale server."""
     return VERSION
 
 
@@ -122,9 +129,10 @@ async def trend(
     lat: float = Query(..., ge=-90, le=90),
     lon: float = Query(..., ge=-180, le=180),
     start_year: int = Query(FIRST_YEAR),
-    end_year: int = Query(date.today().year - 1),
+    end_year: int | None = Query(None, description="Defaults to last year"),
 ) -> dict:
     """Full case file for one variable at one location and period."""
+    end_year = _default_end_year(end_year)
     _check_variable(variable)
     _check_years(start_year, end_year)
     try:
@@ -140,9 +148,10 @@ async def sweep(
     lat: float = Query(..., ge=-90, le=90),
     lon: float = Query(..., ge=-180, le=180),
     start_year: int = Query(FIRST_YEAR),
-    end_year: int = Query(date.today().year - 1),
+    end_year: int | None = Query(None, description="Defaults to last year"),
 ) -> dict:
     """Which variables are trending at this location? Every variable, ranked by evidence."""
+    end_year = _default_end_year(end_year)
     _check_years(start_year, end_year)
     try:
         results = await analyze_many(list(VARIABLES), lat, lon, start_year, end_year, detail=True)
@@ -181,7 +190,7 @@ async def sweep(
 
     ok_rows = [r for r in rows if r["ok"]]
     for row, flag in zip(ok_rows, benjamini_hochberg([r["p_value"] for r in ok_rows], ALPHA)):
-        row["significant_fdr"] = flag
+        row["significant_fdr"] = bool(flag and row["significant"])  # a flat (zero-slope) row never counts
 
     rows.sort(
         key=lambda r: (
@@ -214,9 +223,10 @@ async def grid(
     size: float = Query(10.0, gt=0, le=40, description="Width of the scanned area in degrees"),
     n: int = Query(3, ge=2, le=MAX_GRID_SIDE, description="Points per side"),
     start_year: int = Query(FIRST_YEAR),
-    end_year: int = Query(date.today().year - 1),
+    end_year: int | None = Query(None, description="Defaults to last year"),
 ) -> dict:
     """Trend for each point on an n x n grid around a center location."""
+    end_year = _default_end_year(end_year)
     _check_variable(variable)
     _check_years(start_year, end_year)
 
@@ -250,7 +260,7 @@ async def grid(
 
     # Many cells are tested at once, so some would pass by luck: control the false-discovery rate.
     for cell, flag in zip(ok, benjamini_hochberg([c["p_value"] for c in ok], ALPHA)):
-        cell["significant_fdr"] = flag
+        cell["significant_fdr"] = bool(flag and cell["significant"])
 
     composite = _composite(VARIABLES[variable], [(c["lat"], c["_annual"]) for c in ok], ok)
     for c in ok:
@@ -328,9 +338,10 @@ async def suspects(
     lat: float = Query(..., ge=-90, le=90),
     lon: float = Query(..., ge=-180, le=180),
     start_year: int = Query(FIRST_YEAR),
-    end_year: int = Query(date.today().year - 1),
+    end_year: int | None = Query(None, description="Defaults to last year"),
 ) -> dict:
     """What moves with this trend? Climate rhythms, global warming and an independent NASA cross-check."""
+    end_year = _default_end_year(end_year)
     _check_variable(variable)
     _check_years(start_year, end_year)
     try:
@@ -347,9 +358,10 @@ async def suspects(
 @app.get("/api/vitals")
 async def vitals(
     start_year: int = Query(FIRST_YEAR),
-    end_year: int = Query(date.today().year - 1),
+    end_year: int | None = Query(None, description="Defaults to last year"),
 ) -> dict:
     """Earth's vital signs: global temperature, CO2 and sea ice (trend tests) plus ENSO, PDO and NAO (status)."""
+    end_year = _default_end_year(end_year)
     _check_years(start_year, end_year)
     return await build_vitals(start_year, end_year)
 
@@ -364,9 +376,10 @@ def places() -> list[dict]:
 async def world(
     variable: str,
     start_year: int = Query(FIRST_YEAR),
-    end_year: int = Query(date.today().year - 1),
+    end_year: int | None = Query(None, description="Defaults to last year"),
 ) -> dict:
     """One variable across every place in the gazetteer: where is it changing most? (Sample sites, not the whole globe.)"""
+    end_year = _default_end_year(end_year)
     _check_variable(variable)
     _check_years(start_year, end_year)
     limiter = asyncio.Semaphore(MAX_WORLD_CONCURRENCY)
@@ -398,7 +411,7 @@ async def world(
     entries = await asyncio.gather(*(probe(p) for p in PLACES))
     ok = [e for e in entries if e["ok"]]
     for entry, flag in zip(ok, benjamini_hochberg([e["p_value"] for e in ok], ALPHA)):
-        entry["significant_fdr"] = flag
+        entry["significant_fdr"] = bool(flag and entry["significant"])
     solid = [e for e in ok if e["significant_fdr"]]
     return {
         "variable": {"id": variable, **VARIABLES[variable]},
@@ -422,10 +435,11 @@ async def world(
 @app.get("/api/ledger")
 async def ledger(
     start_year: int = Query(FIRST_YEAR),
-    end_year: int = Query(date.today().year - 1),
+    end_year: int | None = Query(None, description="Defaults to last year"),
     limit: int = Query(300, ge=20, le=1500, description="How many of the top-ranked trends to return"),
 ) -> dict:
     """The trend ledger: every variable at every sample place plus the planet's vital signs, ranked by evidence."""
+    end_year = _default_end_year(end_year)
     _check_years(start_year, end_year)
     return await build_ledger(start_year, end_year, limit=limit)
 
@@ -436,9 +450,10 @@ async def forecast(
     lat: float = Query(..., ge=-90, le=90),
     lon: float = Query(..., ge=-180, le=180),
     start_year: int = Query(FIRST_YEAR),
-    end_year: int = Query(date.today().year - 1),
+    end_year: int | None = Query(None, description="Defaults to last year"),
 ) -> dict:
     """Forecast lab: backtested 1-5 year forecast with conformal error bands, and how it compares with naive baselines."""
+    end_year = _default_end_year(end_year)
     _check_variable(variable)
     _check_years(start_year, end_year)
     try:
@@ -456,10 +471,11 @@ async def forecast(
 @app.get("/api/archetypes")
 async def archetypes(
     start_year: int = Query(FIRST_YEAR),
-    end_year: int = Query(date.today().year - 1),
+    end_year: int | None = Query(None, description="Defaults to last year"),
     k: int | None = Query(None, ge=2, le=6, description="Number of archetypes; defaults to the best-separated choice"),
 ) -> dict:
     """Trend archetypes: cluster the sample places by how all their variables are changing, and find climate twins."""
+    end_year = _default_end_year(end_year)
     _check_years(start_year, end_year)
     return await build_archetypes(start_year, end_year, k=k)
 
@@ -472,9 +488,10 @@ async def duel(
     lat_b: float = Query(..., ge=-90, le=90),
     lon_b: float = Query(..., ge=-180, le=180),
     start_year: int = Query(FIRST_YEAR),
-    end_year: int = Query(date.today().year - 1),
+    end_year: int | None = Query(None, description="Defaults to last year"),
 ) -> dict:
     """Compare the same variable at two locations and test whether the trends differ."""
+    end_year = _default_end_year(end_year)
     _check_variable(variable)
     _check_years(start_year, end_year)
     try:
@@ -550,9 +567,19 @@ def _trend_difference(a: dict, b: dict) -> dict:
 # --------------------------------------------------------------------------- V2 endpoints
 
 
+def _visitor_key(request: Request) -> str:
+    """Rate-limit key for the caller: the socket peer, or X-Forwarded-For only as TD_TRUSTED_PROXY_HOPS allows."""
+    peer = request.client.host if request.client and request.client.host else None
+    return client_identity(peer, request.headers.get("x-forwarded-for"))
+
+
 @app.get("/api/health/details")
-def health_details() -> dict:
-    """Non-secret dependency availability and cache age. Never triggers upstream network requests or exposes keys."""
+async def health_details() -> dict:
+    """Non-secret dependency availability and cache age. Never triggers upstream network requests or exposes keys.
+
+    async on purpose (A4): it then runs on the event loop, the same thread that writes the caches it reads, so it can never
+    iterate a cache while another thread mutates it.
+    """
     nasa_info = nasa_cache_health()
     streams_info = streams.cache_health()
     explain_info = explanation_health()
@@ -585,6 +612,7 @@ def health_details() -> dict:
 
 @app.get("/api/live-weather")
 async def live_weather(
+    request: Request,
     lat: float = Query(..., ge=-90, le=90),
     lon: float = Query(..., ge=-180, le=180),
     hours: int = Query(
@@ -594,8 +622,8 @@ async def live_weather(
         description="Forecast horizon in hours (1 to 72)",
     ),
 ) -> dict:
-    """Meteomatics operational current and short-range hourly weather for one location."""
-    return await fetch_live_weather(lat=lat, lon=lon, hours=hours)
+    """Meteomatics operational current and short-range hourly weather for one location (per-visitor quota applies)."""
+    return await fetch_live_weather(lat=lat, lon=lon, hours=hours, client_key=_visitor_key(request))
 
 
 @app.get("/api/monthly-frames")
@@ -603,8 +631,8 @@ async def monthly_frames(
     variable: str,
     lat: float = Query(..., ge=-90, le=90),
     lon: float = Query(..., ge=-180, le=180),
-    start_year: int = Query(max(FIRST_YEAR, date.today().year - 3)),
-    end_year: int = Query(date.today().year - 1),
+    start_year: int | None = Query(None, description="Defaults to three years ago"),
+    end_year: int | None = Query(None, description="Defaults to last year"),
     n: int = Query(3, ge=1, le=MAX_MONTHLY_GRID_SIDE, description="Local grid points per side (1 to 3)"),
     size: float = Query(
         DEFAULT_MONTHLY_GRID_SIZE_DEG,
@@ -614,6 +642,9 @@ async def monthly_frames(
     ),
 ) -> dict:
     """Observed monthly frames for a local analysis grid around one location."""
+    end_year = _default_end_year(end_year)
+    if start_year is None:
+        start_year = max(FIRST_YEAR, date.today().year - 3)
     _check_variable(variable)
     last_year = date.today().year
     if not (FIRST_YEAR <= start_year <= end_year <= last_year):
@@ -635,7 +666,7 @@ async def monthly_forecast(
     lat: float = Query(..., ge=-90, le=90),
     lon: float = Query(..., ge=-180, le=180),
     start_year: int = Query(FIRST_YEAR),
-    end_year: int = Query(date.today().year - 1),
+    end_year: int | None = Query(None, description="Defaults to last year"),
     horizons: int = Query(MAX_FORECAST_HORIZON, ge=1, le=MAX_FORECAST_HORIZON, description="Forecast horizon in months (1 to 3)"),
     n: int = Query(3, ge=1, le=MAX_MONTHLY_GRID_SIDE, description="Local grid points per side (1 to 3)"),
     size: float = Query(
@@ -646,6 +677,7 @@ async def monthly_forecast(
     ),
 ) -> dict:
     """Backtested 1–3 month forecast frames for T2M, PRECTOTCORR, and CLOUD_AMT on a local grid."""
+    end_year = _default_end_year(end_year)
     _check_variable(variable)
     last_year = date.today().year
     if not (FIRST_YEAR <= start_year < end_year <= last_year):
@@ -669,9 +701,8 @@ async def explanations(payload: ExplanationRequest, request: Request) -> dict:
     _check_variable(variable)
     _check_years(start_year, end_year)
 
-    client_ip = request.client.host if request.client and request.client.host else "anonymous"
     try:
-        return await generate_explanation(payload, client_ip=client_ip)
+        return await generate_explanation(payload, client_ip=_visitor_key(request))
     except AnalysisError as exc:
         raise HTTPException(422, str(exc)) from exc
     except PowerError as exc:

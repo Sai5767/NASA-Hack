@@ -126,3 +126,66 @@ def test_detail_false_skips_heavy_sections():
 )
 def test_grade_rules(p, significant, passed, expected):
     assert _grade(p, significant, passed, 5) == expected
+
+
+def _monthly_from_annual(years, values):
+    return {f"{y}{m:02d}": v for y, v in zip(years, values) for m in range(1, 13)}
+
+
+# ---- review item B1: significant, direction, sign, summary, checks, grade and verdict agree --------------------------
+
+
+def test_zero_sen_slope_with_low_p_gives_one_consistent_no_trend_answer():
+    from tests.test_stats import HEAVY_TIES
+
+    years = list(range(1981, 2025))
+    result = analyze_series("PRECSNOLAND", 45.0, 10.0, _monthly_from_annual(years, HEAVY_TIES), 1981, 2024)
+    stats = result["stats"]
+    assert stats["p_value"] < 0.05 and stats["slope_per_decade"] == 0.0
+    assert stats["significant"] is False
+    assert stats["direction"] == "no significant trend" and stats["sign"] == "flat"
+    checks = {c["id"]: c for c in result["checks"]}
+    assert checks["mk"]["passed"] is False and "exactly 0" in checks["mk"]["detail"]
+    assert result["grade"]["code"] == "none"
+    assert result["evidence_trace"]["verdict"]["code"] == "no_clear_evidence"
+    assert result["evidence_trace"]["mann_kendall"]["significant"] is False
+    assert "no statistically significant trend" in result["summary"] and "no direction can be claimed" in result["summary"]
+    assert result["emergence"]["year"] is None
+    assert not any(m["significant"] and m.get("sign") == 0 for m in result["fingerprint"])
+
+
+# ---- review item B2: emergence uses the same serial-correlation-adjusted test as the headline -----------------------
+
+
+def _persistent_series(seed):
+    import random
+
+    rng = random.Random(seed)
+    x, vals = 0.0, []
+    for i in range(40):
+        x = 0.7 * x + rng.gauss(0, 1)
+        vals.append(0.02 * i + x)
+    return vals
+
+
+@pytest.mark.parametrize("seed", [0, 1, 3])
+def test_no_emergence_year_when_the_adjusted_headline_is_not_significant(seed):
+    years = list(range(1981, 2021))
+    result = analyze_series("T2M", 10.0, 10.0, _monthly_from_annual(years, _persistent_series(seed)), 1981, 2020)
+    assert result["stats"]["p_naive"] < 0.05 < result["stats"]["p_value"]  # only the unadjusted test would pass
+    assert result["stats"]["significant"] is False
+    assert result["emergence"]["year"] is None
+    last = result["emergence"]["series"][-1]
+    assert last["end_year"] == 2020
+    assert last["p"] == pytest.approx(result["stats"]["p_value"])          # the last point IS the headline test
+    assert last["z"] == pytest.approx(result["stats"]["z"])
+
+
+def test_emergence_year_is_the_start_of_the_final_significant_run():
+    monthly = make_monthly(trend_per_year=0.05, noise_sd=0.3, seed=2)
+    result = analyze_series("T2M", 42.0, -93.6, monthly, 1981, 2024)
+    series, year = result["emergence"]["series"], result["emergence"]["year"]
+    assert result["stats"]["significant"] and year is not None
+    idx = next(i for i, row in enumerate(series) if row["end_year"] == year)
+    assert all(row["significant"] for row in series[idx:])
+    assert idx == 0 or not series[idx - 1]["significant"]

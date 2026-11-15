@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { fetchForecast } from "../api.js";
-import { formatP, formatPlace, signed } from "../lib/format.js";
+import { formatPlace, signed } from "../lib/format.js";
 import { directionWord, noiseSentence, pValueMeaning } from "../lib/words.js";
 import { Verdict } from "./CaseParts.jsx";
 import TrendChart from "./charts/TrendChart.jsx";
 import InView from "./InView.jsx";
+import { verdictView } from "./insight/logic.js";
 import Term from "./Term.jsx";
 
 const GRADE_WORDS = { strong: "Strong evidence", moderate: "Likely real", weak: "Faint signal", none: "Inconclusive" };
@@ -61,7 +62,7 @@ function ForecastHeadline({ data, onMore }) {
           </h3>
           <p className="dim">
             Likely range <span className="mono">{last.lo?.toPrecision(3)}</span> to <span className="mono">{last.hi?.toPrecision(3)}</span> (80% band). The{" "}
-            <b>{lab.best_label}</b> model made errors {Math.round((best?.skill ?? 0) * 100)}% smaller than a naive guess when replayed on past years.
+            <b>{lab.best_label}</b> model made errors {Math.round((best?.skill ?? 0) * 100)}% smaller than a naive guess in backtests on past years.
           </p>
         </>
       )}
@@ -84,15 +85,16 @@ function ForecastHeadline({ data, onMore }) {
 }
 
 /** The challenge's four questions, answered at a glance. Everything technical lives one click away in Detail. */
-export default function Overview({ data, onDetail, onGo, events = [], onEvent }) {
+export default function Overview({ data, onDetail, onGo, events = [], onEvent, verdict }) {
   const { variable, location, period, quality, stats, grade } = data;
   const units = variable.units;
   const tone = stats.significant ? stats.sign : "flat";
   const percent = stats.percent_of_mean != null ? ` (${signed(stats.percent_of_mean, 3)}% of the average)` : "";
+  const v = verdictView(data);
 
   return (
     <div className="overview">
-      <Verdict data={data} />
+      {verdict ?? <Verdict data={data} />}
 
       <div className="answers">
         <Answer n={0} question="1 · What is changing?" tone={tone} headline={`${variable.label} is ${directionWord(stats)}`}>
@@ -111,9 +113,9 @@ export default function Overview({ data, onDetail, onGo, events = [], onEvent })
           </p>
         </Answer>
 
-        <Answer n={3} question="4 · Is it real?" tone={grade.code === "none" ? "flat" : tone} headline={GRADE_WORDS[grade.code]} more="See the evidence" onMore={() => onDetail("evidence")}>
+        <Answer n={3} question="4 · Is it real?" tone={grade.code === "none" ? "flat" : tone} headline={v?.label ?? GRADE_WORDS[grade.code]} more="See the evidence" onMore={() => onDetail("evidence")}>
           <p className="dim">
-            {grade.passed} of {grade.total} checks passed, <Term id="pvalue">p</Term> <span className="mono">{stats.p_value < 0.001 ? "< 0.001" : `= ${formatP(stats.p_value)}`}</span>. {pValueMeaning(stats)}
+            {grade.passed} of {grade.total} <Term id="grade">checks</Term> passed. {pValueMeaning(stats)}
           </p>
         </Answer>
       </div>

@@ -16,7 +16,16 @@ import math
 from statistics import mean
 
 from .nasa_power import VARIABLES, annual_means, fetch_monthly_multi
-from .stats import adjustment_is_material, benjamini_hochberg, best_step, mann_kendall, mk_z_and_p, ols, pettitt, sample_std
+from .stats import (
+    adjustment_is_material,
+    benjamini_hochberg,
+    best_step,
+    mann_kendall,
+    ols,
+    pettitt,
+    sample_std,
+    zero_slope_with_low_p,
+)
 
 FIRST_YEAR = 1981            # first year of NASA POWER monthly data
 MIN_YEARS = 20               # a trend over fewer complete years is not meaningful
@@ -150,22 +159,28 @@ def _fingerprint(records: list[tuple[int, int, float]]) -> list[dict]:
         )
         tested.append(len(rows) - 1)
         p_values.append(res.p_value)
-    # 12 simultaneous tests: control the false-discovery rate.
+    # 12 simultaneous tests: control the false-discovery rate. A month whose median slope is exactly 0 has no direction,
+    # so it never counts as significant (the same rule as the headline test, see stats.mann_kendall).
     for idx, flag in zip(tested, benjamini_hochberg(p_values, ALPHA)):
-        rows[idx]["significant"] = flag
+        rows[idx]["significant"] = flag and rows[idx]["sign"] != 0
     return rows
 
 
 def _emergence(years: list[int], values: list[float]) -> tuple[list[dict], int | None]:
-    """Mann-Kendall z-score as years are added; the year after which significance holds."""
+    """Mann-Kendall z-score as years are added; the year after which significance holds.
+
+    Each prefix is tested exactly like the headline (serial-correlation-adjusted p, and a zero median slope is never
+    significant), so the last point equals the headline result and an emergence year exists only when the headline
+    trend is significant (docs/STATS_AUDIT.md, B2).
+    """
     series = []
     for k in range(EMERGENCE_MIN_YEARS, len(values) + 1):
-        z, p = mk_z_and_p(values[:k])
-        series.append({"end_year": years[k - 1], "z": z, "p": p})
+        res = mann_kendall(values[:k], [float(y) for y in years[:k]], alpha=ALPHA)
+        series.append({"end_year": years[k - 1], "z": res.z, "p": res.p_value, "significant": res.significant})
     emergence_year = None
-    if series and series[-1]["p"] < ALPHA:
+    if series and series[-1]["significant"]:
         idx = len(series) - 1
-        while idx > 0 and series[idx - 1]["p"] < ALPHA:
+        while idx > 0 and series[idx - 1]["significant"]:
             idx -= 1
         emergence_year = series[idx]["end_year"]
     return series, emergence_year
@@ -297,11 +312,17 @@ def _summary(info, where, years, mk, total_change, snr, grade_label, passed, tot
         f"{_num(mk.sens_slope * 10)} {unit} per decade "
         f"(95% range {_num(mk.sens_ci_low * 10)} to {_num(mk.sens_ci_high * 10)})"
     )
-    if mk.significant and mk.sens_slope != 0:
+    if mk.significant:
         verb = "rose" if mk.sens_slope > 0 else "fell"
         text = f"{info['label']} {where} {verb} over {span}: {rate}, about {_num(total_change)} {unit} in total."
         if snr is not None:
             text += f" That change is roughly {abs(snr):.1f}× the normal year-to-year swing."
+    elif zero_slope_with_low_p(mk, ALPHA):
+        text = (
+            f"{info['label']} {where} shows no statistically significant trend over {span}. "
+            f"Many years have identical values (for example none at all), so the typical rate of change is {rate}. "
+            f"The Mann–Kendall p-value is {_p(mk.p_value)}, but with a median rate of exactly zero no direction can be claimed."
+        )
     else:
         text = (
             f"{info['label']} {where} shows no statistically significant trend over {span}. "
@@ -389,7 +410,11 @@ def analyze_series(
             "id": "mk",
             "label": "The Mann–Kendall test is significant",
             "passed": mk.significant,
-            "detail": f"p = {_p(mk.p_value)} (needs < {ALPHA})",
+            "detail": (
+                f"p = {_p(mk.p_value)}, but the median rate is exactly 0 (many tied years), so no trend is claimed"
+                if zero_slope_with_low_p(mk, ALPHA)
+                else f"p = {_p(mk.p_value)} (needs < {ALPHA})"
+            ),
         },
         {
             "id": "ols",
@@ -741,15 +766,36 @@ async def analyze_many(
     return out
 
 
+GRID_LAT_LIMIT = 89.75  # half a NASA POWER cell short of the pole: every longitude meets at ±90, so a row there is one point
+
+
+def _wrap_lon(v: float) -> float:
+    """Longitude in [-180, 180): 181 -> -179, so a grid crossing the antimeridian keeps its spacing."""
+    wrapped = ((v + 180.0) % 360.0) - 180.0
+    return 0.0 if wrapped == 0 else wrapped  # no -0.0
+
+
 def grid_points(lat: float, lon: float, size: float, n: int) -> list[tuple[float, float]]:
-    """n x n points centered on (lat, lon) spanning `size` degrees, kept within valid ranges."""
+    """n x n points (row-major, south to north, west to east) spanning `size` degrees around (lat, lon).
 
-    def axis(center: float, low: float, high: float) -> list[float]:
-        start = center - size / 2
-        step = size / (n - 1)
-        values = [start + i * step for i in range(n)]
-        return [round(min(max(v, low), high), 4) for v in values]
-
-    lats = axis(lat, -90.0, 90.0)
-    lons = axis(lon, -180.0, 180.0)
+    Every point is distinct and evenly spaced (A6 in the backend review):
+      * longitude wraps across the antimeridian instead of clamping at ±180;
+      * near a pole the whole latitude window is shifted (not clamped) so it fits inside ±GRID_LAT_LIMIT, which keeps
+        the spacing and the row count. The grid is then no longer centered on `lat`, but no two rows collapse onto
+        the same latitude, so multiple-testing counts, the composite and Moran's I never see duplicate cells.
+    A window wider than 2 * GRID_LAT_LIMIT (impossible at the API's size <= 40) is centered on the equator.
+    """
+    if n < 2:
+        raise ValueError("A grid needs at least 2 points per side.")
+    step = size / (n - 1)
+    half = size / 2
+    center_lat = lat
+    if half >= GRID_LAT_LIMIT:
+        center_lat = 0.0
+    elif center_lat + half > GRID_LAT_LIMIT:
+        center_lat = GRID_LAT_LIMIT - half
+    elif center_lat - half < -GRID_LAT_LIMIT:
+        center_lat = -GRID_LAT_LIMIT + half
+    lats = [round(center_lat - half + i * step, 4) for i in range(n)]
+    lons = [_wrap_lon(round(_wrap_lon(round(lon - half + i * step, 6)), 4)) for i in range(n)]
     return [(la, lo) for la in lats for lo in lons]

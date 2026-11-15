@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import ipaddress
 import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -54,7 +55,7 @@ _TRACKING_PARAMS = {
     "mc_eid",
     "msclkid",
     "ref",
-    " _hsenc",
+    "_hsenc",
 }
 
 # Deterministic category rules checked in order
@@ -100,6 +101,8 @@ CATEGORY_RULES: list[tuple[str, tuple[str, ...]]] = [
 RED_SEVERITY_KEYWORDS = (
     "evacuation",
     "evacuate",
+    "evacuating",
+    "evacuee",
     "state of emergency",
     "emergency declared",
     "catastrophic",
@@ -176,14 +179,18 @@ GENERIC_RELEVANCE_KEYWORDS = (
 
 
 def _word_regex(words) -> "re.Pattern[str]":
-    """Whole-word (optionally plural) matcher, so "flood" does not fire inside "floodlight"."""
+    """Whole-word matcher that also accepts common inflections (s, es, ed, d, ing), so "flood" matches "flooding"
+    and "flooded" and "evacuate" matches "evacuated", but not "floodlights" (no word boundary after "flood")."""
     alternatives = "|".join(re.escape(w) for w in sorted(set(words), key=len, reverse=True))
-    return re.compile(rf"(?<![a-z0-9])(?:{alternatives})(?:s|es)?(?![a-z0-9])")
+    return re.compile(rf"(?<![a-z0-9])(?:{alternatives})(?:s|es|ed|d|ing)?(?![a-z0-9])")
 
 
 # Relevance = the environmental category words plus the generic list above. Severity words ("warning", "watch",
 # "alert") only raise severity on a story that already passed this check; they never make a story relevant.
 _RELEVANCE_RE = _word_regex(list(GENERIC_RELEVANCE_KEYWORDS) + [kw for _, kws in CATEGORY_RULES for kw in kws])
+# A bare "storm" ("Storm Ciaran batters London", "storms lash the coast") is relevant, but only as a noun: it is NOT
+# inflected, so "fans storming the pitch" and "stormed out" stay irrelevant. "brainstorm" is excluded by the boundary.
+_STORM_RE = re.compile(r"(?<![a-z0-9])storms?(?![a-z0-9])")
 _CATEGORY_RES = [(code, _word_regex(kws)) for code, kws in CATEGORY_RULES]
 _RED_RE = _word_regex(RED_SEVERITY_KEYWORDS)
 _AMBER_RE = _word_regex(AMBER_SEVERITY_KEYWORDS)
@@ -191,7 +198,47 @@ _AMBER_RE = _word_regex(AMBER_SEVERITY_KEYWORDS)
 
 def is_environmentally_relevant(title: str, snippet: str = "") -> bool:
     """True when a story is plausibly about weather, climate or the environment (deterministic keyword rule)."""
-    return bool(_RELEVANCE_RE.search(f"{title} {snippet}".lower()))
+    text = f"{title} {snippet}".lower()
+    return bool(_RELEVANCE_RE.search(text) or _STORM_RE.search(text))
+
+
+# Transparent allow-list for `publisher_verified`. An item is verified only when the host of its canonical URL IS one
+# of these registrable domains or a subdomain of one (so "www.reuters.com" and "news.bbc.co.uk" match, while
+# "reuters.com.evil.example" and "notreuters.com" do not). It is a curated editorial list of major wire services,
+# public broadcasters, established newsrooms and science/government agencies, not a judgement on any other outlet:
+# every other syntactically valid host is simply `false`. The provider-supplied "publisher" name is never trusted.
+VERIFIED_PUBLISHER_DOMAINS = frozenset(
+    {
+        # wire services
+        "reuters.com", "apnews.com", "afp.com", "bloomberg.com",
+        # public / international broadcasters
+        "bbc.com", "bbc.co.uk", "npr.org", "pbs.org", "cbc.ca", "abc.net.au", "sbs.com.au", "rnz.co.nz",
+        "dw.com", "france24.com", "aljazeera.com", "nhk.or.jp", "voanews.com",
+        # established newsrooms
+        "theguardian.com", "nytimes.com", "washingtonpost.com", "wsj.com", "ft.com", "economist.com",
+        "thehindu.com", "japantimes.co.jp",
+        # science journals and magazines
+        "nature.com", "science.org", "scientificamerican.com", "newscientist.com",
+        # science agencies and intergovernmental bodies
+        "nasa.gov", "noaa.gov", "usgs.gov", "climate.gov", "weather.gov", "epa.gov", "esa.int", "copernicus.eu",
+        "wmo.int", "un.org", "ipcc.ch", "unep.org", "metoffice.gov.uk", "bom.gov.au", "imd.gov.in",
+    }
+)
+
+
+def is_publisher_verified(url_or_host: str | None) -> bool:
+    """True when the URL's (or bare host's) registrable domain is on VERIFIED_PUBLISHER_DOMAINS."""
+    if not url_or_host or not isinstance(url_or_host, str):
+        return False
+    text = url_or_host.strip()
+    try:
+        host = urlparse(text if "//" in text else f"//{text}").hostname
+    except ValueError:
+        return False
+    if not host:
+        return False
+    host = host.lower().rstrip(".")
+    return any(host == d or host.endswith("." + d) for d in VERIFIED_PUBLISHER_DOMAINS)
 
 
 @dataclass(frozen=True)
@@ -356,9 +403,25 @@ def normalize_canonical_url(raw_url: str | None) -> str | None:
         return None
     if parsed.username or parsed.password:
         return None
-    host = parsed.netloc.lower().split(":")[0]
-    if "." not in host or host in ("localhost", "127.0.0.1"):
+    try:
+        host = (parsed.hostname or "").lower()
+        port = parsed.port
+    except ValueError:  # malformed port or bracketed host
         return None
+    if not host or host == "localhost" or host.endswith(".localhost"):
+        return None
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        ip = None
+        if "." not in host:
+            return None
+    if ip is not None and not ip.is_global:  # loopback, private, link-local... are never article hosts
+        return None
+    if ip is not None and ip.version == 6:
+        host = f"[{host}]"
+    default_port = 443 if parsed.scheme.lower() == "https" else 80
+    netloc = host if port is None or port == default_port else f"{host}:{port}"
 
     filtered_q = [
         (k, v)
@@ -366,7 +429,7 @@ def normalize_canonical_url(raw_url: str | None) -> str | None:
         if k.lower().strip() not in _TRACKING_PARAMS and not k.lower().startswith("utm_")
     ]
     path = parsed.path or "/"
-    return urlunparse((parsed.scheme.lower(), host, path, "", urlencode(filtered_q), ""))
+    return urlunparse((parsed.scheme.lower(), netloc, path, "", urlencode(filtered_q), ""))
 
 
 def parse_published_time(raw_date: str | None) -> str | None:
@@ -456,7 +519,7 @@ def normalize_and_deduplicate_articles(raw_entries: list[tuple[NewsLocationQuery
 
         publisher = str(raw.get("publisher") or raw.get("domain") or "").strip()
         if not publisher:
-            publisher = urlparse(canonical_url).netloc.lower()
+            publisher = (urlparse(canonical_url).hostname or "").lower()
             if publisher.startswith("www."):
                 publisher = publisher[4:]
         if not publisher:
@@ -476,6 +539,7 @@ def normalize_and_deduplicate_articles(raw_entries: list[tuple[NewsLocationQuery
                 "id": item_id,
                 "title": title[:220],
                 "publisher": publisher[:100],
+                "publisher_verified": is_publisher_verified(canonical_url),
                 "canonical_url": canonical_url,
                 "url": canonical_url,
                 "published_at": published_at,

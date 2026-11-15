@@ -98,18 +98,36 @@ def _predictability(local: dict[int, float], drivers: dict[str, dict[int, float]
 
 
 def _enso_adjusted(info: dict, local: dict[int, float], oni: dict[int, float]) -> dict | None:
-    """Trend after removing the part of each year's value that tracks ENSO."""
+    """Trend after removing the part of each year's value that tracks ENSO.
+
+    The ENSO coefficient is a partial regression coefficient: it is estimated from the linearly detrended pair, which
+    (Frisch-Waugh-Lovell) equals the ONI coefficient of y ~ a + c*t + b*ONI. Regressing the raw, trending values on raw
+    ONI would credit to ENSO any drift that ONI happens to share with time (review item B6). `enso_share` is the
+    share of the detrended year-to-year variance that ONI explains (partial R^2).
+    """
     years, y, d = _align(local, oni)
     if len(years) < MIN_YEARS:
         return None
+    times = [float(t) for t in years]
+    y_flat, d_flat = linear_detrend(y, times), linear_detrend(d, times)
+    sdd = sum(v * v for v in d_flat)
+    syy = sum(v * v for v in y_flat)
+    y_mean = sum(y) / len(y)
+    y_total = sum((v - y_mean) ** 2 for v in y)
+    if sdd <= 0 or syy <= 1e-24 * y_total:
+        # ONI is a straight line over these years, or the local values are (to rounding) a straight line: either way
+        # there is no year-to-year swing for ENSO to explain once time is held fixed.
+        b, share = 0.0, 0.0
+    else:
+        b = sum(a * c for a, c in zip(d_flat, y_flat)) / sdd
+        share = (b * b * sdd / syy) if syy > 0 else 0.0
     d_mean = sum(d) / len(d)
-    fit = ols(y, d)
-    adjusted = [v - fit.slope * (x - d_mean) for v, x in zip(y, d)]
+    adjusted = [v - b * (x - d_mean) for v, x in zip(y, d)]
     before = annual_core(info, years, y)["stats"]
     after = annual_core(info, years, adjusted)["stats"]
     return {
         "n_years": len(years),
-        "enso_share": max(0.0, fit.r2) * 100.0,
+        "enso_share": min(1.0, max(0.0, share)) * 100.0,
         "slope_before": before["slope_per_decade"],
         "slope_after": after["slope_per_decade"],
         "ci_low_after": after["ci_low_per_decade"],

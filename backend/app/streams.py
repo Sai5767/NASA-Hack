@@ -16,7 +16,10 @@ import time
 
 import httpx
 
-TTL_SECONDS = 12 * 3600
+from .resilience import HEALTH_REGISTRY, load_config
+
+HEALTH_SERVICE = "planet_streams"
+TTL_SECONDS = 12 * 3600  # default only; the live value is STREAMS_CACHE_TTL_SECONDS (see _ttl)
 RETRY_STATUS = {429, 500, 502, 503, 504}
 NSIDC_VERSIONS = ("v4.0", "v3.0")
 NSIDC_BASE = "https://noaadata.apps.nsidc.org/NOAA/G02135/{hemi}/monthly/data/{letter}_{month:02d}_extent_{version}.csv"
@@ -207,12 +210,22 @@ _text_cache: dict[str, tuple[float, str]] = {}
 _series_cache: dict[str, tuple[float, object]] = {}
 
 
+def _ttl() -> float:
+    try:
+        return float(load_config().streams_cache_ttl_seconds)
+    except Exception:  # a broken config must never take the data streams down
+        return float(TTL_SECONDS)
+
+
 def _fresh(entry: tuple[float, object] | None) -> bool:
-    return entry is not None and time.monotonic() - entry[0] < TTL_SECONDS
+    return entry is not None and time.monotonic() - entry[0] < _ttl()
 
 
 async def fetch_text(url: str) -> str:
-    """GET a text file (cached for 12 hours, retried on transient errors)."""
+    """GET a text file (cached for STREAMS_CACHE_TTL_SECONDS, retried on transient errors).
+
+    Success and failure are recorded in HEALTH_REGISTRY under "planet_streams".
+    """
     cached = _text_cache.get(url)
     if _fresh(cached):
         return cached[1]
@@ -226,12 +239,15 @@ async def fetch_text(url: str) -> str:
                 continue
             resp.raise_for_status()
             _text_cache[url] = (time.monotonic(), resp.text)
+            HEALTH_REGISTRY.record_success(HEALTH_SERVICE)
             return resp.text
         except httpx.TransportError as exc:
             last = exc
             await asyncio.sleep(0.7 * (attempt + 1))
         except httpx.HTTPError as exc:
+            HEALTH_REGISTRY.record_failure(HEALTH_SERVICE, "http_error")
             raise StreamError(f"Could not fetch {url}: {exc}") from exc
+    HEALTH_REGISTRY.record_failure(HEALTH_SERVICE, "network_error")
     raise StreamError(f"Could not fetch {url}: {last}")
 
 
@@ -265,14 +281,20 @@ async def get_monthly(stream_id: str) -> dict[str, float | None]:
         "gistemp_global": parse_gistemp_global, "co2_mlo": parse_co2, "oni": parse_oni,
         "pdo": parse_pdo, "nao": parse_nao,
     }
-    if stream_id == "arctic_ice":
-        series = await _nsidc("north")
-    elif stream_id == "antarctic_ice":
-        series = await _nsidc("south")
-    else:
-        series = parsers[stream_id](await fetch_text(URLS[stream_id]))
-    if not any(v is not None for v in series.values()):
-        raise StreamError(f"{STREAMS[stream_id]['label']}: the file contained no usable values.")
+    try:
+        if stream_id == "arctic_ice":
+            series = await _nsidc("north")
+        elif stream_id == "antarctic_ice":
+            series = await _nsidc("south")
+        else:
+            series = parsers[stream_id](await fetch_text(URLS[stream_id]))
+        if not any(v is not None for v in series.values()):
+            HEALTH_REGISTRY.record_failure(HEALTH_SERVICE, "empty_data")
+            raise StreamError(f"{STREAMS[stream_id]['label']}: the file contained no usable values.")
+    except StreamError:
+        if cached is not None:  # refresh failed after the TTL: serve the last good data rather than nothing
+            return cached[1]  # type: ignore[return-value]
+        raise
     _series_cache[stream_id] = (time.monotonic(), series)
     return series
 
@@ -282,7 +304,12 @@ async def get_zonal() -> dict[str, dict[int, float]]:
     cached = _series_cache.get("gistemp_zonal")
     if _fresh(cached):
         return cached[1]  # type: ignore[return-value]
-    bands = parse_gistemp_zonal(await fetch_text(URLS["gistemp_zonal"]))
+    try:
+        bands = parse_gistemp_zonal(await fetch_text(URLS["gistemp_zonal"]))
+    except StreamError:
+        if cached is not None:
+            return cached[1]  # type: ignore[return-value]
+        raise
     _series_cache["gistemp_zonal"] = (time.monotonic(), bands)
     return bands
 
@@ -301,8 +328,6 @@ def latest_value(series: dict[str, float | None]) -> tuple[str, float] | None:
 
 def cache_health() -> dict:
     """Non-secret cache and availability telemetry for public planet streams."""
-    from .resilience import HEALTH_REGISTRY, load_config
-
     cfg = load_config()
     now = time.monotonic()
     ages = [max(0.0, now - ts) for ts, _ in _series_cache.values()]

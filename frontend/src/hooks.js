@@ -1,16 +1,24 @@
 import { useEffect, useLayoutEffect, useState } from "react";
 import { clamp, easeOutCubic } from "./lib/format.js";
+import { motionReduced } from "./lib/theme.js";
 
 const QUERY = "(prefers-reduced-motion: reduce)";
 
+/** OS "reduce motion" OR the in-app Account preference (`<html data-motion="reduced">`, set by lib/theme.js). */
 export function useReducedMotion() {
-  const [reduced, setReduced] = useState(() => typeof window !== "undefined" && !!window.matchMedia?.(QUERY).matches);
+  const [reduced, setReduced] = useState(() => typeof window !== "undefined" && motionReduced());
   useEffect(() => {
+    const onChange = () => setReduced(motionReduced());
+    onChange();
     const mq = window.matchMedia?.(QUERY);
-    if (!mq) return undefined;
-    const onChange = () => setReduced(mq.matches);
-    mq.addEventListener("change", onChange);
-    return () => mq.removeEventListener("change", onChange);
+    mq?.addEventListener("change", onChange);
+    // The in-app preference is an attribute on <html>: watch it so a change in Account applies at once.
+    const observer = typeof MutationObserver === "undefined" ? null : new MutationObserver(onChange);
+    observer?.observe(document.documentElement, { attributes: true, attributeFilter: ["data-motion"] });
+    return () => {
+      mq?.removeEventListener("change", onChange);
+      observer?.disconnect();
+    };
   }, []);
   return reduced;
 }

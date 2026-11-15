@@ -91,9 +91,10 @@ async def _compute(start_year: int, end_year: int, places: list[dict]) -> dict:
             )
         )
 
-    # One correction over every test, so "survives" means survives all of them.
+    # One correction over every test, so "survives" means survives all of them. A row with no direction (a zero median
+    # slope, "flat") is never significant, even when its p-value would pass (see stats.mann_kendall, review item B1).
     for row, flag in zip(rows, benjamini_hochberg([r["p_value"] for r in rows], ALPHA)):
-        row["significant_fdr"] = flag
+        row["significant_fdr"] = flag and row["significant"]
     ranked = sorted(rows, key=lambda r: (r["p_value"], -abs(r["signal_to_noise"] or 0.0)))
     for i, row in enumerate(ranked, start=1):
         row["rank"] = i

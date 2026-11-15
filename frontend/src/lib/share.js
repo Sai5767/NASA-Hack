@@ -1,9 +1,12 @@
 /** Shareable links: the whole question lives in the URL hash, so a link reopens the same case. */
 
-export const TAB_IDS = ["investigate", "sweep", "scan", "duel", "world", "vitals", "events", "ledger"];
+export const TAB_IDS = ["investigate", "sweep", "scan", "duel", "world", "vitals", "events", "ledger", "learn"];
+/** The two top-level pages. A link without `p` opens Main for the case file and Explore for every other tool. */
+export const PAGE_IDS = ["main", "explore"];
 
-export function encodeState({ tab, params, pinB }) {
+export function encodeState({ page, tab, params, pinB }) {
   const q = new URLSearchParams();
+  if (PAGE_IDS.includes(page)) q.set("p", page);
   q.set("t", tab);
   if (params) {
     q.set("v", params.variable);
@@ -26,7 +29,8 @@ export function decodeState(hash) {
   try {
     const q = new URLSearchParams(String(hash ?? "").replace(/^#/, ""));
     const tab = TAB_IDS.includes(q.get("t")) ? q.get("t") : "investigate";
-    const state = { tab, params: null, pinB: null };
+    const page = PAGE_IDS.includes(q.get("p")) ? q.get("p") : null;
+    const state = { page: page ?? (tab === "investigate" ? "main" : "explore"), tab, params: null, pinB: null };
 
     const variable = q.get("v");
     const lat = Number(q.get("lat"));
@@ -48,7 +52,7 @@ export function decodeState(hash) {
     if (q.has("blat") && q.has("blon") && inRange(blat, -90, 90) && inRange(blon, -180, 180)) {
       state.pinB = { lat: blat, lon: blon };
     }
-    return state.params || state.pinB || tab !== "investigate" ? state : null;
+    return state.params || state.pinB || tab !== "investigate" || page ? state : null;
   } catch {
     return null;
   }

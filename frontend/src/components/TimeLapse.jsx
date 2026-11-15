@@ -57,7 +57,7 @@ export default function TimeLapse({ lapse, years, units, onChange }) {
         aria-valuetext={`${lapse.year}`}
       />
       <div className="lapse-foot">
-        <span className="faint small">Each dot is one site's {units} that year compared with its own {first}–{last} average.</span>
+        <span className="faint small">Each dot is one sample site's {units} that year compared with its own {first}–{last} average. Sample sites, not a complete global map.</span>
         <span className="seg" role="group" aria-label="Speed">
           {SPEEDS.map((s) => (
             <button key={s.ms} type="button" className={lapse.speed === s.ms ? "on" : ""} onClick={() => onChange({ ...lapse, speed: s.ms })}>{s.label}</button>

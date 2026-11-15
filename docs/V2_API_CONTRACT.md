@@ -14,7 +14,7 @@ Deterministic JSON fixtures for every V2 route are stored in `backend/tests/fixt
 2. **Server-Computed Statistics Only:** The frontend must never compute or alter trend slopes, confidence intervals, p-values, serial-correlation factors, or forecast eligibility. Render `evidence_trace` directly from `GET /api/trend`.
 3. **Strict Request Validation on `POST /api/explanations`:** The endpoint uses `extra="forbid"`. Only submit `{case_signature, variable, lat, lon, start_year, end_year, question}`. Submitting client-side `p_value`, `slope`, `stats`, or `system_prompt` fields will return `HTTP 422`.
 4. **Observed vs. Forecast Separation:** `GET /api/monthly-frames` returns `"kind": "observed"`. `GET /api/monthly-forecast` returns `"kind": "forecast"` with `"badge": "Forecast — not observed data"` **only** when `"eligible": true`. When `"eligible": false`, `"frames"` is `[]` and `"reason"` explains why forecasts are withheld.
-5. **News is Context, Not Evidence:** Every item from `GET /api/news` includes `"label": "news context, not scientific evidence"` and a deterministic `"severity"` (`"green" | "amber" | "red"`). When `"stale": true`, display `cache_age_seconds` / `fetched_at` visibly.
+5. **News is Context, Not Evidence:** Every item from `GET /api/news` includes `"label": "news context, not scientific evidence"`, a deterministic `"severity"` (`"green" | "amber" | "red"`) and `"publisher_verified": true | false`. Show `publisher_verified: false` items only as "Unverified news context", less prominent than verified ones, and never make their severity sound like official advice. When `"stale": true`, display `cache_age_seconds` / `fetched_at` visibly.
 6. **Live Weather is a Separate Source:** `GET /api/live-weather` (Meteomatics) is hourly operational weather for the next 1 to 72 hours. It is never NASA POWER data, never part of a trend, and never the app's own monthly forecast. Show its `label` and `source_note` with it, and handle `available: false` as a normal state (no credentials, provider outage), not an error.
 
 ---
@@ -31,7 +31,9 @@ Returns the complete point trend case file, now extended with `case_signature` a
 | `lat` | `float` | `-90.0 <= lat <= 90.0` | *(required)* | Latitude in decimal degrees |
 | `lon` | `float` | `-180.0 <= lon <= 180.0` | *(required)* | Longitude in decimal degrees |
 | `start_year` | `int` | `1981 <= start_year < end_year` | `1981` | First year of analysis window |
-| `end_year` | `int` | `end_year - start_year + 1 >= 20` | `current_year - 1` | Last year of analysis window |
+| `end_year` | `int` | `end_year - start_year + 1 >= 20` | `current_year - 1` | Last year of analysis window. The default is computed from today's date on every request (it used to be frozen when the server started), on every route that has one. |
+
+**Significance rule (Phase 0, B1):** `stats.significant` is `false` whenever Sen's slope is exactly 0, even when the Mann-Kendall `p_value` is below 0.05 (heavy ties, e.g. zero-snowfall years). `p_value` itself is unchanged. The same rule flows into `/api/sweep`, `/api/grid`, `/api/world`, `/api/ledger`, Planet Vitals and `evidence_trace`; `significant_fdr` is only ever `true` for a row that is also `significant`. `emergence.series[*].z` / `p` are autocorrelation-adjusted, each entry has a `significant` boolean, and `emergence.year` (and `emergence_year` in sweep and Planet Vitals) is `null` whenever the headline trend is not significant. Details: `docs/STATS_AUDIT.md`, "Backend review fixes (2026-11-15)".
 
 ### New Top-Level Fields Added in V2
 
@@ -268,7 +270,9 @@ Returns observed monthly values and anomalies on a tightly bounded local grid (`
 Evaluates rolling-origin monthly backtests (horizons 1 to 3 months) against a `seasonal_naive` baseline for `T2M`, `PRECTOTCORR`, and `CLOUD_AMT` only.
 
 - When `eligible: true`, `frames` contains 1 to 3 forecast frames with `"kind": "forecast"` and `"badge": "Forecast — not observed data"`.
-- When `eligible: false`, `frames` is `[]` and `reason` / `reason_code` explain why forecast frames are withheld (`"unsupported_variable"`, `"no_skill_over_seasonal_naive"`, `"poor_calibration_coverage"`, `"sparse_monthly_data"`, `"grid_cell_failure"`, `"insufficient_history"`, `"insufficient_backtest_origins"`, or `"constant_series"`).
+- When `eligible: false`, `frames` is `[]` and `reason` / `reason_code` explain why forecast frames are withheld (`"unsupported_variable"`, `"no_skill_over_seasonal_naive"`, `"poor_calibration_coverage"`, `"sparse_monthly_data"`, `"grid_cell_failure"`, `"insufficient_history"`, `"insufficient_backtest_origins"`, `"constant_series"`, or `"misaligned_cells"`). `"insufficient_backtest_origins"` is a defensive code that cannot occur with the current thresholds (120-month minimum, horizon at most 3). `"misaligned_cells"` is also defensive: it means the cells would forecast different calendar months, which the alignment step below prevents.
+- **Alignment (Phase 0, A2):** every cell's training series is trimmed to the earliest last valid month across the grid before any backtest, so every cell forecasts the same calendar months and each frame's `month` label is true for every cell in it. `alignment` reports `{ "common_end_month": "YYYY-MM", "cells_trimmed_to_common_end": int }` (or `null` when no series was built: unsupported variable, grid-cell failure). The first forecast month is the month after `common_end_month`, which can be earlier than `end_year + 1`-January when a cell's latest month is missing.
+- **`calibration` has one shape** whenever it is an object: `nominal_coverage`, `empirical_coverage` (`null` if not measured), `min_required_coverage`, `n_test_origins` (distinct held-out origin months), `n_test_pairs` (scored origin-horizon pairs; the old `n_test_origins` value counted these), `interval_half_width_by_horizon` (`null` entries if not measured), `passed`. It is `null` when no backtest ran for the whole grid (unsupported variable, grid-cell failure, sparse data, misaligned cells). When the response is withheld because one cell failed, `models`, `calibration` and `training_range` describe that failing cell (`failed_cell_id`), not the centre cell.
 - The quality gate applies to **every** cell of the local grid. If any one cell is withheld the whole response is `eligible: false`, and the response names the first failing cell in `failed_cell_id` (present only in that case) with a per-cell `eligible` / `reason` list in `cells`.
 - **Gate thresholds** (`backend/app/monthly.py`): at least 120 contiguous valid months (10 years); at most 5% missing months *inside* the variable's own record (months before a variable's record begins, such as cloud cover before 1984, are not counted as missing); at least 12 rolling backtest origins (24 used when available); the selected model must beat `seasonal_naive` overall by at least 1.5% mean absolute error **and** at every requested horizon; held-out interval coverage must reach at least 60% (nominal 80%).
 
@@ -332,7 +336,8 @@ Evaluates rolling-origin monthly backtests (horizons 1 to 3 months) against a `s
     "nominal_coverage": 0.8,
     "empirical_coverage": 0.8333,
     "min_required_coverage": 0.6,
-    "n_test_origins": 30,
+    "n_test_origins": 10,
+    "n_test_pairs": 30,
     "interval_half_width_by_horizon": [0.64, 0.66, 0.68],
     "passed": true
   },
@@ -342,6 +347,7 @@ Evaluates rolling-origin monthly backtests (horizons 1 to 3 months) against a `s
     "n_months": 528,
     "n_backtest_origins": 24
   },
+  "alignment": { "common_end_month": "2024-12", "cells_trimmed_to_common_end": 0 },
   "grid": { "n": 2, "size_degrees": 2.0, "total_cells": 4 },
   "provenance": { "... observation_state: statistical_forecast_from_reanalysis ..." },
   "cells": [ "... per-cell forecasts ..." ],
@@ -396,6 +402,7 @@ Evaluates rolling-origin monthly backtests (horizons 1 to 3 months) against a `s
   "models": [],
   "calibration": null,
   "training_range": null,
+  "alignment": null,
   "grid": { "n": 2, "size_degrees": 2.0, "total_cells": 4 },
   "provenance": { "... provenance ..." },
   "cells": [],
@@ -426,7 +433,7 @@ Extra properties are forbidden (`HTTP 422`). Submit `case_signature` from `/api/
 | --- | --- | --- |
 | `"ok"` | `false` | Live OpenAI Responses API explanation succeeded and passed citation/driver validation. |
 | `"fallback"` | `true` | Live AI call failed or was rejected by citation validation; serving curated literature context from `reasons.py`. |
-| `"no_key"` | `true` | `OPENAI_API_KEY` is not configured on the server; serving curated literature context from `reasons.py`. |
+| `"no_key"` | `true` | Live AI is not configured: `OPENAI_API_KEY` is unset (`fallback_reason: "missing_api_key"`) or `OPENAI_EXPLANATION_MODEL` is unset (`fallback_reason: "missing_model"`; no model name is built into the server). Serving curated literature context from `reasons.py`. |
 | `"rate_limited"` | `true` | Client exceeded the per-window explanation quota (`retry_after_seconds` provided); serving curated fallback. |
 | `"no_evidence"` | `true` | Either the measured trend is not statistically significant (`fallback_reason: "no_significant_trend"`), or no substantiated explanation exists (`drivers: []`). |
 
@@ -435,7 +442,11 @@ Extra properties are forbidden (`HTTP 422`). Submit `case_signature` from `/api/
 - A citation link must be `https`, on an allow-listed science or institutional domain (NASA, NOAA, NSIDC, IPCC, WMO and a fixed set of journal publishers), with no credentials, backslash or whitespace in it.
 - It must also be a link that really exists in what the model was given or retrieved: a page returned by the web-search tool during that request, or one of the curated sources supplied in the prompt. A plausible-looking address on an official domain that the model made up is dropped.
 - If no driver survives, the response falls back (`status: "fallback"`, `fallback_reason: "validation_failed"`) to the curated text in `reasons.py`.
-- Rate limiting applies per client address (default 15 live AI calls per 5 minutes) and returns HTTP 200 with `status: "rate_limited"`, not HTTP 429.
+- Rate limiting applies per visitor (default 15 live AI calls per 5 minutes) and returns HTTP 200 with `status: "rate_limited"`, not HTTP 429. The visitor is the socket peer address, or the `X-Forwarded-For` entry written by the trusted proxy when the owner sets `TD_TRUSTED_PROXY_HOPS` (Azure App Service: `1`); IPv6 visitors are grouped per /64. Cached answers (24 hours per `case_signature` + normalised question) are served without spending the allowance.
+- **Retrieval is restricted too:** the server uses the Responses API `web_search` tool with `filters.allowed_domains` set to the same science allow-list (parent domains only; subdomains are included), so the search itself can only retrieve those sites. Citation validation above is the second defence.
+- `retry_after_seconds` is present on every response: an integer when `status` is `"rate_limited"` (or when OpenAI itself rate-limited the call and sent `Retry-After`), otherwise `null`.
+- `measured_facts` numbers are rounded to 4 significant digits (not 4 decimal places), so a tiny significant slope or a very small p-value is never shown or sent to the model as 0.
+- `citations` is deduplicated by link (a `?utm_source=` copy and the plain link are one citation) and lists only citations used by the drivers actually returned (at most 4 drivers).
 
 ### Example Response (`HTTP 200`)
 
@@ -494,6 +505,7 @@ Extra properties are forbidden (`HTTP 422`). Submit `case_signature` from `/api/
   "generated_at": "2026-11-15T00:00:00Z",
   "fallback": false,
   "fallback_reason": null,
+  "retry_after_seconds": null,
   "case_signature": "v2|T2M|70.000|-150.000|1981|2024|fixture000000000000000000",
   "measured_facts": {
     "variable_id": "T2M",
@@ -509,8 +521,8 @@ Extra properties are forbidden (`HTTP 422`). Submit `case_signature` from `/api/
     "ci_low_per_decade": 0.541,
     "ci_high_per_decade": 0.662,
     "total_change": 2.589,
-    "p_value": 0.0,
-    "raw_p_value": 0.0,
+    "p_value": 6.273e-18,
+    "raw_p_value": 6.273e-18,
     "grade": { "code": "strong", "label": "Strong evidence", "passed": 5, "total": 5 },
     "verdict": "Strong evidence of a trend"
   },
@@ -546,6 +558,7 @@ Returns deduplicated, deterministically triaged environmental/weather news conte
       "id": "news_9f4b2c8e1a20",
       "title": "Severe heatwave advisory issued across northern India as temperatures surge",
       "publisher": "BBC News",
+      "publisher_verified": true,
       "canonical_url": "https://www.bbc.com/news/science-environment-101",
       "url": "https://www.bbc.com/news/science-environment-101",
       "published_at": "2026-11-14T12:00:00Z",
@@ -600,6 +613,7 @@ Returns non-secret availability and cache age for NASA POWER, planet streams, Me
       "oldest_cache_age_seconds": 18.5,
       "timeout_seconds": 30.0,
       "max_concurrency": 3,
+      "max_concurrency_scope": "process",
       "last_status": "healthy",
       "last_success_at": "2026-11-15T00:00:00Z",
       "last_error_at": null,
@@ -639,6 +653,14 @@ Returns non-secret availability and cache age for NASA POWER, planet streams, Me
         "misses": 0,
         "stale_hits": 0
       },
+      "rate_limit": {
+        "per_visitor_max_requests": 30,
+        "per_visitor_window_seconds": 300,
+        "global_max_requests": 300,
+        "global_window_seconds": 3600,
+        "tracked_visitors": 0,
+        "trusted_proxy_hops": 0
+      },
       "telemetry": {
         "last_status": "idle",
         "last_success_at": null,
@@ -650,9 +672,16 @@ Returns non-secret availability and cache age for NASA POWER, planet streams, Me
     "ai_explanations": {
       "status": "fallback_only",
       "configured": false,
-      "model": "gpt-4o-mini",
+      "key_present": false,
+      "model": null,
+      "model_configured": false,
       "web_search_enabled": true,
+      "web_search_tool": "web_search",
+      "search_context_size": "low",
+      "max_tool_calls": 3,
+      "max_output_tokens": 1400,
       "allowed_domains_count": 30,
+      "search_filter_domains_count": 20,
       "fallback_available": true,
       "fallback_source": "curated_literature_rules (reasons.py)",
       "rate_limit_max_requests": 15,
@@ -722,7 +751,11 @@ Meteomatics operational weather for **one location**: current conditions and an 
 | `lon` | `float` | `-180.0 <= lon <= 180.0` | *(required)* | Longitude (rounded to 4 decimals) |
 | `hours` | `int` | `1 <= hours <= 72` | `24` | Forecast horizon in hours. Out-of-range values return `HTTP 422`. |
 
-The series starts at the current UTC hour and is hourly (`PT1H`). Results are cached for 15 minutes per place (coordinates rounded to 0.01°) and horizon.
+The series starts at the current UTC hour and is hourly (`PT1H`). Results are cached for 15 minutes per place (coordinates rounded to 0.01°) and horizon, but a cached reply is only fresh within the UTC hour it started in: after the hour turns it is refreshed, and any stale copy served is trimmed so `series[0]`, `current` and `request.start` are the current hour. `location` is always the caller's own rounded coordinates.
+
+**Quota protection (Phase 0, item B):** requests that would reach Meteomatics (cache misses) are limited per visitor (default 30 per 5 minutes, `METEOMATICS_RATE_LIMIT_MAX` / `METEOMATICS_RATE_LIMIT_WINDOW_SECONDS`) and for the whole server (default 300 per hour, `METEOMATICS_GLOBAL_RATE_LIMIT_MAX` / `METEOMATICS_GLOBAL_RATE_LIMIT_WINDOW_SECONDS`). Cache hits are never counted. The visitor is identified as for `/api/explanations` (socket peer, or the trusted `X-Forwarded-For` entry when `TD_TRUSTED_PROXY_HOPS` is set). Provider replies are streamed and refused as soon as they pass 512 KB.
+
+`retry_after_seconds` is present on every response: an integer for `"rate_limited"` (and for a `"stale"` reply served because of a limit, or when Meteomatics sent `Retry-After`), otherwise `null`.
 
 ### `status` values (always `HTTP 200` when the query itself is valid)
 
@@ -731,7 +764,8 @@ The series starts at the current UTC hour and is hourly (`PT1H`). Results are ca
 | `"available"` | `true` | `false` | Fresh, validated data in `series` and `current`. |
 | `"stale"` | `true` | `true` | The refresh failed; the last good result is shown. Display `fetched_at` and `reason`. |
 | `"unconfigured"` | `false` | `false` | The server has no Meteomatics credentials. Hide or disable the live-weather panel and show `reason`. This is the normal state on a fresh local install. |
-| `"unavailable"` | `false` | `false` | Provider failure (authentication, rate limit or quota, timeout, bad range, malformed reply) and no cached result. Show `reason`; it never contains a credential or an upstream error body. |
+| `"unavailable"` | `false` | `false` | Provider failure (authentication, rate limit or quota, timeout, bad range, malformed reply, or a server misconfiguration such as an invalid `METEOMATICS_BASE_URL`) and no cached result. Show `reason`; it never contains a credential or an upstream error body. |
+| `"rate_limited"` | `false` | `false` | This visitor (or the whole server) used its live-weather allowance and no cached reply exists for this place. Meteomatics was not called. Show `reason` and try again after `retry_after_seconds`. When a cached reply exists it is served instead, as `"stale"`. |
 
 ### Example Response — Unconfigured (`HTTP 200`)
 
@@ -760,6 +794,7 @@ The series starts at the current UTC hour and is hourly (`PT1H`). Results are ca
   "fetched_at": "2026-11-15T14:09:53Z",
   "stale": false,
   "reason": "Live weather is unavailable because METEOMATICS_USERNAME and METEOMATICS_PASSWORD are not configured on the server.",
+  "retry_after_seconds": null,
   "source_note": "Meteomatics operational weather data. It is separate from NASA POWER climate-trend analysis.",
   "provider_metadata": {}
 }
@@ -784,8 +819,30 @@ When data are available `available` is `true`, `status` is `"available"`, `reaso
   ],
   "current": { "time": "2026-11-15T14:00:00Z", "temperature_c": 0.0, "precipitation_1h_mm": 0.0, "cloud_cover_percent": 0.0, "wind_speed_10m_ms": null },
   "stale": false,
-  "reason": null
+  "reason": null,
+  "retry_after_seconds": null
 }
 ```
 
 (The remaining fields — `provider`, `label`, `location`, `request`, `parameters`, `parameter_details`, `fetched_at`, `source_note`, `provider_metadata` — are the same as in the unconfigured example.)
+
+---
+
+## 8. Phase 0 repair changes (2026-11-15)
+
+Summary of every API-visible change from the Phase 0 backend repair (full list with tests: `docs/V2_BACKEND_REPAIR_HANDOFF.md`). All are additive or tighten an existing promise; the only removed field is `/api/version` `root` (see its row).
+
+| Route | Change |
+| --- | --- |
+| all GET routes with year defaults | `end_year` (and `/api/monthly-frames` `start_year`) defaults are computed from today's date per request. |
+| `/api/trend`, `/api/sweep`, `/api/grid`, `/api/world`, `/api/ledger`, `/api/vitals` | `significant` is `false` when Sen's slope is 0; `significant_fdr` requires `significant`; emergence p-values are autocorrelation-adjusted and `emergence.year` / `emergence_year` is `null` unless the headline is significant (Agent 0B; see `docs/STATS_AUDIT.md`). |
+| `/api/grid`, `/api/monthly-frames`, `/api/monthly-forecast` | Grid longitudes wrap into [-180, 180) (180 is returned as -180); near a pole the grid window shifts inside ±89.75 instead of repeating rows, so it is not centred on the requested latitude there (Agent 0B). |
+| `/api/forecast` | `coverage` gains `model` and `calibration_end_year`; `coverage.test` is truly out of sample; each replay gains `band_basis: "in_sample"`; new top-level `replay_note` (Agent 0B). |
+| `/api/suspects` | `enso_adjusted.enso_share` is a partial R²; the adjusted slope and its interval shift slightly (Agent 0B). |
+| `/api/archetypes` | `k` is the number of clusters actually returned; new `requested_k` (the requested `k`, or `null`) (Agent 0C). |
+| `/api/monthly-forecast` | New `alignment` object; calibration has one schema with new `n_test_pairs` (`n_test_origins` now counts origins); new defensive `reason_code` `"misaligned_cells"`; a withheld response's `models` / `calibration` / `training_range` describe the failing cell. |
+| `/api/explanations` | New `retry_after_seconds` on every response; `status: "no_key"` also covers a missing model (`fallback_reason: "missing_model"`); `measured_facts` uses significant digits; citations deduplicated and limited to returned drivers; live calls use the `web_search` tool with `filters.allowed_domains`. |
+| `/api/news` | Every item has `publisher_verified` (boolean, next to `publisher`): `true` only when the canonical URL's host is, or is a subdomain of, a domain in `news.VERIFIED_PUBLISHER_DOMAINS` (wire services, public broadcasters, major newsrooms, science journals, science agencies); the provider's publisher name is never trusted. Show `false` items as "Unverified news context". URLs keep a non-default port and bracketed IPv6 host; default ports are dropped; non-global IP hosts are rejected; `_hsenc` is stripped. Relevance accepts inflections ("flooding", "flooded", "evacuated") and bare "storm(s)"; "evacuating" / "evacuee" are red keywords (Agent 0C). |
+| `/api/version` | (Integration, after Phase 0; the one removal.) `root`, the server's absolute folder path, is no longer returned because on a laptop it contains the user name. It is replaced by `root_id`, a 16-hex-character one-way fingerprint of the folder (SHA-256 of the lower-cased path without a trailing slash) that the launcher (`app-common.ps1` `Get-FolderId`) compares with its own folder. The page never read `root`. Fields now: `app`, `version`, `branch`, `dirty`, `root_id`, `started_epoch`. |
+| `/api/live-weather` | New `status: "rate_limited"`; new `retry_after_seconds`; hour-aligned cache; caller's own `location`; invalid base URL is `"unavailable"`, not HTTP 500. |
+| `/api/health/details` | `ai_explanations` gains `key_present`, `model_configured`, `web_search_tool`, `search_context_size`, `max_tool_calls`, `max_output_tokens`, `search_filter_domains_count`, and `model` is `null` until the owner sets one; `meteomatics` gains `rate_limit`; `nasa_power` gains `max_concurrency_scope: "process"`; `planet_streams` now records real success/failure (`http_error`, `network_error`, `empty_data`), honours `STREAMS_CACHE_TTL_SECONDS` and serves stale series when a refresh fails (Agent 0C). |

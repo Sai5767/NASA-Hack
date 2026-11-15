@@ -148,3 +148,11 @@ def test_stability_is_high_for_real_clusters_and_lower_for_noise():
     uniform = [[rng.random() * 8, rng.random() * 8] for _ in range(45)]
     assert cluster_stability(points, 3, seed=0, repeats=6) > 0.95
     assert cluster_stability(uniform, 3, seed=0, repeats=6) < cluster_stability(points, 3, seed=0, repeats=6)
+
+
+def test_kmeans_caps_k_at_the_number_of_distinct_points_and_never_returns_an_empty_cluster():
+    points = [[0.0] * 15 for _ in range(9)] + [[1.0] * 15]
+    labels, centers, _ = kmeans(points, 3, seed=7)
+    assert sorted(set(labels)) == [0, 1]
+    assert len(centers) == 2
+    assert labels.count(0) == 9 and labels.count(1) == 1

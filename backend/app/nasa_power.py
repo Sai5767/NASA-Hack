@@ -139,6 +139,23 @@ _cache: OrderedDict[tuple, dict[str, float | None]] = OrderedDict()
 _cache_timestamps: dict[tuple, float] = {}
 
 
+def _configured_concurrency() -> int:
+    from .resilience import load_config
+
+    return load_config().nasa_max_concurrency
+
+
+def _make_global_limit():
+    from .resilience import LoopBoundSemaphore
+
+    return LoopBoundSemaphore(_configured_concurrency)
+
+
+# One process-wide limit on parallel NASA POWER requests (NASA_POWER_MAX_CONCURRENCY), shared by every route and every
+# visitor (A7). Per-route semaphores elsewhere only shape one request's own fan-out; this one bounds the total.
+_GLOBAL_LIMIT = _make_global_limit()
+
+
 class PowerError(RuntimeError):
     """Raised when NASA POWER cannot be reached or returns unusable data."""
 
@@ -157,7 +174,7 @@ def _cache_get(key: tuple, *, allow_stale: bool = False) -> dict[str, float | No
     ts = _cache_timestamps.get(key)
     if ts is not None and not allow_stale:
         ttl = load_config().nasa_cache_ttl_seconds
-        if time.monotonic() - ts > ttl:
+        if ttl <= 0 or time.monotonic() - ts > ttl:
             return None
     _cache.move_to_end(key)
     return value
@@ -178,7 +195,9 @@ def cache_health() -> dict:
 
     cfg = load_config()
     now = time.monotonic()
-    ages = [max(0.0, now - _cache_timestamps[k]) for k in _cache if k in _cache_timestamps]
+    # Copy before iterating (A4): the health route must never trip over a write on the event loop.
+    stamps = list(_cache_timestamps.values())
+    ages = [max(0.0, now - ts) for ts in stamps]
     snap = HEALTH_REGISTRY.snapshot("nasa_power")
     return {
         "status": "degraded" if snap["consecutive_failures"] > 0 else "available",
@@ -191,6 +210,7 @@ def cache_health() -> dict:
         "oldest_cache_age_seconds": round(max(ages), 1) if ages else None,
         "timeout_seconds": cfg.nasa_timeout_seconds,
         "max_concurrency": cfg.nasa_max_concurrency,
+        "max_concurrency_scope": "process",
         **snap,
     }
 
@@ -215,8 +235,9 @@ async def _request(params: dict) -> dict:
     last_error: Exception | None = None
     for attempt in range(len(RETRY_DELAYS) + 1):
         try:
-            async with httpx.AsyncClient(timeout=timeout_sec) as client:
-                resp = await client.get(POWER_MONTHLY_URL, params=params)
+            async with _GLOBAL_LIMIT.get():
+                async with httpx.AsyncClient(timeout=timeout_sec) as client:
+                    resp = await client.get(POWER_MONTHLY_URL, params=params)
             if resp.status_code in RETRY_STATUS and attempt < len(RETRY_DELAYS):
                 await asyncio.sleep(RETRY_DELAYS[attempt])
                 continue

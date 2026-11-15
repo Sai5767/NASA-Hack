@@ -123,3 +123,16 @@ def test_forecast_endpoint_says_when_the_record_is_too_short(fake_power):
 def test_forecast_endpoint_validates_input():
     assert client.get("/api/forecast", params={"variable": "NOPE", "lat": 0, "lon": 0}).status_code == 404
     assert client.get("/api/forecast", params={"variable": "T2M", "lat": 99, "lon": 0}).status_code == 422
+
+
+def test_fewer_distinct_places_than_k_does_not_crash_and_reports_the_actual_k():
+    # 9 identical places + 1 different one, k = 3 requested (review item B8): only two groups can exist.
+    entries = [
+        {"id": f"p{i}", "name": f"p{i}", "kind": "city", "lat": 0, "lon": 0, "features": [0.0] * len(CORE_VARIABLES)}
+        for i in range(9)
+    ]
+    entries.append({"id": "p9", "name": "p9", "kind": "city", "lat": 0, "lon": 0, "features": [1.0] * len(CORE_VARIABLES)})
+    out = cluster_places(entries, chosen_k=3)
+    assert out["k"] == 2 and out["requested_k"] == 3
+    assert sorted(c["size"] for c in out["clusters"]) == [1, 9]
+    assert all(c["size"] > 0 for c in out["clusters"])

@@ -144,9 +144,14 @@ def _lloyd(points: list[list[float]], centers: list[list[float]], max_iter: int)
 
 
 def kmeans(points: list[list[float]], k: int, seed: int = 0, n_init: int = 10, max_iter: int = 60) -> tuple[list[int], list[list[float]], float]:
-    """k-means with k-means++ starts; the best of n_init runs. Clusters are numbered by size, largest first."""
+    """k-means with k-means++ starts; the best of n_init runs. Clusters are numbered by size, largest first.
+
+    k is capped at the number of distinct points (identical points cannot be split), and any cluster that still
+    ends up empty is dropped, so the labels are always 0..m-1 with m <= k and every cluster has members.
+    """
     if not 1 <= k <= len(points):
         raise ValueError("k must be between 1 and the number of points.")
+    k = min(k, len({tuple(p) for p in points}))
     rng = random.Random(seed)
     best = None
     for _ in range(n_init):
@@ -154,7 +159,7 @@ def kmeans(points: list[list[float]], k: int, seed: int = 0, n_init: int = 10, m
         if best is None or inertia < best[2]:
             best = (labels, centers, inertia)
     labels, centers, inertia = best
-    order = sorted(range(k), key=lambda c: -labels.count(c))
+    order = sorted((c for c in range(k) if c in labels), key=lambda c: -labels.count(c))
     remap = {old: new for new, old in enumerate(order)}
     return [remap[lab] for lab in labels], [centers[old] for old in order], inertia
 

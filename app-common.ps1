@@ -69,9 +69,20 @@ function Get-ExpectedVersion([string]$root) {
     return [pscustomobject]@{ Commit = ("$commit").Trim(); Dirty = $dirty }
 }
 
+# The same one-way folder fingerprint the backend reports as root_id (backend/app/version.py folder_id). The backend
+# never publishes the folder path itself, because on a laptop it contains the user name.
+function Get-FolderId([string]$path) {
+    $norm = $path.TrimEnd('\', '/').ToLowerInvariant()
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try { $bytes = $sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($norm)) } finally { $sha.Dispose() }
+    return (($bytes | ForEach-Object { $_.ToString("x2") }) -join "").Substring(0, 16)
+}
+
 # Why a running backend is NOT the current code of this folder, or $null if it is.
 function Get-StaleReason([string]$root, $info) {
     if (-not $info -or $info.app -ne "trend-detective") { return "it is an older build that does not report its version" }
+    if ($info.root_id -and ([string]$info.root_id -ne (Get-FolderId $root))) { return "it is running from another copy of the app folder" }
+    # Older builds reported the folder path itself as "root".
     if ($info.root -and (([string]$info.root).TrimEnd('\') -ne $root.TrimEnd('\'))) { return "it is running from another folder: $($info.root)" }
     $started = [DateTimeOffset]::FromUnixTimeSeconds([long]$info.started_epoch).UtcDateTime
     $newest = Get-ChildItem (Join-Path $root "backend\app") -Filter *.py | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1

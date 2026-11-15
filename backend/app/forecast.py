@@ -203,18 +203,35 @@ def run_forecast_lab(years: list[int], values: list[float], horizon: int = HORIZ
     abs_by_h = {h: [(o, abs(e)) for (o, hh, e) in errs[best_id] if hh == h] for h in range(1, horizon + 1)}
     q_all = {h: conformal_quantile([e for _, e in rows]) for h, rows in abs_by_h.items()}
 
-    # Honest coverage check: calibrate on the earlier origins, test on the later ones.
+    # Honest coverage check of the whole procedure (review item B3). Pretend it is the year after origin `cut`: only
+    # values with index <= cut are known. The model and the baseline are chosen, and the band calibrated, on backtest
+    # rows whose TARGET is known by then (o + h - 1 <= cut), and the band is then scored on later origins (o > cut),
+    # which those choices never saw. The model chosen this way can differ from the overall winner; it is reported.
     cut = origins[max(1, math.floor(len(origins) * CALIBRATION_SHARE)) - 1]
+
+    def known_by_cut(model_id: str) -> list[tuple[int, int, float]]:
+        return [(o, hh, e) for (o, hh, e) in errs[model_id] if o + hh - 1 <= cut]
+
+    def mae_cal(model_id: str) -> float:
+        return mean(abs(e) for (_, _, e) in known_by_cut(model_id))
+
+    cal_id = min((m["id"] for m in MODELS), key=mae_cal)
     hits = total = 0
-    for h, rows in abs_by_h.items():
-        q_cal = conformal_quantile([e for o, e in rows if o <= cut])
+    for h in range(1, horizon + 1):
+        q_cal = conformal_quantile([abs(e) for (_, hh, e) in known_by_cut(cal_id) if hh == h])
         if q_cal is None:
             continue
-        for o, e in rows:
-            if o > cut:
+        for o, hh, e in errs[cal_id]:
+            if hh == h and o > cut:
                 total += 1
-                hits += e <= q_cal
-    coverage = {"nominal": COVERAGE, "test": hits / total if total else None, "n_test": total}
+                hits += abs(e) <= q_cal
+    coverage = {
+        "nominal": COVERAGE,
+        "test": hits / total if total else None,
+        "n_test": total,
+        "model": cal_id,
+        "calibration_end_year": years[cut],
+    }
 
     # The forecast itself.
     final = next(m["fn"] for m in MODELS if m["id"] == best_id)(values, horizon)
@@ -234,7 +251,9 @@ def run_forecast_lab(years: list[int], values: list[float], horizon: int = HORIZ
             points.append(
                 {"year": years[o - 1] + h, "value": v, "lo": v - q if q is not None else None, "hi": v + q if q is not None else None, "actual": values[o + h - 1]}
             )
-        replays.append({"origin_year": years[o - 1], "points": points})
+        # The band is today's band (q_all), calibrated on every backtest error including these years', and the model
+        # was chosen with hindsight: a replay illustrates the model's track record, it is not an out-of-sample test.
+        replays.append({"origin_year": years[o - 1], "points": points, "band_basis": "in_sample"})
 
     return {
         "ok": True,
@@ -250,6 +269,10 @@ def run_forecast_lab(years: list[int], values: list[float], horizon: int = HORIZ
         "forecast": forecast,
         "coverage": coverage,
         "replays": replays,
+        "replay_note": (
+            "Replays use the winning model and today's error band, both chosen with knowledge of the whole record, so "
+            "they illustrate the track record rather than test it. The out-of-sample check is the coverage figure."
+        ),
         "history": [{"year": y, "value": v} for y, v in zip(years, values)],
         "caveat": "A statistical extrapolation of this one series, not a climate projection. It assumes the pattern of recent decades continues.",
     }

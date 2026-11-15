@@ -62,3 +62,35 @@ export const fetchExplanation = (payload, signal) => postJson("/api/explanations
 export const fetchNews = (params = {}, signal) => getJson("/api/news", params, signal);
 export const fetchLiveWeather = (params, signal) => getJson("/api/live-weather", params, signal);
 
+
+// ---- Insight additions (Agent 4: evidence verdict, manual Why). Append-only; existing exports above are unchanged. ----
+/**
+ * POST /api/explanations that keeps the HTTP status, so the caller can tell a stale case signature (HTTP 422 naming
+ * the signature: refetch the trend, retry once) from any other failure. Throws an Error with `.status` and `.detail`
+ * (`.status` is 0 when the server could not be reached). Send only `{ case_signature, question? }`.
+ */
+export async function requestExplanation(payload, signal) {
+  let res;
+  try {
+    res = await fetch(`${API_BASE}/api/explanations`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal,
+    });
+  } catch (err) {
+    if (err.name === "AbortError") throw err;
+    const e = new Error("Can't reach the analysis server.");
+    e.status = 0;
+    e.detail = null;
+    throw e;
+  }
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const e = new Error(typeof body.detail === "string" ? body.detail : "The request failed.");
+    e.status = res.status;
+    e.detail = body.detail ?? null;
+    throw e;
+  }
+  return body;
+}

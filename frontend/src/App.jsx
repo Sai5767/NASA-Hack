@@ -1,35 +1,46 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchArchetypes, fetchDuel, fetchGrid, fetchLedger, fetchPlaces, fetchSweep, fetchTrend, fetchVariables, fetchVersion, fetchVitals, fetchWorld } from "./api.js";
-import Archetypes, { CLUSTER_COLORS } from "./components/Archetypes.jsx";
-import Boot from "./components/Boot.jsx";
+import { CLUSTER_COLORS } from "./components/Archetypes.jsx";
 import Briefing from "./components/Briefing.jsx";
-import CaseFile from "./components/CaseFile.jsx";
 import { AboutDialog, CasesDialog, GlossaryDialog } from "./components/Dialogs.jsx";
-import Duel from "./components/Duel.jsx";
-import Events from "./components/Events.jsx";
 import { ExplainContext } from "./components/ExplainContext.js";
 import Explainer from "./components/Explainer.jsx";
-import ForYou from "./components/ForYou.jsx";
 import Globe, { applyGlobePalette } from "./components/Globe.jsx";
-import Home from "./components/Home.jsx";
-import IntakeWizard from "./components/Intake.jsx";
-import Ledger from "./components/Ledger.jsx";
-import Loading from "./components/Loading.jsx";
-import Scan from "./components/Scan.jsx";
+import GlobeLegend from "./components/globe/GlobeLegend.jsx";
+import ExplorePanel from "./components/insight/ExplorePanel.jsx";
+import { VerdictSlot } from "./components/main/InsightSlots.jsx";
+import { ForecastSlot, MainLayersProvider, MainStage, NewsSlot, WeatherSlot } from "./components/main/MainLayers.jsx";
 import SetupPanel from "./components/SetupPanel.jsx";
+import AccountPanel from "./components/shell/AccountPanel.jsx";
+import Dashboard, { DataPicker, PlaceSwitcher, Slot } from "./components/shell/Dashboard.jsx";
+import { Drawer, ShellContext } from "./components/shell/Drawer.jsx";
+import Onboarding from "./components/shell/Onboarding.jsx";
+import SignIn from "./components/shell/SignIn.jsx";
+import TopBar, { Brand } from "./components/shell/TopBar.jsx";
+import { MOBILE_QUERY, REDUCED_QUERY, TABLET_QUERY, useMedia, useProfileStore } from "./components/shell/useShellState.js";
 import Starfield from "./components/Starfield.jsx";
-import Sweep from "./components/Sweep.jsx";
-import Vitals from "./components/Vitals.jsx";
-import World from "./components/World.jsx";
-import { useStoredState } from "./hooks.js";
-import { CASES, FIRST_YEAR, LAST_FULL_YEAR, SURPRISES } from "./lib/cases.js";
+import { CASES, FIRST_YEAR, LAST_FULL_YEAR } from "./lib/cases.js";
 import { EVENTS, EVENT_BY_ID, KINDS } from "./lib/events.js";
 import { clamp, formatP, formatPlace, round2, signed } from "./lib/format.js";
 import { cellContains, nearestPlace } from "./lib/geo.js";
 import { intensity, mixHex, prepareLapse } from "./lib/lapse.js";
-import { DEFAULT_PROFILE, addWatch, defaultView, hasWatch, removeWatch, suggest, toggleWatch } from "./lib/profile.js";
-import { decodeState, encodeState } from "./lib/share.js";
-import { DEFAULT_THEME, applyTheme, nextTheme, themeOf } from "./lib/theme.js";
+import {
+  INTERESTS,
+  MAX_PLACES,
+  addPlace,
+  defaultView,
+  hasPlace,
+  interestById,
+  interestOf,
+  placeId,
+  removePlace,
+  setPrefs,
+  stageOf,
+  variablesFor,
+  withAccount,
+} from "./lib/profile.js";
+import { DEFAULT_EXPLORE_TAB, EXPLORE_TABS, flipDirection, hashFromRoute, historyMode, routeFromHash } from "./lib/route.js";
+import { DATA_COLORS, DEFAULT_THEME, themeOf } from "./lib/theme.js";
 import { compareVersions, describeVersion } from "./lib/version.js";
 
 // Set at build time by vite.config.js from git; the analysis server reports its own through /api/version.
@@ -38,17 +49,15 @@ const PAGE_VERSION = {
   dirty: typeof __APP_DIRTY__ === "undefined" ? false : __APP_DIRTY__,
 };
 
-const COLORS = { up: "#ff6a5c", down: "#4da6ff", flat: "#8794b8", failed: "#5f6a8a", a: "#4dffd9", b: "#ff6bd5" };
+// One theme ("mission"). Colours drawn by JavaScript (dots, pins, the globe) come from lib/theme.js; the CSS from theme.css.
+const PALETTE = themeOf(DEFAULT_THEME);
+const COLORS = { ...DATA_COLORS, ...PALETTE.colors };
+applyGlobePalette(PALETTE.globe);
+
 const EMPTY = { data: null, key: "", loading: false, error: "" };
 const MAX_YEAR = new Date().getFullYear();
 
-const SWEEP_STEPS = ["Pulling 19 variables in one request…", "Removing the seasonal cycle from each…", "Running trend tests on all of them…", "Ranking by strength of evidence…"];
-const SCAN_STEPS = ["Contacting NASA POWER…", "Analyzing each place on the grid…", "Applying false-discovery control…", "Measuring the spatial pattern…"];
-const DUEL_STEPS = ["Fetching both places…", "Fitting both trends…", "Testing whether the rates differ…"];
-const WORLD_STEPS = ["Asking NASA POWER about sample places around the world…", "Fitting a trend at each one…", "Applying false-discovery control…", "Placing the dots…"];
-const ARCH_STEPS = ["Fetching every variable at each sample place…", "Measuring each variable's change against its normal swings…", "Clustering similar fingerprints…", "Testing whether the groups are stable…"];
-const LEDGER_STEPS = ["Asking NASA POWER about every sample place…", "Testing all 19 variables at each…", "Correcting over a thousand tests together…", "Ranking by strength of evidence…", "Looking up published context…"];
-const VITALS_STEPS = ["Reading NASA GISTEMP…", "Reading NOAA CO₂ and NSIDC sea ice…", "Testing each vital sign…", "Checking the climate rhythms…"];
+const PAGE_NAMES = { main: "Main dashboard", explore: "Explore" };
 
 const keys = {
   trend: (p) => [p.variable, p.lat, p.lon, p.start, p.end].join("|"),
@@ -122,7 +131,7 @@ function worldDots(data) {
   const units = data.variable.units;
   return data.places.map((p) => {
     if (!p.ok) {
-      return { id: p.id, name: p.name, lat: p.lat, lon: p.lon, color: COLORS.failed, r: 3.5, ring: false, tip: `${p.name} · not measurable here` };
+      return { id: p.id, name: p.name, lat: p.lat, lon: p.lon, color: COLORS.failed, r: 3.5, ring: false, failed: true, tip: `${p.name} · not measurable here` };
     }
     const color = p.significant ? (p.slope_per_decade >= 0 ? COLORS.up : COLORS.down) : COLORS.flat;
     const status = p.significant_fdr ? "holds up after correction" : p.significant ? "significant, not after correction" : "no clear trend";
@@ -134,6 +143,8 @@ function worldDots(data) {
       color,
       r: 4 + Math.min(5, Math.abs(p.signal_to_noise ?? 0) * 1.6),
       ring: p.significant_fdr,
+      sign: p.significant ? (p.slope_per_decade >= 0 ? "up" : "down") : undefined,
+      failed: false,
       tip: `${p.name} · ${signed(p.slope_per_decade)} ${units}/decade · ${status}`,
     };
   });
@@ -144,7 +155,7 @@ function lapseDots(data, prepared, year) {
   const units = data.variable.units;
   return data.places.map((p) => {
     const base = { id: p.id, name: p.name, lat: p.lat, lon: p.lon, ring: false };
-    if (!p.ok) return { ...base, color: COLORS.failed, r: 3.5, tip: `${p.name} · not measurable here` };
+    if (!p.ok) return { ...base, color: COLORS.failed, r: 3.5, failed: true, tip: `${p.name} · not measurable here` };
     const a = prepared.at(p.id, year);
     if (a == null) return { ...base, color: COLORS.failed, r: 3, tip: `${p.name} · no value for ${year}` };
     const k = intensity(a, prepared.scale);
@@ -152,6 +163,7 @@ function lapseDots(data, prepared, year) {
       ...base,
       color: mixHex(COLORS.flat, a >= 0 ? COLORS.up : COLORS.down, k),
       r: 4 + 5 * k,
+      sign: a > 0 ? "up" : a < 0 ? "down" : undefined,
       tip: `${p.name} · ${year}: ${signed(a, 3)} ${units} vs its own average`,
     };
   });
@@ -171,50 +183,113 @@ function archetypeDots(data) {
   }));
 }
 
-function seenBoot() {
-  try {
-    return sessionStorage.getItem("td-boot") === "1";
-  } catch {
-    return false;
+/** Notices shown once under the top bar (and on the welcome screen): blocked storage, unreadable profile, V1 migration. */
+function StorageNotice({ status, migrated, onDismiss }) {
+  if (status === "blocked") {
+    return (
+      <div className="shell-strip warn" role="status">
+        <b>Your browser is blocking storage.</b> Your choices will last only until this tab closes.
+      </div>
+    );
   }
+  if (status === "corrupt") {
+    return (
+      <div className="shell-strip warn" role="status">
+        <b>Your saved profile couldn't be read</b>, so a fresh one was started on this device.
+        <button type="button" className="btn btn-sm btn-ghost" onClick={onDismiss}>Dismiss</button>
+      </div>
+    );
+  }
+  if (migrated) {
+    return (
+      <div className="shell-strip info" role="status">
+        Your places and interests from the previous version were brought over. Check them below.
+        <button type="button" className="btn btn-sm btn-ghost" onClick={onDismiss}>Dismiss</button>
+      </div>
+    );
+  }
+  return null;
 }
 
-function PinPrompt({ label }) {
-  return (
-    <div className="card hud-card prompt reveal">
-      <p className="eyebrow">{label}</p>
-      <h2>Drop a pin first</h2>
-      <p className="dim">Click anywhere on the globe, type a place above, or choose a quick place in the setup panel.</p>
-    </div>
-  );
+/** The server's place list, used for place search. Loaded once; failure only disables search. */
+function usePlaces() {
+  const [state, setState] = useState({ places: [], status: "loading" });
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchPlaces(controller.signal)
+      .then((places) => setState({ places: Array.isArray(places) ? places : [], status: "ready" }))
+      .catch((e) => e.name !== "AbortError" && setState({ places: [], status: "error" }));
+    return () => controller.abort();
+  }, []);
+  return state;
 }
 
-function ErrorCard({ message, onRetry }) {
+/** Sign-in and the two onboarding questions, inside one centred frame. The dashboard is not rendered behind it. */
+function Welcome({ store, places, placesStatus }) {
+  const { profile } = store;
+  const stage = stageOf(profile);
+  const [about, setAbout] = useState(false);
   return (
-    <div className="card error-card reveal" role="alert">
-      <p className="eyebrow">The investigation hit a snag</p>
-      <p>{message}</p>
-      {onRetry && <button type="button" className="btn btn-sm" onClick={onRetry}>Try again</button>}
+    <div className="welcome">
+      <Starfield accentRgb={PALETTE.accentRgb} />
+      <div className="welcome-limb" aria-hidden="true" />
+      <StorageNotice status={store.status} migrated={false} onDismiss={store.dismissNotice} />
+      <main className="welcome-main">
+        <header className="welcome-brand">
+          <Brand as="h1" />
+        </header>
+        <div className={`welcome-card card${stage === "onboarding" ? " wide" : ""}`}>
+          <div key={stage} className="card-swap">
+            {stage === "signin" ? (
+              <SignIn onSignIn={(email) => store.update((p) => withAccount(p, email))} />
+            ) : (
+              <Onboarding
+                profile={profile}
+                places={places}
+                placesStatus={placesStatus}
+                onFinish={(draft) => store.update({ ...draft, onboarding: "done" })}
+                onSkip={(draft) => store.update({ ...draft, onboarding: "skipped" })}
+              />
+            )}
+          </div>
+        </div>
+      </main>
+      <footer className="welcome-foot faint small">
+        Independent project, not endorsed by NASA. · <button type="button" className="linklike" onClick={() => setAbout(true)}>About</button>
+      </footer>
+      {about && <AboutDialog onClose={() => setAbout(false)} />}
     </div>
   );
 }
 
 export default function App() {
-  const initial = useMemo(() => decodeState(window.location.hash), []);
-  const [booting, setBooting] = useState(() => !initial && !seenBoot() && !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
+  const store = useProfileStore();
+  const { places, status: placesStatus } = usePlaces();
+  if (stageOf(store.profile) !== "app") return <Welcome store={store} places={places} placesStatus={placesStatus} />;
+  return <Workspace store={store} places={places} placesStatus={placesStatus} />;
+}
+
+/** The signed-in app: top bar, Main (dashboard + globe + timeline) and Explore (the advanced tools). */
+function Workspace({ store, places, placesStatus }) {
+  const { profile, update } = store;
+  const initial = useMemo(() => routeFromHash(window.location.hash), []);
+  const [page, setPage] = useState(initial.page);
+  const [exploreTab, setExploreTab] = useState(initial.page === "explore" ? initial.tab : DEFAULT_EXPLORE_TAB);
+  const tab = page === "main" ? "investigate" : exploreTab;
+  const [flip, setFlip] = useState("none");
+  const [announce, setAnnounce] = useState("");
   const [variables, setVariables] = useState([]);
-  const [places, setPlaces] = useState([]);
-  const [tab, setTab] = useState(initial?.tab ?? "investigate");
+  const [variablesStatus, setVariablesStatus] = useState("loading");
   const [draft, setDraft] = useState(() => ({
-    variable: "T2M",
+    variable: profile.prefs.variable,
     lat: "",
     lon: "",
     start: String(FIRST_YEAR),
     end: String(LAST_FULL_YEAR),
-    ...(initial?.params ? toDraftPatch(initial.params) : {}),
+    ...(initial.params ? toDraftPatch(initial.params) : {}),
   }));
-  const [params, setParams] = useState(initial?.params ?? null);
-  const [pinB, setPinB] = useState(initial?.pinB ?? null);
+  const [params, setParams] = useState(initial.params);
+  const [pinB, setPinB] = useState(initial.pinB);
   const [pickTarget, setPickTarget] = useState("A");
   const [scanCfg, setScanCfg] = useState({ size: 10, n: 4 });
   const [selectedCell, setSelectedCell] = useState(null);
@@ -235,48 +310,114 @@ export default function App() {
   const [ledger, setLedger] = useState(EMPTY);
   const [lapse, setLapse] = useState({ on: false, year: null, playing: false, speed: 500 });
   const [serverVersion, setServerVersion] = useState(null);
-  const [theme, setTheme] = useStoredState("td-theme", DEFAULT_THEME);
-  // Colours drawn by JavaScript (map dots, pins, the globe) follow the theme; the CSS follows data-theme on <html>.
-  const palette = themeOf(theme);
-  Object.assign(COLORS, palette.colors);
-  applyGlobePalette(palette.globe);
-  useEffect(() => applyTheme(theme), [theme]);
-  const [storedProfile, setProfile] = useStoredState("td-profile", DEFAULT_PROFILE);
-  const [watch, setWatch] = useStoredState("td-watch", []);
-  const [viewPref, setViewPref] = useStoredState("td-view", null);
+  const [viewPref, setViewPref] = useState(profile.prefs.view);
   const [detailFocus, setDetailFocus] = useState(null);
-  const [forYouOpen, setForYouOpen] = useState(true);
   const [eventId, setEventId] = useState(null);
   const [explainer, setExplainer] = useState({ started: false, open: false, request: null });
+  const [drawer, setDrawer] = useState(null); // { id, title, eyebrow, render } — single occupancy
+  const [dashOpen, setDashOpen] = useState(false);
+  const [dataType, setDataType] = useState(null);
+  const tablet = useMedia(TABLET_QUERY);
+  const mobile = useMedia(MOBILE_QUERY);
+  const reducedMotion = useMedia(REDUCED_QUERY) || profile.prefs.reduceMotion;
   const askExplainer = useCallback((request) => setExplainer({ started: true, open: true, request: request ? { ...request, nonce: Date.now() } : null }), []);
   const explainTerm = useCallback((id) => askExplainer({ id }), [askExplainer]);
-  const profile = useMemo(() => ({ ...DEFAULT_PROFILE, ...storedProfile }), [storedProfile]);
   const view = viewPref ?? defaultView(profile);
-  const home = tab === "investigate" && !params;
-  const forYouItems = useMemo(() => suggest(profile, { limit: 3 }), [profile]);
 
   const controllers = useRef({});
   const draftRef = useRef(draft);
   draftRef.current = draft;
+  const paramsRef = useRef(params);
+  paramsRef.current = params;
   const autoScan = useRef(false);
   const resultsRef = useRef(null);
+  const headingRef = useRef(null);
+  const routeRef = useRef(null);
+  const firstPage = useRef(true);
 
   useEffect(() => {
-    fetchVariables().then(setVariables).catch((e) => setTrend({ ...EMPTY, error: e.message }));
-    fetchPlaces().then(setPlaces).catch(() => setPlaces([]));
+    // Only the light lookups load on start. No world survey, news, forecast or per-place request happens here.
+    fetchVariables()
+      .then((v) => {
+        setVariables(v);
+        setVariablesStatus("ready");
+      })
+      .catch(() => setVariablesStatus("error"));
     fetchVersion().then(setServerVersion).catch(() => setServerVersion(null));
-    if (initial?.params) setFocus({ lat: initial.params.lat, lon: initial.params.lon, k: 1.8, nonce: 1 });
+    if (initial.params) setFocus({ lat: initial.params.lat, lon: initial.params.lon, k: 1.8, nonce: 1 });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Keep the URL in step with the question so a copied link reopens the same case.
+  // ---------------------------------------------------------------- URL / history (lib/route.js)
+
   useEffect(() => {
+    const next = { page, tab, params, pinB };
+    const mode = historyMode(routeRef.current, next);
+    routeRef.current = next;
+    if (mode === "none") return;
+    const hash = hashFromRoute(next);
+    const url = window.location.pathname + window.location.search + (hash ? `#${hash}` : "");
     try {
-      const hash = params || tab !== "investigate" ? encodeState({ tab, params, pinB: tab === "duel" ? pinB : null }) : "";
-      window.history.replaceState(null, "", window.location.pathname + window.location.search + (hash ? `#${hash}` : ""));
+      if (mode === "push") window.history.pushState({ td: 2 }, "", url);
+      else window.history.replaceState({ td: 2 }, "", url);
     } catch {
       /* the URL is only a convenience */
     }
-  }, [tab, params, pinB]);
+  }, [page, tab, params, pinB]);
+
+  useEffect(() => {
+    const onPop = () => {
+      const r = routeFromHash(window.location.hash);
+      const kept = r.params ?? paramsRef.current; // a page without a place in its URL keeps the current place
+      routeRef.current = { ...r, params: kept, pinB: r.tab === "duel" ? r.pinB : null };
+      setPage((prev) => {
+        if (prev !== r.page) setFlip(flipDirection(prev, r.page));
+        return r.page;
+      });
+      if (r.page === "explore") setExploreTab(r.tab);
+      if (r.params) {
+        setParams(r.params);
+        setDraft((d) => ({ ...d, ...toDraftPatch(r.params) }));
+      }
+      if (r.tab === "duel") setPinB(r.pinB);
+      setDrawer(null);
+      setDashOpen(false);
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
+  const goPage = useCallback(
+    (next) => {
+      setDrawer(null);
+      setDashOpen(false);
+      if (next === page) return;
+      setFlip(flipDirection(page, next));
+      setPage(next);
+      if (next === "explore") setLapse((l) => ({ ...l, playing: false }));
+    },
+    [page],
+  );
+  const goTool = useCallback((t) => {
+    setExploreTab(t);
+    setSelectedCell(null);
+    setPage((prev) => {
+      if (prev !== "explore") setFlip("forward");
+      return "explore";
+    });
+  }, []);
+
+  // After a page flip: focus the new page's heading, announce it, and start at the top (spec 4.7).
+  useEffect(() => {
+    headingRef.current?.focus({ preventScroll: true });
+    window.scrollTo(0, 0);
+    if (firstPage.current) {
+      firstPage.current = false;
+      return;
+    }
+    setAnnounce(PAGE_NAMES[page]);
+  }, [page]);
+
+  // ---------------------------------------------------------------- analyses
 
   const worldParams = useMemo(
     () => ({ variable: params?.variable ?? draft.variable, start: params?.start ?? FIRST_YEAR, end: params?.end ?? LAST_FULL_YEAR }),
@@ -299,11 +440,14 @@ export default function App() {
       return null;
     }
   }, []);
+  useEffect(() => () => Object.values(controllers.current).forEach((c) => c?.abort()), []);
 
   const runTrend = useCallback(
     (p) => run("trend", keys.trend(p), setTrend, (s) => fetchTrend({ variable: p.variable, lat: p.lat, lon: p.lon, start_year: p.start, end_year: p.end }, s)),
     [run],
   );
+  // A stale-signature refetch inside the Why panel hands back the fresh trend for the same case; the key is unchanged.
+  const onTrendRefreshed = useCallback((fresh) => fresh && setTrend((s) => (s.data ? { ...s, data: fresh } : s)), []);
   const runSweep = useCallback(
     (p) => run("sweep", keys.sweep(p), setSweep, (s) => fetchSweep({ lat: p.lat, lon: p.lon, start_year: p.start, end_year: p.end }, s)),
     [run],
@@ -359,17 +503,21 @@ export default function App() {
     return data;
   }, [params, scanCfg, run]);
 
-  // Run whichever analysis the open tab needs when the question changes.
+  // Run whichever analysis the open page needs when the question changes. Main needs only the active place's trend;
+  // the heavy Explore analyses (world survey, vitals, ledger, sweep, duel) run only while their Explore tool is open.
   useEffect(() => {
-    if (tab === "world" && worldMode === "survey" && world.key !== keys.world(worldParams)) runWorld(worldParams);
-    if (tab === "world" && worldMode === "archetypes" && archetypes.key !== keys.archetypes(vitalsYears, archK)) runArchetypes(vitalsYears, archK);
-    if (tab === "vitals" && vitals.key !== keys.vitals(vitalsYears)) runVitals(vitalsYears);
-    if (tab === "ledger" && ledger.key !== keys.ledger(vitalsYears)) runLedger(vitalsYears);
+    if (page === "explore") {
+      if (tab === "world" && worldMode === "survey" && world.key !== keys.world(worldParams)) runWorld(worldParams);
+      if (tab === "world" && worldMode === "archetypes" && archetypes.key !== keys.archetypes(vitalsYears, archK)) runArchetypes(vitalsYears, archK);
+      if (tab === "vitals" && vitals.key !== keys.vitals(vitalsYears)) runVitals(vitalsYears);
+      if (tab === "ledger" && ledger.key !== keys.ledger(vitalsYears)) runLedger(vitalsYears);
+    }
     if (!params) return;
     if (tab === "investigate" && trend.key !== keys.trend(params)) runTrend(params);
+    if (page !== "explore") return;
     if (tab === "sweep" && sweep.key !== keys.sweep(params)) runSweep(params);
     if (tab === "duel" && pinB && duel.key !== keys.duel(params, pinB)) runDuel(params, pinB);
-  }, [tab, params, pinB, worldParams, vitalsYears, worldMode, archK]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [page, tab, params, pinB, worldParams, vitalsYears, worldMode, archK]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (tab === "scan" && autoScan.current && params) {
@@ -383,12 +531,12 @@ export default function App() {
     if (tab !== "duel") setPickTarget("A");
   }, [tab, pinB]);
 
-  // On narrow screens the results sit below the globe: bring them into view.
+  // On narrow screens the Explore results sit below the globe: bring them into view.
   useEffect(() => {
-    if (window.innerWidth <= 1000 && (trend.data || sweep.data || grid.data || duel.data || world.data || vitals.data || archetypes.data)) {
-      resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (page === "explore" && window.innerWidth <= 1000 && (trend.data || sweep.data || grid.data || duel.data || world.data || vitals.data || archetypes.data)) {
+      resultsRef.current?.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth", block: "start" });
     }
-  }, [trend.data, sweep.data, grid.data, duel.data, world.data, vitals.data, archetypes.data]);
+  }, [trend.data, sweep.data, grid.data, duel.data, world.data, vitals.data, archetypes.data]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const commit = useCallback((patch, opts = {}) => {
     setParams((prev) => ({
@@ -406,11 +554,11 @@ export default function App() {
   }, []);
 
   const gridFresh = tab === "scan" && !!grid.data && !!params && grid.key === keys.grid(params, scanCfg);
-  const cells = useMemo(() => (gridFresh ? scanCells(grid.data) : []), [gridFresh, grid.data, theme]);
+  const cells = useMemo(() => (gridFresh ? scanCells(grid.data) : []), [gridFresh, grid.data]);
   const cellHalf = gridFresh ? grid.data.size / (grid.data.n - 1) / 2 : 0;
-  const worldFresh = tab === "world" && worldMode === "survey" && !!world.data && world.key === keys.world(worldParams);
+  const worldFresh = page === "explore" && tab === "world" && worldMode === "survey" && !!world.data && world.key === keys.world(worldParams);
   const archFresh =
-    tab === "world" && worldMode === "archetypes" && !!archetypes.data?.ok && archetypes.key === keys.archetypes(vitalsYears, archK);
+    page === "explore" && tab === "world" && worldMode === "archetypes" && !!archetypes.data?.ok && archetypes.key === keys.archetypes(vitalsYears, archK);
   const lapseData = useMemo(() => (worldFresh ? prepareLapse(world.data.places) : null), [worldFresh, world.data]);
   useEffect(() => {
     if (!lapse.on || !lapse.playing || !lapseData) return undefined;
@@ -422,13 +570,6 @@ export default function App() {
     if (!worldFresh) setLapse((l) => (l.on ? { ...l, on: false, playing: false } : l));
   }, [worldFresh]);
 
-  const watchDots = useMemo(
-    () =>
-      home
-        ? watch.map((w) => ({ id: w.id, name: w.name, lat: w.lat, lon: w.lon, color: COLORS.a, r: 6, ring: true, tip: `${w.name} · on your watchlist`, watch: w }))
-        : [],
-    [home, watch, theme],
-  );
   const eventDots = useMemo(
     () =>
       tab === "events"
@@ -446,12 +587,43 @@ export default function App() {
         : [],
     [tab, eventId],
   );
-  const dots = useMemo(() => {
+  const exploreDots = useMemo(() => {
     if (worldFresh) return lapse.on && lapseData ? lapseDots(world.data, lapseData, lapse.year) : worldDots(world.data);
     if (archFresh) return archetypeDots(archetypes.data);
-    if (eventDots.length) return eventDots;
-    return watchDots;
-  }, [worldFresh, archFresh, world.data, archetypes.data, eventDots, watchDots, lapse.on, lapse.year, lapseData, theme]);
+    return eventDots;
+  }, [worldFresh, archFresh, world.data, archetypes.data, eventDots, lapse.on, lapse.year, lapseData]);
+
+  // ---------------------------------------------------------------- place / variable selection
+
+  const placeNameFor = (lat, lon) => nearestPlace(places, lat, lon, 250)?.name ?? formatPlace(lat, lon);
+  const activePlace = useMemo(() => {
+    if (!params) return null;
+    const id = placeId(params.lat, params.lon);
+    const saved = profile.places.find((p) => p.id === id);
+    return saved ? { ...saved, saved: true } : { id, name: placeNameFor(params.lat, params.lon), lat: params.lat, lon: params.lon, saved: false };
+  }, [params?.lat, params?.lon, profile.places, places]); // eslint-disable-line react-hooks/exhaustive-deps
+  const variableId = params?.variable ?? draft.variable;
+  const variableInfo = variables.find((v) => v.id === variableId) ?? null;
+
+  // The data type shown in the picker: once the variable list arrives, the type of the current variable among the
+  // user's chosen types. With no place in the URL and a remembered variable outside the chosen types, start on the
+  // first chosen type's headline variable instead.
+  useEffect(() => {
+    if (dataType || !variables.length) return;
+    const chosen = profile.interests;
+    const inChosen = chosen.find((id) => variablesFor(id, variables).some((v) => v.id === variableId));
+    if (inChosen) return setDataType(inChosen);
+    if (chosen.length && !initial.params) {
+      const first = interestById(chosen[0]);
+      const list = variablesFor(first.id, variables);
+      setDataType(first.id);
+      const v = list.find((x) => x.id === first.first) ?? list[0];
+      if (v) setDraft((d) => ({ ...d, variable: v.id }));
+      return undefined;
+    }
+    setDataType(interestOf(variableId, variables, chosen) ?? INTERESTS[0].id);
+    return undefined;
+  }, [variables]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handlePick = (lat, lon) => {
     const la = round2(lat);
@@ -473,11 +645,33 @@ export default function App() {
     if (tab === "duel" && !pinB) setPickTarget("B");
   };
 
+  const selectPlace = (p) => {
+    setActiveCase(null);
+    setSelectedCell(null);
+    commit({ lat: p.lat, lon: p.lon, variable: variableId }, { k: 1.8 });
+  };
+
+  const chooseVariable = (id) => {
+    if (!id) return;
+    setDraft((d) => ({ ...d, variable: id }));
+    if (params) commit({ variable: id }, { fly: false });
+    if (id !== profile.prefs.variable) update((p) => setPrefs(p, { variable: id }));
+  };
+
+  const chooseDataType = (tid) => {
+    setDataType(tid);
+    const list = variablesFor(tid, variables);
+    if (list.length && !list.some((v) => v.id === variableId)) {
+      const first = interestById(tid)?.first;
+      chooseVariable((list.find((v) => v.id === first) ?? list[0]).id);
+    }
+  };
+
   const openPlace = (place) => {
     setActiveCase(null);
     setSelectedCell(null);
     commit({ variable: worldParams.variable, lat: round2(place.lat), lon: round2(place.lon) });
-    setTab("investigate");
+    setExploreTab("investigate");
   };
 
   const applyDraft = () => {
@@ -494,11 +688,6 @@ export default function App() {
     else if (tab === "duel" && pinB) runDuel(parsed.value, pinB);
   };
 
-  const chooseVariable = (id) => {
-    setDraft((d) => ({ ...d, variable: id }));
-    if (params) commit({ variable: id }, { fly: false });
-  };
-
   const choosePlace = (place) => {
     setActiveCase(null);
     setSelectedCell(null);
@@ -508,7 +697,7 @@ export default function App() {
 
   const openVariable = (id) => {
     commit({ variable: id }, { fly: false });
-    setTab("investigate");
+    setExploreTab("investigate");
   };
 
   const openCase = (c) => {
@@ -532,100 +721,49 @@ export default function App() {
       setParams((prev) => (prev ? { ...prev, variable: c.variable, start: FIRST_YEAR, end: LAST_FULL_YEAR } : prev));
     }
     if (c.tab === "world") setWorldMode(c.mode ?? "survey");
-    setTab(c.tab);
-  };
-
-  const openIntake = ({ variable, lat, lon, own }) => {
-    setModal(null);
-    setActiveCase(null);
-    setTab("investigate");
-    if (own) {
-      setDraft((d) => ({ ...d, variable }));
-      if (params) commit({ variable }, { fly: false });
-      return;
-    }
-    commit({ variable, lat, lon });
-    setFormMsg("");
+    goTool(c.tab);
   };
 
   const openAsk = (s) => {
-    if (s.type === "place") openIntake({ variable: s.variable, lat: s.place.lat, lon: s.place.lon });
-    else chooseVariable(s.variable);
-  };
-
-  const openWatch = (w) => {
-    setActiveCase(null);
-    setSelectedCell(null);
-    commit({ variable: w.variable, lat: w.lat, lon: w.lon });
-    setTab("investigate");
+    if (s.type === "place") {
+      setActiveCase(null);
+      setExploreTab("investigate");
+      commit({ variable: s.variable, lat: s.place.lat, lon: s.place.lon });
+      setFormMsg("");
+    } else chooseVariable(s.variable);
   };
 
   const openEvent = (ev) => {
     setEventId(ev.id);
-    setTab("events");
-    setSelectedCell(null);
+    goTool("events");
     setFocus({ lat: ev.lat, lon: ev.lon, k: 1.5, nonce: Date.now() });
   };
 
   const openEventCase = (ev) => {
     setActiveCase(null);
     commit({ variable: ev.variable, lat: ev.lat, lon: ev.lon });
-    setTab("investigate");
+    setExploreTab("investigate");
   };
 
   const openLedgerRow = (row) => {
     setActiveCase(null);
     if (row.kind === "planet") {
-      setTab("vitals");
+      setExploreTab("vitals");
       return;
     }
     commit({ variable: row.variable, lat: row.lat, lon: row.lon });
-    setTab("investigate");
+    setExploreTab("investigate");
   };
 
-  const placeNameFor = (lat, lon) => nearestPlace(places, lat, lon, 250)?.name ?? formatPlace(lat, lon);
-  const watchItem = params ? { variable: params.variable, lat: params.lat, lon: params.lon, name: placeNameFor(params.lat, params.lon) } : null;
-  const watched = !!watchItem && hasWatch(watch, watchItem);
-  const toggleCurrentWatch = () => watchItem && setWatch((list) => toggleWatch(list, watchItem));
-
-  const openSuggestion = (s) => {
-    if (s.kind === "case") openCase(s.case);
-    else openIntake(s.open);
+  // The case file's ☆ Watch button now saves the place to the profile (max five).
+  const watched = !!params && hasPlace(profile, params.lat, params.lon);
+  const toggleCurrentWatch = () => {
+    if (!params) return;
+    update((p) =>
+      hasPlace(p, params.lat, params.lon) ? removePlace(p, placeId(params.lat, params.lon)) : addPlace(p, { name: placeNameFor(params.lat, params.lon), lat: params.lat, lon: params.lon }),
+    );
   };
-
-  const surprise = () => {
-    const pick = SURPRISES[Math.floor(Math.random() * SURPRISES.length)];
-    openIntake({ variable: pick.variable, lat: pick.lat, lon: pick.lon });
-  };
-
-  /** Save the answers, seed the watchlist from them, then do what the user said they wanted to do first. */
-  const finishIntake = (answers) => {
-    const next = { ...answers, done: true };
-    setProfile(next);
-    setViewPref(null); // let the chosen level of detail decide the starting view again
-    setForYouOpen(true);
-    const picks = suggest(next, { limit: 6 });
-    setWatch((list) => (list.length ? list : picks.filter((s) => s.kind === "place").slice(0, 3).reverse().reduce((acc, s) => addWatch(acc, s.open), [])));
-    setModal(null);
-    if (next.goal === "check") {
-      setTimeout(() => document.getElementById("ask-input")?.focus(), 150);
-      return;
-    }
-    if (next.goal === "learn") {
-      setModal("glossary");
-      return;
-    }
-    const wanted = next.goal === "compare" ? CASES.find((c) => c.tab === "duel") : next.goal === "forecast" ? CASES.find((c) => c.id === "forecast") : null;
-    if (wanted) {
-      openCase(wanted);
-      if (next.goal === "forecast") {
-        setViewPref("detail");
-        setDetailFocus({ id: "forecast", nonce: Date.now() });
-      }
-      return;
-    }
-    if (picks[0]) openSuggestion(picks[0]);
-  };
+  const saveActivePlace = () => activePlace && update((p) => addPlace(p, activePlace));
 
   const swapPlaces = () => {
     if (!pinB || !params) return;
@@ -645,100 +783,232 @@ export default function App() {
     return undefined;
   };
 
-  const pins = [
+  // ---------------------------------------------------------------- drawer slot
+
+  const openDrawer = useCallback((d) => {
+    setDashOpen(false);
+    setDrawer(d);
+  }, []);
+  const closeDrawer = useCallback(() => setDrawer(null), []);
+  const openAccount = () => (drawer?.id === "account" ? closeDrawer() : openDrawer({ id: "account", title: "Account" }));
+  const shell = useMemo(() => ({ openDrawer, closeDrawer, drawerId: drawer?.id ?? null, reducedMotion, page }), [openDrawer, closeDrawer, drawer?.id, reducedMotion, page]);
+
+  const resetAll = () => {
+    Object.values(controllers.current).forEach((c) => c?.abort());
+    try {
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    } catch {
+      /* ignore */
+    }
+    store.reset();
+  };
+
+  // ---------------------------------------------------------------- render pieces
+
+  const pinsFor = (withB) => [
     ...(params ? [{ lat: params.lat, lon: params.lon, color: COLORS.a, label: "A" }] : []),
-    ...(tab === "duel" && pinB ? [{ lat: pinB.lat, lon: pinB.lon, color: COLORS.b, label: "B", phase: 0.5 }] : []),
+    ...(withB && pinB ? [{ lat: pinB.lat, lon: pinB.lon, color: COLORS.b, label: "B", phase: 0.5 }] : []),
   ];
   const busy = trend.loading || sweep.loading || grid.loading || duel.loading || world.loading || vitals.loading || archetypes.loading || ledger.loading;
   const scanStale = !!params && !!grid.data && grid.key !== keys.grid(params, scanCfg);
   const briefingTab = activeCase?.tab;
-  // Essentials are the challenge's required trio: one variable over time at a place, every variable at a place, a region.
-  const tabs = [
-    { id: "investigate", label: "Case file", hint: "one place", core: true },
-    { id: "sweep", label: "Sweep", hint: "all variables", core: true },
-    { id: "scan", label: "Scan", hint: "a region", core: true },
-    { id: "duel", label: "Duel", hint: "two places" },
-    { id: "world", label: "World", hint: places.length ? `${places.length} sites` : "sample sites" },
-    { id: "vitals", label: "Vitals", hint: "the planet" },
-    { id: "ledger", label: "Ledger", hint: "every trend" },
-    { id: "events", label: "Events", hint: "what happened" },
-  ];
-  const renderTab = (t) => (
-    <button
-      key={t.id}
-      type="button"
-      role="tab"
-      id={`tab-${t.id}`}
-      aria-selected={tab === t.id}
-      aria-controls="panel"
-      className="tab"
-      onClick={() => { setTab(t.id); setSelectedCell(null); }}
-    >
-      <b>{t.label}</b>
-      <small>{t.hint}</small>
-    </button>
+  const trendFresh = !!params && trend.key === keys.trend(params);
+  const mainTrend = trendFresh ? trend : params ? { ...EMPTY, loading: true } : EMPTY;
+  const explainData = tab === "investigate" && trendFresh && trend.data ? trend.data : null;
+  const versionWarn = compareVersions(PAGE_VERSION, serverVersion) === "different";
+  const versionText = describeVersion(serverVersion ?? PAGE_VERSION);
+
+  const savedDots = useMemo(
+    () =>
+      profile.places.map((p) => ({
+        id: p.id,
+        name: p.name,
+        lat: p.lat,
+        lon: p.lon,
+        color: COLORS.a,
+        r: 6,
+        ring: activePlace?.id === p.id,
+        tip: `${p.name} · one of your places`,
+        place: p,
+      })),
+    [profile.places, activePlace?.id],
+  );
+  const mainGlobeProps = {
+    pins: pinsFor(false),
+    dots: savedDots,
+    onDotPick: (d) => d.place && selectPlace(d.place),
+    focus,
+    busy: trend.loading,
+    idleSpin: !params && !reducedMotion,
+    onPick: handlePick,
+  };
+  const layerProps = {
+    place: activePlace,
+    variable: variableInfo,
+    places: profile.places,
+    interests: profile.interests,
+    reducedMotion,
+    page,
+    openDrawer,
+    closeDrawer,
+  };
+  const verdictText = trendFresh && trend.data ? trend.data.evidence_trace?.verdict?.label ?? trend.data.grade?.label : trend.loading ? "Checking…" : "";
+
+  const mainPage = (
+    <MainLayersProvider {...layerProps}>
+      <div className="main-page">
+        <h1 className="sr-only" tabIndex={-1} ref={page === "main" ? headingRef : undefined}>Main dashboard</h1>
+
+        {/* Tablet summary strip: the whole strip opens the dashboard drawer. */}
+        <button type="button" className="summary-strip" onClick={() => setDashOpen(true)} aria-expanded={dashOpen} aria-controls="dashboard">
+          <span className="summary-open mono">☰ Dashboard</span>
+          <span className="summary-text">
+            {activePlace ? activePlace.name : "No place chosen"} · {variableInfo?.label ?? variableId}
+            {verdictText && <> · <b>{verdictText}</b></>}
+          </span>
+        </button>
+
+        {/* Mobile place bar: native pickers for place and variable. */}
+        <div className="place-bar">
+          <label className="sr-only" htmlFor="pb-place">Place</label>
+          <select
+            id="pb-place"
+            value={activePlace?.saved ? activePlace.id : activePlace ? "__here" : ""}
+            onChange={(e) => {
+              const p = profile.places.find((x) => x.id === e.target.value);
+              if (p) selectPlace(p);
+            }}
+          >
+            {!activePlace && <option value="">Choose a place</option>}
+            {activePlace && !activePlace.saved && <option value="__here">{activePlace.name} (not saved)</option>}
+            {profile.places.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+          <label className="sr-only" htmlFor="pb-var">Variable</label>
+          <select id="pb-var" value={variableId} onChange={(e) => chooseVariable(e.target.value)} disabled={!variables.length}>
+            {(profile.interests.length ? profile.interests : INTERESTS.map((i) => i.id)).map((tid) => (
+              <optgroup key={tid} label={interestById(tid).label}>
+                {variablesFor(tid, variables).map((v) => <option key={`${tid}-${v.id}`} value={v.id}>{v.label}</option>)}
+              </optgroup>
+            ))}
+            {!variables.some((v) => v.id === variableId) && <option value={variableId}>{variableId}</option>}
+          </select>
+        </div>
+
+        <Dashboard
+          drawerMode={tablet}
+          open={dashOpen}
+          onClose={() => setDashOpen(false)}
+          header={
+            <>
+              <PlaceSwitcher
+                places={profile.places}
+                place={activePlace}
+                onPlace={selectPlace}
+                onSave={saveActivePlace}
+                canSave={profile.places.length < MAX_PLACES}
+                onAdd={() => openDrawer({ id: "account", title: "Account" })}
+              />
+              <DataPicker
+                interests={profile.interests}
+                variables={variables}
+                variablesStatus={variablesStatus}
+                dataType={dataType}
+                variableId={variableId}
+                onDataType={chooseDataType}
+                onVariable={chooseVariable}
+              />
+            </>
+          }
+          footer={
+            <>
+              <button type="button" className="linklike" onClick={() => setModal("about")}>Sources &amp; credits</button>
+              <button type="button" className="linklike" onClick={() => goPage("explore")}>Open Explore ▸</button>
+            </>
+          }
+        >
+          <Slot name="verdict" index={1}>
+            <VerdictSlot
+              place={activePlace}
+              variable={variableInfo}
+              trend={mainTrend}
+              onRetry={() => params && runTrend(params)}
+              onOpenDetail={() => {
+                setViewPref("detail");
+                goTool("investigate");
+              }}
+              openDrawer={openDrawer}
+              closeDrawer={closeDrawer}
+              detailLevel={profile.prefs.detail}
+              onTrendRefreshed={onTrendRefreshed}
+            />
+          </Slot>
+          <Slot name="weather" index={2}><WeatherSlot {...layerProps} /></Slot>
+          <Slot name="forecast" index={3}><ForecastSlot {...layerProps} /></Slot>
+          <Slot name="news" index={4}><NewsSlot {...layerProps} /></Slot>
+        </Dashboard>
+
+        <div className="main-stage">
+          <MainStage {...layerProps} globeProps={mainGlobeProps} overlay={null} />
+        </div>
+      </div>
+    </MainLayersProvider>
   );
 
-  const explainData = tab === "investigate" && params && trend.data && trend.key === keys.trend(params) ? trend.data : null;
+  const onTabKey = (e) => {
+    const ids = EXPLORE_TABS.map((t) => t.id);
+    const i = ids.indexOf(exploreTab);
+    let next = null;
+    if (e.key === "ArrowRight") next = ids[(i + 1) % ids.length];
+    if (e.key === "ArrowLeft") next = ids[(i - 1 + ids.length) % ids.length];
+    if (e.key === "Home") next = ids[0];
+    if (e.key === "End") next = ids[ids.length - 1];
+    if (!next) return;
+    e.preventDefault();
+    goTool(next);
+    requestAnimationFrame(() => document.getElementById(`tab-${next}`)?.focus());
+  };
 
-  return (
-    <ExplainContext.Provider value={explainTerm}>
-    <div className="app">
-      <Starfield key={theme} accentRgb={palette.accentRgb} />
-      <svg width="0" height="0" style={{ position: "absolute" }} aria-hidden="true" focusable="false">
-        <defs>
-          <filter id="ink" x="-5%" y="-5%" width="110%" height="110%">
-            <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="4" result="noise" />
-            <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.7" />
-          </filter>
-        </defs>
-      </svg>
-
-      {booting && <Boot onDone={() => { try { sessionStorage.setItem("td-boot", "1"); } catch { /* storage unavailable */ } setBooting(false); }} />}
-
-      <header className="topbar">
-        <div className="brand">
-          <svg className="brand-mark" viewBox="0 0 48 48" aria-hidden="true">
-            <circle cx="22" cy="22" r="15" fill="none" stroke="var(--accent)" strokeWidth="2.4" />
-            <path d="M11 28 L17 22 L22 25 L32 14" fill="none" stroke="var(--accent)" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
-            <line x1="33" y1="33" x2="44" y2="44" stroke="var(--accent)" strokeWidth="3.4" strokeLinecap="round" />
-          </svg>
-          <div>
-            <h1>Trend <span>Detective</span></h1>
-            <p>EARTH SYSTEM CASE FILES · NASA, NOAA &amp; NSIDC DATA</p>
-          </div>
-        </div>
-        <nav className="nav" aria-label="Main">
-          <button type="button" className="btn btn-sm" onClick={() => setModal("intake")}>✦ Personalise</button>
-          <button type="button" className="btn btn-sm" onClick={() => setModal("cases")}>Case files</button>
-          <button type="button" className="btn btn-sm" onClick={() => askExplainer(null)}>? Explain</button>
-          <button type="button" className="btn btn-sm" onClick={() => setTheme(nextTheme(theme))} title={`Colour theme: ${palette.label}. Click to switch to ${themeOf(nextTheme(theme)).label}.`}>
-            ◐ {palette.label}
-          </button>
-          <button type="button" className="btn btn-sm" onClick={() => setModal("glossary")}>Glossary</button>
-          <button type="button" className="btn btn-sm" onClick={() => setModal("about")}>About</button>
-        </nav>
+  const explorePage = (
+    <div className="explore-page">
+      <header className="explore-head">
+        <h1 tabIndex={-1} ref={page === "explore" ? headingRef : undefined}>Explore</h1>
+        <p className="dim">Advanced tools for digging deeper</p>
       </header>
+      <div className="explore-tabs-wrap">
+        <div className="explore-tabs" role="tablist" aria-label="Explore tools" onKeyDown={onTabKey}>
+          {EXPLORE_TABS.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              role="tab"
+              id={`tab-${t.id}`}
+              aria-selected={exploreTab === t.id}
+              aria-controls="panel"
+              tabIndex={exploreTab === t.id ? 0 : -1}
+              className={`tab${t.divider ? " tab-divided" : ""}`}
+              onClick={() => goTool(t.id)}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
-      <main className={`stage${home ? " home" : ""}`}>
+      <div className="stage">
         <div className="globe-col">
           <Globe
-            key={theme}
-            pins={pins}
+            pins={pinsFor(tab === "duel")}
             cells={cells}
             cellHalf={cellHalf}
             selectedCell={selectedCell}
-            dots={dots}
-            onDotPick={(d) => (d.event ? openEvent(d.event) : d.watch ? openWatch(d.watch) : openPlace(d))}
+            dots={exploreDots}
+            onDotPick={(d) => (d.event ? openEvent(d.event) : openPlace(d))}
             focus={focus}
             modeRequest={modeRequest}
             busy={busy}
-            idleSpin={!params}
+            idleSpin={!params && tab === "world" && !reducedMotion}
             onPick={handlePick}
           >
-            {home && forYouOpen && forYouItems.length > 0 && (
-              <ForYou items={forYouItems} personal={profile.done} onOpen={openSuggestion} onClose={() => setForYouOpen(false)} />
-            )}
             {cells.length > 0 && (
               <ul className="globe-legend mono" aria-label="Map key">
                 <li><i style={{ background: COLORS.up }} /> significant rise</li>
@@ -748,6 +1018,7 @@ export default function App() {
               </ul>
             )}
             {worldFresh && lapse.on && <div className="lapse-year" aria-live="polite">{lapse.year}</div>}
+            {cells.length === 0 && (worldFresh || archFresh) && <GlobeLegend sampleSites />}
             {cells.length === 0 && worldFresh && lapse.on && (
               <ul className="globe-legend mono" aria-label="Map key">
                 <li><i className="round" style={{ background: COLORS.up }} /> above the site's own average</li>
@@ -755,7 +1026,7 @@ export default function App() {
                 <li><i className="round" style={{ background: COLORS.flat }} /> near it · stronger colour = more unusual</li>
               </ul>
             )}
-            {cells.length === 0 && worldFresh && !lapse.on && dots.length > 0 && (
+            {cells.length === 0 && worldFresh && !lapse.on && exploreDots.length > 0 && (
               <ul className="globe-legend mono" aria-label="Map key">
                 <li><i className="round" style={{ background: COLORS.up }} /> rising</li>
                 <li><i className="round" style={{ background: COLORS.down }} /> falling</li>
@@ -775,177 +1046,86 @@ export default function App() {
         </div>
 
         <div className="console" ref={resultsRef}>
-          <div className="tab-groups">
-            <div className="tab-group">
-              <span className="tab-group-label">Essentials</span>
-              <div className="tabs" role="tablist" aria-label="Essential investigations">{tabs.filter((t) => t.core).map(renderTab)}</div>
-            </div>
-            <div className="tab-group">
-              <span className="tab-group-label">Explore more</span>
-              <div className="tabs more" role="tablist" aria-label="More ways to investigate">{tabs.filter((t) => !t.core).map(renderTab)}</div>
-            </div>
-          </div>
+          {tab !== "learn" && (
+            <SetupPanel
+              variables={variables}
+              places={places}
+              draft={draft}
+              onDraft={(patch) => setDraft((d) => ({ ...d, ...patch }))}
+              onVariable={chooseVariable}
+              onApply={applyDraft}
+              onPlace={choosePlace}
+              onAsk={openAsk}
+              disabled={busy || variables.length === 0}
+              message={formMsg}
+            />
+          )}
 
-          <SetupPanel
-            variables={variables}
-            places={places}
-            draft={draft}
-            onDraft={(patch) => setDraft((d) => ({ ...d, ...patch }))}
-            onVariable={chooseVariable}
-            onApply={applyDraft}
-            onPlace={choosePlace}
-            onAsk={openAsk}
-            disabled={busy || variables.length === 0}
-            message={formMsg}
+          {activeCase && briefingTab && tab !== "learn" && <Briefing key={activeCase.id} item={activeCase} onClose={() => setActiveCase(null)} />}
+
+          <ExplorePanel
+            tab={tab}
+            hasPin={!!params}
+            serverDown={variablesStatus === "error"}
+            onRetry={retry}
+            detail={{
+              r: trend,
+              fresh: trendFresh,
+              view,
+              onView: (v) => {
+                setViewPref(v);
+                update((p) => setPrefs(p, { view: v }));
+              },
+              onGo: goTool,
+              onEvent: openEvent,
+              watched,
+              onToggleWatch: toggleCurrentWatch,
+              focusSection: detailFocus,
+              onTrendRefreshed,
+            }}
+            sweep={{ r: sweep, selected: params?.variable, onOpen: openVariable }}
+            scan={{
+              r: grid,
+              cfg: scanCfg,
+              onCfg: setScanCfg,
+              onRun: runScan,
+              stale: scanStale,
+              selected: selectedCell,
+              onSelect: setSelectedCell,
+              onOpenCell: (lat, lon) => {
+                commit({ lat, lon });
+                setExploreTab("investigate");
+              },
+            }}
+            duel={{
+              r: duel,
+              data: duel.data && params && pinB && duel.key === keys.duel(params, pinB) ? duel.data : null,
+              params,
+              pinB,
+              pickTarget,
+              onPickTarget: setPickTarget,
+              onPlaceB: (p) => setPinB({ lat: p.lat, lon: p.lon }),
+              onSwap: swapPlaces,
+              onRun: () => params && pinB && runDuel(params, pinB),
+              caseNames: activeCase?.b ? { a: activeCase.a.name, b: activeCase.b.name } : null,
+            }}
+            world={{ mode: worldMode, onMode: setWorldMode, r: world, archetypes, onOpen: openPlace, lapse, lapseYears: lapseData?.years ?? [], onLapse: setLapse, onChooseK: setArchK }}
+            vitals={{ r: vitals }}
+            ledger={{ r: ledger, onOpen: openLedgerRow }}
+            events={{
+              selectedId: eventId,
+              onSelect: (id) => {
+                setEventId(id);
+                const ev = EVENT_BY_ID[id];
+                if (ev) setFocus({ lat: ev.lat, lon: ev.lon, k: 1.5, nonce: Date.now() });
+              },
+              onOpenCase: openEventCase,
+              onOpenVitals: () => setExploreTab("vitals"),
+            }}
+            learn={{ casesCount: CASES.length, onOpenCases: () => setModal("cases"), onOpenGlossary: () => setModal("glossary"), onExplain: askExplainer, onOpenAbout: () => setModal("about") }}
           />
-
-          {activeCase && briefingTab && <Briefing key={activeCase.id} item={activeCase} onClose={() => setActiveCase(null)} />}
-
-          <div id="panel" role="tabpanel" aria-labelledby={`tab-${tab}`} className="panel-stack">
-            {tab === "investigate" &&
-              (!params ? (
-                trend.error ? (
-                  <ErrorCard message={trend.error} />
-                ) : (
-                  <Home
-                    placeCount={places.length}
-                    profile={profile}
-                    watch={watch}
-                    variables={variables}
-                    onCases={() => setModal("cases")}
-                    onIntake={() => setModal("intake")}
-                    onOpenWatch={openWatch}
-                    onRemoveWatch={(id) => setWatch((list) => removeWatch(list, id))}
-                  />
-                )
-              ) : trend.loading ? (
-                <Loading title="Investigating" />
-              ) : trend.error ? (
-                <ErrorCard message={trend.error} onRetry={retry} />
-              ) : trend.data ? (
-                <CaseFile
-                  key={trend.key}
-                  data={trend.data}
-                  view={view}
-                  onView={setViewPref}
-                  onGo={(t) => { setTab(t); setSelectedCell(null); }}
-                  onEvent={openEvent}
-                  watched={watched}
-                  onToggleWatch={toggleCurrentWatch}
-                  focusSection={detailFocus}
-                />
-              ) : null)}
-
-            {tab === "sweep" &&
-              (!params ? (
-                <PinPrompt label="Sweep" />
-              ) : sweep.loading ? (
-                <Loading title="Sweeping every variable" steps={SWEEP_STEPS} />
-              ) : sweep.error ? (
-                <ErrorCard message={sweep.error} onRetry={retry} />
-              ) : sweep.data ? (
-                <Sweep key={sweep.key} data={sweep.data} selected={params.variable} onOpen={openVariable} />
-              ) : null)}
-
-            {tab === "scan" && (
-              <>
-                <Scan
-                  cfg={scanCfg}
-                  onCfg={setScanCfg}
-                  onRun={runScan}
-                  loading={grid.loading}
-                  hasPin={!!params}
-                  stale={scanStale}
-                  data={grid.data}
-                  selected={selectedCell}
-                  onSelect={setSelectedCell}
-                  onOpenCell={(lat, lon) => { commit({ lat, lon }); setTab("investigate"); }}
-                />
-                {grid.loading && <Loading title="Scanning the region" steps={SCAN_STEPS} />}
-                {grid.error && <ErrorCard message={grid.error} onRetry={runScan} />}
-              </>
-            )}
-
-            {tab === "duel" && (
-              <>
-                <Duel
-                  params={params}
-                  pinB={pinB}
-                  hasPin={!!params}
-                  pickTarget={pickTarget}
-                  onPickTarget={setPickTarget}
-                  onPlaceB={(p) => setPinB({ lat: p.lat, lon: p.lon })}
-                  onSwap={swapPlaces}
-                  onRun={() => params && pinB && runDuel(params, pinB)}
-                  data={duel.data && params && pinB && duel.key === keys.duel(params, pinB) ? duel.data : null}
-                  loading={duel.loading}
-                  caseNames={activeCase?.b ? { a: activeCase.a.name, b: activeCase.b.name } : null}
-                />
-                {duel.loading && <Loading title="Comparing two places" steps={DUEL_STEPS} />}
-                {duel.error && <ErrorCard message={duel.error} onRetry={retry} />}
-              </>
-            )}
-
-            {tab === "world" && (
-              <>
-                <div className="seg world-switch" role="group" aria-label="World view">
-                  <button type="button" className={worldMode === "survey" ? "on" : ""} onClick={() => setWorldMode("survey")}>One variable</button>
-                  <button type="button" className={worldMode === "archetypes" ? "on" : ""} onClick={() => setWorldMode("archetypes")}>All variables · archetypes</button>
-                </div>
-                {worldMode === "survey" &&
-                  (world.loading ? (
-                    <Loading title="Surveying the world" steps={WORLD_STEPS} />
-                  ) : world.error ? (
-                    <ErrorCard message={world.error} onRetry={retry} />
-                  ) : world.data ? (
-                    <World key={world.key} data={world.data} onOpen={openPlace} lapse={lapse} lapseYears={lapseData?.years ?? []} onLapse={setLapse} />
-                  ) : null)}
-                {worldMode === "archetypes" &&
-                  (archetypes.loading ? (
-                    <Loading title="Finding trend archetypes" steps={ARCH_STEPS} />
-                  ) : archetypes.error ? (
-                    <ErrorCard message={archetypes.error} onRetry={retry} />
-                  ) : archetypes.data?.ok ? (
-                    <Archetypes data={archetypes.data} onChooseK={setArchK} onOpen={openPlace} />
-                  ) : archetypes.data ? (
-                    <ErrorCard message={archetypes.data.message} />
-                  ) : null)}
-              </>
-            )}
-
-            {tab === "vitals" &&
-              (vitals.loading ? (
-                <Loading title="Reading the planet's vital signs" steps={VITALS_STEPS} />
-              ) : vitals.error ? (
-                <ErrorCard message={vitals.error} onRetry={retry} />
-              ) : vitals.data ? (
-                <Vitals key={vitals.key} data={vitals.data} />
-              ) : null)}
-
-            {tab === "ledger" &&
-              (ledger.loading ? (
-                <Loading title="Building the trend ledger" steps={LEDGER_STEPS} />
-              ) : ledger.error ? (
-                <ErrorCard message={ledger.error} onRetry={retry} />
-              ) : ledger.data ? (
-                <Ledger key={ledger.key} data={ledger.data} onOpen={openLedgerRow} />
-              ) : null)}
-
-            {tab === "events" && (
-              <Events
-                selectedId={eventId}
-                onSelect={(id) => {
-                  setEventId(id);
-                  const ev = EVENT_BY_ID[id];
-                  if (ev) setFocus({ lat: ev.lat, lon: ev.lon, k: 1.5, nonce: Date.now() });
-                }}
-                onOpenCase={openEventCase}
-                onOpenVitals={() => setTab("vitals")}
-              />
-            )}
-          </div>
         </div>
-      </main>
+      </div>
 
       <footer className="footer">
         <p>
@@ -953,25 +1133,90 @@ export default function App() {
           NOAA GML, CPC and NCEI; NSIDC Sea Ice Index. Independent project, not endorsed by NASA.{" "}
           <button type="button" onClick={() => setModal("about")}>About & credits</button>
         </p>
-        <p className="version">
-          Version {describeVersion(serverVersion ?? PAGE_VERSION)}
-          {compareVersions(PAGE_VERSION, serverVersion) === "different" && (
-            <span className="version-warn" role="alert">
-              {" "}· This page ({describeVersion(PAGE_VERSION)}) and the analysis server ({describeVersion(serverVersion)}) are different versions. Close this
-              window, double-click STOP.bat, then START.bat.
-            </span>
-          )}
-        </p>
+        <p className="version">Version {versionText}</p>
       </footer>
-
-      {modal === "cases" && <CasesDialog variables={variables} onOpen={openCase} onClose={() => setModal(null)} />}
-      {modal === "intake" && <IntakeWizard initial={profile} onFinish={finishIntake} onSurprise={surprise} onClose={() => setModal(null)} />}
-      {modal === "glossary" && <GlossaryDialog onClose={() => setModal(null)} onExplain={(id) => { setModal(null); explainTerm(id); }} />}
-      {modal === "about" && <AboutDialog onClose={() => setModal(null)} />}
-      {explainer.started && (
-        <Explainer request={explainer.request} data={explainData} open={explainer.open} onClose={() => setExplainer((s) => ({ ...s, open: false }))} />
-      )}
     </div>
+  );
+
+  return (
+    <ExplainContext.Provider value={explainTerm}>
+      <ShellContext.Provider value={shell}>
+        <div className={`app page-${page}`}>
+          <Starfield accentRgb={PALETTE.accentRgb} />
+          <svg width="0" height="0" style={{ position: "absolute" }} aria-hidden="true" focusable="false">
+            <defs>
+              <filter id="ink" x="-5%" y="-5%" width="110%" height="110%">
+                <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="4" result="noise" />
+                <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.7" />
+              </filter>
+            </defs>
+          </svg>
+
+          <nav className="skip-links" aria-label="Skip links">
+            {page === "main" ? (
+              <>
+                <button type="button" onClick={() => focusInside("globe-stage")}>Skip to globe</button>
+                <button type="button" onClick={() => focusInside("timeline")}>Skip to timeline</button>
+              </>
+            ) : (
+              <button type="button" onClick={() => focusInside("panel")}>Skip to results</button>
+            )}
+          </nav>
+
+          <TopBar page={page} onPage={goPage} accountLabel={profile.account?.label} accountOpen={drawer?.id === "account"} onAccount={openAccount} />
+          {versionWarn && (
+            <div className="shell-strip warn" role="alert">
+              This page ({describeVersion(PAGE_VERSION)}) and the analysis server ({describeVersion(serverVersion)}) are different versions. Close this window,
+              double-click STOP.bat, then START.bat.
+            </div>
+          )}
+          <StorageNotice status={store.status} migrated={store.migrated} onDismiss={store.dismissNotice} />
+          <p className="sr-only" aria-live="polite">{announce}</p>
+
+          <main key={page} className={`page ${flip === "forward" ? "page-flip-forward" : flip === "back" ? "page-flip-back" : "page-fade"}`}>
+            {page === "main" ? mainPage : explorePage}
+          </main>
+
+          {drawer && (
+            <Drawer id={drawer.id} title={drawer.title} eyebrow={drawer.eyebrow} onClose={closeDrawer}>
+              {drawer.id === "account" ? (
+                <AccountPanel
+                  profile={profile}
+                  onChange={update}
+                  places={places}
+                  placesStatus={placesStatus}
+                  storageStatus={store.status}
+                  onReset={resetAll}
+                  onAbout={() => {
+                    closeDrawer();
+                    setModal("about");
+                  }}
+                  version={versionText}
+                />
+              ) : (
+                drawer.render?.()
+              )}
+            </Drawer>
+          )}
+
+          {modal === "cases" && <CasesDialog variables={variables} onOpen={openCase} onClose={() => setModal(null)} />}
+          {modal === "glossary" && <GlossaryDialog onClose={() => setModal(null)} onExplain={(id) => { setModal(null); explainTerm(id); }} />}
+          {modal === "about" && <AboutDialog onClose={() => setModal(null)} />}
+          {explainer.started && (
+            <Explainer request={explainer.request} data={explainData} open={explainer.open} onClose={() => setExplainer((s) => ({ ...s, open: false }))} />
+          )}
+        </div>
+      </ShellContext.Provider>
     </ExplainContext.Provider>
   );
 }
+
+/** Move keyboard focus into a region: its first focusable element, else the region itself. */
+function focusInside(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const target = el.querySelector('[tabindex="0"], button, [href], input, select, canvas[tabindex]') ?? el;
+  if (!target.hasAttribute("tabindex") && target === el) el.setAttribute("tabindex", "-1");
+  target.focus();
+}
+

@@ -138,3 +138,43 @@ def test_a_gap_in_the_record_uses_only_the_unbroken_recent_run():
     values = _trend_series(n=len(years))
     result = run_forecast_lab(years, values)
     assert result["ok"] and result["n_years"] == 31 and result["history"][0]["year"] == 1995
+
+
+# ---- review item B3: the coverage check never uses data from its own test period ---------------------------------
+
+
+def test_coverage_model_and_calibration_ignore_the_test_period():
+    rng = random.Random(22)
+    values = [10 + 0.03 * i + rng.gauss(0, 1) for i in range(45)]
+    result = run_forecast_lab(YEARS, values)
+    cov = result["coverage"]
+    cut_year = cov["calibration_end_year"]
+    assert YEARS[0] < cut_year < YEARS[-1] and cov["model"] in {m["id"] for m in MODELS}
+    # Rewrite every value after the calibration year: the model chosen for the check must not change.
+    k = YEARS.index(cut_year)
+    for shift in (0.5, -0.5):
+        changed = values[: k + 1] + [v + shift * (i + 1) for i, v in enumerate(values[k + 1 :])]
+        assert run_forecast_lab(YEARS, changed)["coverage"]["model"] == cov["model"]
+
+
+def test_coverage_model_is_the_lowest_error_model_on_rows_known_by_the_cut():
+    from statistics import mean
+
+    rng = random.Random(5)
+    values = [10 + 0.05 * i + rng.gauss(0, 0.5) for i in range(45)]
+    result = run_forecast_lab(YEARS, values)
+    k = YEARS.index(result["coverage"]["calibration_end_year"])
+    origins = range(result["min_train"], len(values))
+
+    def mae_known(fn):
+        errs = [abs(fn(values[:o], 5)[h - 1] - values[o + h - 1]) for o in origins for h in range(1, 6) if o + h - 1 <= k]
+        return mean(errs)
+
+    expected = min(MODELS, key=lambda m: mae_known(m["fn"]))["id"]
+    assert result["coverage"]["model"] == expected
+
+
+def test_replay_bands_are_labelled_in_sample():
+    result = run_forecast_lab(YEARS, _trend_series())
+    assert result["replays"] and all(r["band_basis"] == "in_sample" for r in result["replays"])
+    assert "out-of-sample" in result["replay_note"]

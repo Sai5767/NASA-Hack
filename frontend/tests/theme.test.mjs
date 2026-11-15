@@ -1,39 +1,47 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
-import { DEFAULT_THEME, THEMES, THEME_IDS, nextTheme, themeOf } from "../src/lib/theme.js";
+import { DATA_COLORS, DEFAULT_THEME, THEMES, THEME_IDS, nextTheme, savedTheme, themeOf } from "../src/lib/theme.js";
 
-test("the default theme exists and unknown ids fall back to it", () => {
-  assert.ok(THEMES[DEFAULT_THEME]);
-  assert.equal(themeOf("nope"), THEMES[DEFAULT_THEME]);
-  assert.equal(themeOf(undefined), THEMES[DEFAULT_THEME]);
+const css = readFileSync(new URL("../src/styles/theme.css", import.meta.url), "utf8");
+const token = (name) => css.match(new RegExp(`--${name}:\\s*([^;]+);`))?.[1].trim();
+
+test("there is one theme, mission, and unknown or retired ids fall back to it", () => {
+  assert.equal(DEFAULT_THEME, "mission");
+  assert.deepEqual(THEME_IDS, ["mission"]);
+  for (const id of ["nope", undefined, "nebula", "classic"]) assert.equal(themeOf(id), THEMES.mission);
+  assert.equal(nextTheme("mission"), "mission");
+  assert.equal(nextTheme("nope"), "mission");
+  assert.equal(savedTheme(), "mission");
 });
 
-test("switching cycles through every theme and wraps around", () => {
-  let id = THEME_IDS[0];
-  const seen = [];
-  for (let i = 0; i < THEME_IDS.length; i += 1) {
-    seen.push(id);
-    id = nextTheme(id);
+test("the JavaScript palette matches the CSS tokens in theme.css", () => {
+  const t = THEMES.mission;
+  assert.equal(t.colors.a, token("accent"));
+  assert.equal(t.colors.b, token("live"));
+  assert.equal(t.accentRgb, token("accent-rgb").replace(/\s/g, ""));
+  assert.equal(t.globe.atmosphere, token("globe-halo-rgb").replace(/\s/g, ""));
+  assert.equal(t.globe.oceanA, token("globe-ocean-lit"));
+  assert.equal(t.globe.oceanB, token("globe-ocean-dark"));
+  assert.equal(t.globe.flatOcean, token("globe-flat-ocean"));
+  assert.equal(t.globe.land, token("globe-land"));
+  assert.equal(DATA_COLORS.up, token("up"));
+  assert.equal(DATA_COLORS.down, token("down"));
+  assert.equal(DATA_COLORS.flat, token("flat"));
+  assert.equal(DATA_COLORS.failed, token("missing-fg"));
+});
+
+test("legacy token names the existing CSS uses are still defined", () => {
+  for (const name of ["bg-0", "bg-1", "bg-2", "panel", "panel-solid", "panel-raised", "line", "line-strong", "text", "text-dim", "text-faint", "accent", "accent-rgb", "accent-dim", "accent-ink", "ink-rgb", "glow-rgb", "up", "down", "flat", "amber", "ok", "font-display", "font-mono", "radius", "ease", "pin-a", "pin-b"]) {
+    assert.ok(token(name), `--${name} is missing`);
   }
-  assert.deepEqual(seen, THEME_IDS);
-  assert.equal(id, THEME_IDS[0]);
-  assert.equal(nextTheme("nope"), THEME_IDS[0]);
+  assert.ok(!css.includes('[data-theme="classic"]'), "the retired classic theme block is gone");
 });
 
-test("every theme defines the same colours, in a usable format", () => {
-  const keys = (o) => Object.keys(o).sort().join();
-  const ref = THEMES[DEFAULT_THEME];
-  for (const [id, t] of Object.entries(THEMES)) {
-    assert.equal(keys(t), keys(ref), `${id}: top-level keys differ`);
-    assert.equal(keys(t.colors), keys(ref.colors));
-    assert.equal(keys(t.globe), keys(ref.globe));
-    assert.match(t.colors.a, /^#[0-9a-f]{6}$/i);
-    assert.match(t.colors.b, /^#[0-9a-f]{6}$/i);
-    assert.match(t.accentRgb, /^\d+,\d+,\d+$/);
-    assert.equal(t.globe.atmosphere, t.accentRgb, `${id}: the globe's glow should match the accent`);
-  }
-});
-
-test("the two pin colours are different in every theme", () => {
-  for (const t of Object.values(THEMES)) assert.notEqual(t.colors.a.toLowerCase(), t.colors.b.toLowerCase());
+test("colours are usable formats and the two pin colours differ", () => {
+  const t = THEMES.mission;
+  assert.match(t.colors.a, /^#[0-9a-f]{6}$/i);
+  assert.match(t.colors.b, /^#[0-9a-f]{6}$/i);
+  assert.match(t.accentRgb, /^\d+,\d+,\d+$/);
+  assert.notEqual(t.colors.a.toLowerCase(), t.colors.b.toLowerCase());
 });

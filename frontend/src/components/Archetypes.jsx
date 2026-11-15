@@ -63,6 +63,9 @@ export default function Archetypes({ data, onChooseK, onOpen }) {
             </button>
           ))}
         </div>
+        {data.requested_k != null && data.requested_k !== data.k && (
+          <p className="small dim" role="status">You asked for {data.requested_k} archetypes; the clustering returned {data.k} non-empty groups.</p>
+        )}
         <p className="faint small">★ = best separated. {quality.structure === "weak" ? "Structure is weak: treat these groups as a convenience, not as real climate regimes. " : ""}{data.caveat}</p>
       </header>
 

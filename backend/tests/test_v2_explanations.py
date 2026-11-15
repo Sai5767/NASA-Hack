@@ -19,6 +19,8 @@ client = TestClient(app)
 @pytest.fixture(autouse=True)
 def _clean_explanation_state(monkeypatch):
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    # A placeholder, not a real model: no model name is built into the app, so tests that go live must name one.
+    monkeypatch.setenv("OPENAI_EXPLANATION_MODEL", "owner-chosen-model")
     exp_module.clear_explanation_state()
     yield
     exp_module.clear_explanation_state()
@@ -279,3 +281,228 @@ def test_explanations_rate_limiting_and_upstream_quota_fallback(fake_power, monk
     assert out2["status"] == "rate_limited"
     assert out2["fallback"] is True
     assert out2["retry_after_seconds"] >= 1
+
+
+# --------------------------------------------------------------------------- Phase 0 item A and B11
+
+
+def _ok_ai_payload(citation_url: str = "https://www.ipcc.ch/report/ar6/wg1/") -> dict:
+    return {
+        "summary": "Warming here matches wider greenhouse warming.",
+        "drivers": [
+            {
+                "title": "Greenhouse forcing",
+                "explanation": "More greenhouse gas traps more heat near the surface.",
+                "evidence_type": "physical_mechanism",
+                "confidence": "plausible",
+                "citation_ids": ["c1"],
+            }
+        ],
+        "citations": [{"id": "c1", "title": "IPCC AR6 WG1", "url": citation_url, "source_label": "IPCC"}],
+    }
+
+
+def test_request_uses_the_current_web_search_tool_with_the_domain_filter(fake_power, monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-fake-key-for-offline-unit-test")
+    monkeypatch.setenv("OPENAI_EXPLANATION_MODEL", "owner-chosen-low-cost-model")
+    monkeypatch.setenv("OPENAI_WEB_SEARCH_CONTEXT_SIZE", "medium")
+    seen = []
+
+    async def caller(body, cfg):
+        seen.append(body)
+        return {"output_text": json.dumps(_ok_ai_payload())}
+
+    req = exp_module.ExplanationRequest(variable="T2M", lat=42.0, lon=-93.6, start_year=1981, end_year=2024)
+    out = asyncio.run(exp_module.generate_explanation(req, client_ip="10.9.9.9", openai_caller=caller))
+    assert out["status"] == "ok"
+
+    body = seen[0]
+    assert body["model"] == "owner-chosen-low-cost-model"  # from OPENAI_EXPLANATION_MODEL, never built in
+    assert "web_search_preview" not in json.dumps(body)
+    (tool,) = body["tools"]
+    assert tool["type"] == "web_search"
+    assert tool["search_context_size"] == "medium"
+    domains = tool["filters"]["allowed_domains"]
+    assert domains == exp_module.WEB_SEARCH_ALLOWED_DOMAINS
+    assert all("://" not in d and "/" not in d for d in domains)  # bare domains, as the filter expects
+    # Every allow-listed citation domain is reachable through the filter (subdomains are included by their parent)...
+    for allowed in exp_module.ALLOWED_SCIENCE_DOMAINS:
+        assert any(allowed == d or allowed.endswith("." + d) for d in domains), allowed
+    # ...and nothing outside the allow-list is in it.
+    assert set(domains) <= set(exp_module.ALLOWED_SCIENCE_DOMAINS)
+    assert len(domains) <= 100
+    assert body["include"] == ["web_search_call.action.sources"]
+    assert body["max_tool_calls"] == 3 and body["max_output_tokens"] >= 300
+    assert body["text"] == {"format": {"type": "json_object"}}
+    assert body["store"] is False
+
+
+def test_web_search_can_be_switched_off_and_tool_budget_omitted(fake_power, monkeypatch):
+    from app.resilience import load_config
+
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-fake-key-for-offline-unit-test")
+    monkeypatch.setenv("OPENAI_WEB_SEARCH", "0")
+    body = exp_module.build_openai_request_body(load_config(), {"task": "x"})
+    assert "tools" not in body and "include" not in body and "max_tool_calls" not in body
+
+    monkeypatch.setenv("OPENAI_WEB_SEARCH", "1")
+    monkeypatch.setenv("OPENAI_MAX_TOOL_CALLS", "0")
+    monkeypatch.setenv("OPENAI_WEB_SEARCH_CONTEXT_SIZE", "enormous")  # invalid -> the low-cost default
+    body = exp_module.build_openai_request_body(load_config(), {"task": "x"})
+    assert "max_tool_calls" not in body
+    assert body["tools"][0]["search_context_size"] == "low"
+
+
+def test_no_model_name_is_built_in_so_a_key_without_a_model_falls_back(fake_power, monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-fake-key-for-offline-unit-test")
+    monkeypatch.delenv("OPENAI_EXPLANATION_MODEL", raising=False)
+    from app.resilience import load_config
+
+    assert load_config().openai_explanation_model is None
+    sig = make_case_signature("T2M", 70.0, -150.0, 1981, 2024)
+    res = client.post("/api/explanations", json={"case_signature": sig})
+    body = res.json()
+    assert res.status_code == 200
+    assert body["status"] == "no_key" and body["fallback_reason"] == "missing_model"
+    assert body["drivers"]  # curated context still shown
+    health = client.get("/api/health/details").json()["features"]["ai_explanations"]
+    assert health["configured"] is False and health["key_present"] is True and health["model"] is None
+    assert health["status"] == "fallback_only"
+
+
+def test_real_http_path_sends_the_request_and_reads_a_gzip_reply(fake_power, monkeypatch):
+    # The full live path (request_with_resilience -> OpenAI) against an in-memory server that answers with gzip, as OpenAI
+    # does. Before the A1 fix every such reply became fallback_reason "http_error".
+    import gzip
+
+    import httpx
+
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-fake-key-for-offline-unit-test")
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["auth"] = request.headers.get("authorization")
+        captured["body"] = json.loads(request.content)
+        reply = {
+            "status": "completed",
+            "output": [
+                {
+                    "type": "web_search_call",
+                    "action": {"type": "search", "sources": [{"type": "url", "url": "https://www.ipcc.ch/report/ar6/wg1/"}]},
+                },
+                {"type": "message", "content": [{"type": "output_text", "text": json.dumps(_ok_ai_payload()), "annotations": []}]},
+            ],
+        }
+        return httpx.Response(
+            200, headers={"content-encoding": "gzip", "content-type": "application/json"}, content=gzip.compress(json.dumps(reply).encode())
+        )
+
+    real = httpx.AsyncClient
+    monkeypatch.setattr("app.resilience.httpx.AsyncClient", lambda *a, **kw: real(*a, transport=httpx.MockTransport(handler), **kw))
+    req = exp_module.ExplanationRequest(variable="T2M", lat=42.0, lon=-93.6, start_year=1981, end_year=2024)
+    out = asyncio.run(exp_module.generate_explanation(req, client_ip="10.9.9.8"))
+    assert out["status"] == "ok", out.get("fallback_reason")
+    assert captured["auth"] == "Bearer sk-test-fake-key-for-offline-unit-test"  # server-side only...
+    assert "sk-test-fake-key" not in json.dumps(out)  # ...and never in the response
+    assert captured["body"]["tools"][0]["type"] == "web_search"
+
+
+def test_web_search_sources_count_as_provenance_but_are_not_listed_as_citations():
+    page = "https://www.ipcc.ch/report/ar6/wg1/chapter/chapter-11/"
+    api_json = {
+        "output": [
+            {"type": "web_search_call", "action": {"sources": [{"url": page}, {"url": "https://example.com/blog"}]}},
+            {"type": "message", "content": [{"type": "output_text", "text": json.dumps(_ok_ai_payload(page))}]},
+        ]
+    }
+    text, anns = exp_module._extract_responses_api_content(api_json)
+    out = exp_module.validate_and_normalize_ai_output(text, anns, trusted_urls=set())
+    assert [c["url"] for c in out["citations"]] == [page]  # the blog source is neither cited nor added
+
+
+def test_an_incomplete_response_is_not_used():
+    with pytest.raises(ValueError, match="incomplete"):
+        exp_module._extract_responses_api_content({"status": "incomplete", "output_text": "{\"summary\": \"cut"})
+
+
+def test_citations_are_deduplicated_and_never_outlive_their_drivers():
+    # B11: "?utm_source=openai" and the plain link are one citation; citations of drivers beyond the first four are dropped.
+    drivers = [
+        {
+            "title": f"Driver {i}",
+            "explanation": "A hedged physical explanation.",
+            "evidence_type": "physical_mechanism",
+            "confidence": "plausible",
+            "citation_ids": [f"c{i}"] + (["dup"] if i == 0 else []),
+        }
+        for i in range(5)
+    ]
+    citations = [
+        {"id": f"c{i}", "title": f"NASA page {i}", "url": f"https://www.nasa.gov/page-{i}", "source_label": "NASA"}
+        for i in range(5)
+    ]
+    citations.append({"id": "dup", "title": "Same page", "url": "https://www.nasa.gov/page-0?utm_source=openai", "source_label": "NASA"})
+    out = exp_module.validate_and_normalize_ai_output({"summary": "Context.", "drivers": drivers, "citations": citations})
+    assert len(out["drivers"]) == 4
+    urls = [c["url"] for c in out["citations"]]
+    assert len(urls) == 4 and "https://www.nasa.gov/page-4" not in urls
+    assert out["drivers"][0]["citation_ids"] == ["c0"]  # the duplicate id resolves to the first citation
+
+
+def test_tiny_slopes_keep_significant_digits_in_measured_facts(fake_power):
+    from app import analysis
+
+    trend = asyncio.run(analysis.analyze_point("T2M", 70.0, -150.0, 1981, 2024, detail=True))
+    trend["stats"]["slope_per_decade"] = 0.0000123456
+    trend["stats"]["p_value"] = 3.2e-9
+    facts = exp_module._build_measured_facts(trend)
+    assert facts["slope_per_decade"] == pytest.approx(1.235e-05)
+    assert facts["p_value"] == pytest.approx(3.2e-9)
+
+
+def test_a_case_with_no_curated_literature_keeps_the_callers_status(fake_power):
+    # B11: the dead "no_evidence if status == ok" branch is gone; a no-key request says no_key even with no curated match.
+    from app import analysis
+
+    trend = asyncio.run(analysis.analyze_point("PS", 42.0, -93.6, 1981, 2024, detail=True))
+    trend["stats"]["significant"], trend["stats"]["sign"] = True, "up"
+    out = exp_module._build_curated_fallback(trend, "sig", status="no_key", fallback_reason="missing_api_key")
+    if out["drivers"]:
+        pytest.skip("PS has curated literature in reasons.py; the no-match branch is not reachable for it")
+    assert out["status"] == "no_key" and out["fallback_reason"] == "missing_api_key"
+    assert out["retry_after_seconds"] is None
+
+
+def test_cached_answers_are_served_without_spending_rate_limit_or_calling_openai(fake_power, monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-fake-key-for-offline-unit-test")
+    monkeypatch.setenv("EXPLANATION_RATE_LIMIT_MAX", "1")
+    calls = []
+
+    async def caller(body, cfg):
+        calls.append(1)
+        return {"output_text": json.dumps(_ok_ai_payload())}
+
+    req = exp_module.ExplanationRequest(variable="T2M", lat=42.0, lon=-93.6, start_year=1981, end_year=2024, question="Why?")
+    for _ in range(3):
+        out = asyncio.run(exp_module.generate_explanation(req, client_ip="10.7.7.7", openai_caller=caller))
+        assert out["status"] == "ok"
+    assert len(calls) == 1
+    # The same question, differently spaced and cased, is the same cache entry
+    again = exp_module.ExplanationRequest(variable="T2M", lat=42.0, lon=-93.6, start_year=1981, end_year=2024, question="  WHY? ")
+    assert asyncio.run(exp_module.generate_explanation(again, client_ip="10.7.7.7", openai_caller=caller))["cached"] is True
+
+
+def test_explanation_rate_limit_uses_the_trusted_visitor_address(fake_power, monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-fake-key-for-offline-unit-test")
+    monkeypatch.setenv("EXPLANATION_RATE_LIMIT_MAX", "1")
+    monkeypatch.setenv("TD_TRUSTED_PROXY_HOPS", "1")
+    seen = []
+
+    async def fake_generate(payload, *, client_ip="anonymous", openai_caller=None):
+        seen.append(client_ip)
+        return {"status": "ok"}
+
+    monkeypatch.setattr("app.main.generate_explanation", fake_generate)
+    sig = make_case_signature("T2M", 42.0, -93.6, 1981, 2024)
+    client.post("/api/explanations", json={"case_signature": sig}, headers={"X-Forwarded-For": "9.9.9.9, 198.51.100.20:5555"})
+    assert seen == ["198.51.100.20"]

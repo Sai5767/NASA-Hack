@@ -81,3 +81,49 @@ def test_invalid_inputs_are_rejected_before_any_network_call():
     assert client.get("/api/trend", params=short).status_code == 400
     assert client.get("/api/sweep", params={"lat": 0, "lon": 0, "start_year": 1970, "end_year": 2020}).status_code == 400
     assert client.get("/api/grid", params={"variable": "T2M", "lat": 0, "lon": 0, "n": 9}).status_code == 422
+
+
+
+def test_default_end_year_follows_todays_date_not_the_import_date(fake_power, monkeypatch):
+    # A12: Query(date.today().year - 1) froze the default when the module was imported (a server running over New Year
+    # kept last year's default). The default is now resolved on every request.
+    import datetime as real_datetime
+
+    from app import main
+
+    class FakeDate(real_datetime.date):
+        @classmethod
+        def today(cls):
+            return real_datetime.date(2031, 3, 1)
+
+    monkeypatch.setattr(main, "date", FakeDate)
+    body = client.get("/api/trend", params={"variable": "T2M", "lat": 42.0, "lon": -93.6}).json()
+    assert body["period"]["end_year"] == 2030
+    frames = client.get("/api/monthly-frames", params={"variable": "T2M", "lat": 42.0, "lon": -93.6, "n": 1}).json()
+    assert frames["period"]["start_year"] == 2028 and frames["period"]["end_year"] == 2030
+
+
+def test_a_flat_row_is_never_counted_as_fdr_significant(monkeypatch):
+    # Agent 0B's B1 rule: Sen's slope 0 means not significant. BH runs on p-values alone, so main.py also requires
+    # `significant` before setting significant_fdr (sweep, grid, world).
+    from app import main
+
+    async def fake_many(variables, lat, lon, start, end, detail=True):
+        out = {}
+        for v in variables:
+            res = await main.analyze_point(v, lat, lon, start, end, detail=True)
+            res["stats"]["significant"] = False  # e.g. heavy ties: p < 0.05 but slope exactly 0
+            res["stats"]["p_value"] = 0.0001
+            out[v] = res
+        return out
+
+    async def fetch(parameters, lat, lon, start, end):
+        from tests.conftest import make_monthly
+
+        return {p: make_monthly(start, end, trend_per_year=0.08, noise_sd=0.2, seed=5) for p in parameters}
+
+    monkeypatch.setattr("app.analysis.fetch_monthly_multi", fetch)
+    monkeypatch.setattr(main, "analyze_many", fake_many)
+    body = client.get("/api/sweep", params={"lat": 42.0, "lon": -93.6, **PERIOD}).json()
+    assert body["counts"]["significant_fdr"] == 0
+    assert all(r["significant_fdr"] is False for r in body["rows"] if r["ok"])

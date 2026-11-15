@@ -236,3 +236,108 @@ def test_monthly_forecast_clamps_rainfall_and_cloud_bounds():
     if ev["eligible"]:
         for fc in ev["forecasts"]:
             assert 0.0 <= fc["lo"] <= fc["value"] <= fc["hi"] <= 100.0
+
+
+# --------------------------------------------------------------------------- Phase 0 repair tests (A2, A5, A10, A11)
+
+CALIBRATION_KEYS = {
+    "nominal_coverage",
+    "empirical_coverage",
+    "min_required_coverage",
+    "n_test_origins",
+    "n_test_pairs",
+    "interval_half_width_by_horizon",
+    "passed",
+}
+
+
+def test_cells_that_end_a_month_early_never_put_different_months_under_one_frame_label(monkeypatch):
+    # A2 (repro a_repro_monthly.py): the northern row lacks the final month. Before the fix the frame labelled "2025-01"
+    # held that row's 2024-12 forecast. Now every cell is trimmed to the common last month first.
+    async def fetch(parameters, lat, lon, start, end):
+        s = make_monthly(start, end, trend_per_year=0.06, noise_sd=0.5, seed=int(abs(lat * 100 + lon)) % 1000)
+        if lat > 33.45:
+            s[f"{end}12"] = None
+        return {p: s for p in parameters}
+
+    monkeypatch.setattr("app.analysis.fetch_monthly_multi", fetch)
+    res = client.get(
+        "/api/monthly-forecast",
+        params={"variable": "T2M", "lat": 33.45, "lon": -112.07, "start_year": 1981, "end_year": 2024, "n": 3, "size": 2.0},
+    )
+    body = res.json()
+    assert res.status_code == 200 and body["eligible"] is True, body.get("reason")
+    assert body["alignment"] == {"common_end_month": "2024-11", "cells_trimmed_to_common_end": 6}
+    labels = [f["month"] for f in body["frames"]]
+    assert labels == ["2024-12", "2025-01", "2025-02"]
+    for cell in body["cells"]:
+        assert [fc["month"] for fc in cell["forecasts"]] == labels
+    assert body["training_range"]["end_month"] == "2024-11"
+
+
+def test_monthly_forecast_runs_model_fitting_off_the_event_loop(fake_power, monkeypatch):
+    # A5: the backtests are CPU work; they must run in a worker thread so other requests are served meanwhile.
+    import asyncio as _asyncio
+
+    from app import monthly
+
+    used = []
+    real_to_thread = _asyncio.to_thread
+
+    async def spy(fn, *args, **kwargs):
+        used.append(fn.__name__)
+        return await real_to_thread(fn, *args, **kwargs)
+
+    monkeypatch.setattr(monthly.asyncio, "to_thread", spy)
+    out = _asyncio.run(monthly.build_monthly_forecast("T2M", 33.45, -112.07, 1981, 2024, horizons=3, n=2, size=2.0))
+    assert out["eligible"] is True
+    assert used == ["_evaluate_all"]
+
+
+def test_calibration_has_one_shape_in_every_branch():
+    # A10: early exits used {"n_test": 0} while scored ones used other keys.
+    ym_short = [(yr, mo) for yr in range(2015, 2020) for mo in range(1, 13)]
+    short = evaluate_monthly_series(ym_short, [float(i % 12) for i in range(len(ym_short))], "T2M", horizons=2)
+    assert short["reason_code"] == "insufficient_history"
+    assert set(short["calibration"]) == CALIBRATION_KEYS
+    assert short["calibration"]["interval_half_width_by_horizon"] == [None, None]
+
+    ym = [(yr, mo) for yr in range(2000, 2025) for mo in range(1, 13)]
+    rng = random.Random(3)
+    vals = [10 + 0.01 * i + 8 * math.sin(2 * math.pi * (mo - 1) / 12) + rng.gauss(0, 0.4) for i, (_, mo) in enumerate(ym)]
+    scored = evaluate_monthly_series(ym, vals, "T2M", horizons=3)
+    cal = scored["calibration"]
+    assert set(cal) == CALIBRATION_KEYS
+    # pairs = origins x horizons on the held-out side; origins are distinct origin months
+    assert cal["n_test_pairs"] >= cal["n_test_origins"] > 0
+    assert cal["n_test_pairs"] <= cal["n_test_origins"] * 3
+
+
+def test_a_failing_cell_reports_its_own_scoreboard_not_the_centre_cells(monkeypatch):
+    # A10: the old code showed the centre cell's models/calibration next to another cell's failure reason.
+    async def fetch(parameters, lat, lon, start, end):
+        if lat < 33.45:  # southern row: a pure seasonal cycle that no model can beat
+            s = {f"{y}{m:02d}": 15.0 + 10.0 * math.sin(2 * math.pi * (m - 1) / 12) for y in range(start, end + 1) for m in range(1, 13)}
+        else:
+            s = make_monthly(start, end, trend_per_year=0.06, noise_sd=0.5, seed=11)
+        return {p: s for p in parameters}
+
+    monkeypatch.setattr("app.analysis.fetch_monthly_multi", fetch)
+    body = client.get(
+        "/api/monthly-forecast",
+        params={"variable": "T2M", "lat": 33.45, "lon": -112.07, "start_year": 1981, "end_year": 2024, "n": 3, "size": 2.0},
+    ).json()
+    assert body["eligible"] is False and body["reason_code"] == "no_skill_over_seasonal_naive"
+    assert body["failed_cell_id"].startswith("r0_")
+    naive = next(m for m in body["models"] if m["id"] == "seasonal_naive")
+    assert naive["mae"] == 0.0  # the failing (pure seasonal) cell's own scoreboard
+    assert set(body["calibration"]) == CALIBRATION_KEYS
+
+
+def test_the_backtest_origin_gate_is_documented_as_defensive():
+    # A11: with today's constants n - 72 - horizons >= MIN_FORECAST_MONTHS - 75 >= BACKTEST_ORIGINS for every n allowed
+    # through, so "insufficient_backtest_origins" cannot occur. If someone lowers MIN_FORECAST_MONTHS this test says so.
+    from app import monthly
+
+    worst = monthly.MIN_FORECAST_MONTHS - 72 - monthly.MAX_FORECAST_HORIZON
+    assert min(monthly.BACKTEST_ORIGINS, worst) >= monthly.MIN_BACKTEST_ORIGINS

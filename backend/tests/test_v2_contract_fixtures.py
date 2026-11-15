@@ -85,47 +85,34 @@ def build_deterministic_fixtures() -> dict:
     health_resp["checked_at"] = "2026-11-15T00:00:00Z"
     health_resp["version"] = "v2-fixture"
 
+    # News items are produced by the real normaliser (news.normalize_and_deduplicate_articles) from fixed raw articles, so
+    # the fixture always has exactly the live item shape, publisher_verified included (one verified, one not).
+    delhi = news_module.NewsLocationQuery("delhi", "Delhi", 28.61, 77.21, "city", "city_centroid", 50, "saved_location")
+    phoenix = news_module.NewsLocationQuery("phoenix", "Phoenix", 33.45, -112.07, "city", "city_centroid", 50, "saved_location")
+    news_items = news_module.normalize_and_deduplicate_articles(
+        [
+            (
+                delhi,
+                {
+                    "title": "Severe heatwave advisory issued across northern India as temperatures surge",
+                    "url": "https://www.bbc.com/news/science-environment-101",
+                    "publisher": "BBC News",
+                    "seendate": "20261114T120000Z",
+                },
+            ),
+            (
+                phoenix,
+                {
+                    "title": "Local blog says flooding closed several desert roads after storms",
+                    "url": "https://desert-weather-notes.example.org/2026/11/flooding",
+                    "publisher": "Desert Weather Notes",
+                    "seendate": "20261114T090000Z",
+                },
+            ),
+        ]
+    )
     news_resp = {
-        "items": [
-            {
-                "id": "news_9f4b2c8e1a20",
-                "title": "Severe heatwave advisory issued across northern India as temperatures surge",
-                "publisher": "BBC News",
-                "canonical_url": "https://www.bbc.com/news/science-environment-101",
-                "url": "https://www.bbc.com/news/science-environment-101",
-                "published_at": "2026-11-14T12:00:00Z",
-                "category": "heat_wildfire",
-                "severity": "amber",
-                "severity_label": "Weather / environmental watch",
-                "lat": 28.61,
-                "lon": 77.21,
-                "location_id": "delhi",
-                "location_name": "Delhi",
-                "location_source": "saved_location",
-                "coordinate_precision": "city_centroid",
-                "uncertainty_km": 50,
-                "label": news_module.NEWS_CONTEXT_LABEL,
-            },
-            {
-                "id": "news_3d1a7e904b11",
-                "title": "NASA and NOAA researchers publish new satellite study on long-term regional climate trends",
-                "publisher": "NASA Earth Observatory",
-                "canonical_url": "https://earthobservatory.nasa.gov/images/150001/climate-study",
-                "url": "https://earthobservatory.nasa.gov/images/150001/climate-study",
-                "published_at": "2026-11-14T09:00:00Z",
-                "category": "climate_science",
-                "severity": "green",
-                "severity_label": "Informational science / environment context",
-                "lat": 33.45,
-                "lon": -112.07,
-                "location_id": "phoenix",
-                "location_name": "Phoenix",
-                "location_source": "saved_location",
-                "coordinate_precision": "city_centroid",
-                "uncertainty_km": 50,
-                "label": news_module.NEWS_CONTEXT_LABEL,
-            },
-        ],
+        "items": news_items,
         "fetched_at": "2026-11-15T00:00:00Z",
         "stale": False,
         "cache_age_seconds": 0.0,
@@ -199,6 +186,28 @@ def test_saved_v2_fixtures_exist_and_match_contract_keys(fake_power):
     assert saved["explanations_ok"]["disclaimer"] == "These are possible explanations, not proof that one cause created this local trend."
     assert saved["news"]["items"][0]["label"] == "news context, not scientific evidence"
 
+    # Item-level shapes the frontend depends on (top-level keys alone would miss these)
+    live_news_keys = set(live["news"]["items"][0])
+    for item in saved["news"]["items"]:
+        assert set(item) == live_news_keys
+        assert isinstance(item["publisher_verified"], bool)
+    assert [i["publisher_verified"] for i in saved["news"]["items"]] == [True, False]
+    calibration_keys = {
+        "nominal_coverage", "empirical_coverage", "min_required_coverage", "n_test_origins", "n_test_pairs",
+        "interval_half_width_by_horizon", "passed",
+    }
+    assert set(saved["monthly_forecast_eligible"]["calibration"]) == calibration_keys
+    assert set(live["monthly_forecast_eligible"]["calibration"]) == calibration_keys
+    assert set(saved["monthly_forecast_eligible"]["alignment"]) == {"common_end_month", "cells_trimmed_to_common_end"}
+    for key in ("explanations_ok", "explanations_fallback"):
+        assert "retry_after_seconds" in saved[key]
+    ai = saved["health_details"]["features"]["ai_explanations"]
+    assert {"key_present", "model_configured", "web_search_tool", "search_context_size"} <= set(ai)
+    assert ai["web_search_tool"] == "web_search"
+    assert set(saved["health_details"]["features"]["meteomatics"]["rate_limit"]) == set(
+        live["health_details"]["features"]["meteomatics"]["rate_limit"]
+    )
+
     # Live weather: both states exist, are labelled as a separate source, and never carry a credential
     unconfigured, available = saved["live_weather_unconfigured"], saved["live_weather_available"]
     assert (unconfigured["available"], unconfigured["status"], unconfigured["series"]) == (False, "unconfigured", [])
@@ -206,9 +215,37 @@ def test_saved_v2_fixtures_exist_and_match_contract_keys(fake_power):
     assert available["current"] == available["series"][0]
     assert available["series"][2]["wind_speed_10m_ms"] is None  # null preserved, never interpolated
     for payload in (unconfigured, available):
+        assert set(payload) == set(live["live_weather_available"])
+        assert "retry_after_seconds" in payload
         assert payload["label"] == "Meteomatics weather forecast — not NASA trend data"
         assert "separate from NASA POWER" in payload["source_note"]
         assert "password" not in json.dumps(payload).lower().replace("meteomatics_password", "")
 
     # The health report lists Meteomatics too
     assert "meteomatics" in saved["health_details"]["features"]
+
+
+DOCS = Path(__file__).resolve().parents[2] / "docs"
+
+
+def test_backend_docs_contain_no_control_characters():
+    # A16: docs/V2_BACKEND_HANDOFF.md held literal backspace bytes where "\b" was meant ("ackend/.env").
+    for name in ("V2_API_CONTRACT.md", "V2_BACKEND_HANDOFF.md", "V2_BACKEND_REPAIR_HANDOFF.md"):
+        path = DOCS / name
+        if not path.is_file():
+            continue
+        text = path.read_text(encoding="utf-8")
+        bad = sorted({hex(ord(c)) for c in text if ord(c) < 32 and c not in "\n\r\t"})
+        assert not bad, f"{name} contains control characters {bad}"
+    assert "`backend/.env`" in (DOCS / "V2_BACKEND_HANDOFF.md").read_text(encoding="utf-8")
+
+
+def test_no_openai_model_name_is_hard_coded_in_the_backend():
+    # Phase 0 item A: the model is the owner's choice (OPENAI_EXPLANATION_MODEL), never a default in code.
+    import re
+
+    app_dir = Path(__file__).resolve().parents[1] / "app"
+    pattern = re.compile(r"""["'](gpt-[\w.\-]+|o\d[\w.\-]*|chatgpt-[\w.\-]+)["']""")
+    for source in app_dir.glob("*.py"):
+        found = pattern.findall(source.read_text(encoding="utf-8"))
+        assert not found, f"{source.name} hard-codes a model name: {found}"

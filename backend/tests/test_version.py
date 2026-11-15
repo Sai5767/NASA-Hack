@@ -14,7 +14,9 @@ client = TestClient(app)
 def test_the_endpoint_reports_what_the_launcher_needs():
     body = client.get("/api/version").json()
     assert body["app"] == "trend-detective"
-    assert body["root"] == str(version_module.ROOT)
+    assert body["root_id"] == version_module.folder_id(version_module.ROOT)
+    assert "root" not in body  # the local folder path (it contains the user name) is never published
+    assert all(str(version_module.ROOT) not in str(value) for value in body.values())
     assert isinstance(body["dirty"], bool)
     assert 0 < body["started_epoch"] <= time.time()
     assert body["version"]  # a short commit, or "unknown" outside a git checkout
@@ -42,3 +44,10 @@ def test_a_git_that_is_missing_or_slow_never_breaks_the_server(monkeypatch):
 
     monkeypatch.setattr(version_module.subprocess, "run", boom)
     assert version_module._git("rev-parse") is None
+
+
+def test_the_folder_fingerprint_matches_the_launchers_normalisation():
+    # app-common.ps1 hashes the folder lower-cased with any trailing slash removed; both sides must agree.
+    assert version_module.folder_id("C:\\Some\\Folder\\") == version_module.folder_id("c:\\some\\folder")
+    assert version_module.folder_id("/srv/app/") == version_module.folder_id("/srv/app")
+    assert len(version_module.folder_id("x")) == 16

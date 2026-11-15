@@ -166,3 +166,109 @@ def test_clip_and_latest_helpers():
     assert streams.clip_years(series, 2000, 2000) == {"200001": 2.0, "200002": None, "200003": 4.0}
     assert streams.latest_value(series) == ("200101", 5.0)
     assert streams.latest_value({"200001": None}) is None
+
+
+# ---- TTL setting, health recording, stale fallback (review item B7) ---------------------------
+
+
+@pytest.fixture
+def clean_health():
+    from app.resilience import HEALTH_REGISTRY
+
+    HEALTH_REGISTRY.clear()
+    yield HEALTH_REGISTRY
+    HEALTH_REGISTRY.clear()
+
+
+def test_cache_uses_the_configured_ttl(monkeypatch, fresh_caches):
+    clock = {"t": 1000.0}
+    monkeypatch.setattr(streams.time, "monotonic", lambda: clock["t"])
+    monkeypatch.setenv("STREAMS_CACHE_TTL_SECONDS", "120")
+    entry = (1000.0, "x")
+    clock["t"] = 1100.0
+    assert streams._fresh(entry)
+    clock["t"] = 1121.0
+    assert not streams._fresh(entry)
+    monkeypatch.setenv("STREAMS_CACHE_TTL_SECONDS", "3600")
+    assert streams._fresh(entry)
+    assert streams.cache_health()["ttl_seconds"] == 3600
+
+
+def test_stale_series_is_served_when_the_refresh_fails(monkeypatch, fresh_caches, clean_health):
+    state = {"fail": False, "calls": 0}
+
+    async def fake_fetch(url):
+        state["calls"] += 1
+        if state["fail"]:
+            raise streams.StreamError("down")
+        return CO2
+
+    monkeypatch.setattr(streams, "fetch_text", fake_fetch)
+    monkeypatch.setenv("STREAMS_CACHE_TTL_SECONDS", "60")
+    first = asyncio.run(streams.get_monthly("co2_mlo"))
+    stamp, series = streams._series_cache["co2_mlo"]
+    streams._series_cache["co2_mlo"] = (stamp - 3600, series)  # expired
+    state["fail"] = True
+    assert asyncio.run(streams.get_monthly("co2_mlo")) == first  # stale fallback
+    assert state["calls"] == 2                                   # it did try to refresh
+    streams._series_cache.clear()
+    with pytest.raises(streams.StreamError):
+        asyncio.run(streams.get_monthly("co2_mlo"))              # nothing cached: the error surfaces
+
+
+class _FakeResponse:
+    def __init__(self, status, text=""):
+        self.status_code, self.text = status, text
+
+    def raise_for_status(self):
+        import httpx
+
+        if self.status_code >= 400:
+            raise httpx.HTTPStatusError("bad", request=httpx.Request("GET", "https://x.test"), response=self)
+
+
+def _patch_http(monkeypatch, responder):
+    class FakeClient:
+        def __init__(self, *a, **k):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def get(self, url):
+            return responder(url)
+
+    async def no_sleep(_):
+        return None
+
+    monkeypatch.setattr(streams.httpx, "AsyncClient", FakeClient)
+    monkeypatch.setattr(streams.asyncio, "sleep", no_sleep)
+
+
+def test_fetch_success_and_failure_are_recorded_in_the_health_registry(monkeypatch, fresh_caches, clean_health):
+    _patch_http(monkeypatch, lambda url: _FakeResponse(200, "ok"))
+    assert asyncio.run(streams.fetch_text("https://x.test/a")) == "ok"
+    snap = clean_health.snapshot("planet_streams")
+    assert snap["last_status"] == "healthy" and snap["consecutive_failures"] == 0
+    assert streams.cache_health()["status"] == "available"
+
+    _patch_http(monkeypatch, lambda url: _FakeResponse(404))
+    with pytest.raises(streams.StreamError):
+        asyncio.run(streams.fetch_text("https://x.test/missing"))
+    snap = clean_health.snapshot("planet_streams")
+    assert snap["last_status"] == "degraded" and snap["consecutive_failures"] == 1
+    assert snap["last_error_code"] == "http_error"
+    assert streams.cache_health()["status"] == "degraded"
+
+
+def test_an_empty_file_marks_the_stream_degraded(monkeypatch, fresh_caches, clean_health):
+    async def fake_fetch(url):
+        return "# nothing useful here\n"
+
+    monkeypatch.setattr(streams, "fetch_text", fake_fetch)
+    with pytest.raises(streams.StreamError):
+        asyncio.run(streams.get_monthly("co2_mlo"))
+    assert clean_health.snapshot("planet_streams")["consecutive_failures"] == 1

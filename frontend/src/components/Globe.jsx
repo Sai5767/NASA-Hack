@@ -1,10 +1,15 @@
 import { Children, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { geoDistance, geoEqualEarth, geoGraticule10, geoOrthographic, geoPath } from "d3-geo";
+import { geoCircle, geoDistance, geoEqualEarth, geoGraticule10, geoOrthographic, geoPath } from "d3-geo";
 import { feature, mesh } from "topojson-client";
 import world from "world-atlas/countries-110m.json";
 import { cellContains, cellRing } from "../lib/geo.js";
 import { clamp, easeInOutCubic, easeOutCubic, formatLat, formatLon, lerp, mean, wrapLon } from "../lib/format.js";
+import { motionReduced } from "../lib/theme.js";
+import { readTokens } from "../lib/tokens.js";
 import { useReducedMotion } from "../hooks.js";
+import { drawField, makePatterns } from "./globe/fieldLayer.js";
+import LiveGlyph from "./globe/LiveGlyph.jsx";
+import "../styles/globe.css";
 
 // Natural Earth land and borders (public domain) via the world-atlas package.
 const LAND = feature(world, world.objects.land);
@@ -12,15 +17,17 @@ const BORDERS = mesh(world, world.objects.countries, (a, b) => a !== b);
 const GRATICULE = geoGraticule10();
 const SPHERE = { type: "Sphere" };
 
+// Base-globe fallback palette (spec 2.2 "mission"); the app overrides it from lib/theme.js with applyGlobePalette.
 const PAL = {
-  atmosphere: "77,255,217",
-  oceanA: "#143a78",
-  oceanB: "#050a1c",
-  flatOcean: "#07102a",
-  land: "#16486e",
-  coast: "rgba(130, 215, 255, 0.62)",
-  border: "rgba(150, 205, 255, 0.17)",
-  grid: "rgba(110, 165, 255, 0.11)",
+  atmosphere: "110,160,255",
+  oceanA: "#12356b",
+  oceanB: "#061226",
+  flatOcean: "#0a1a36",
+  land: "#1b3555",
+  coast: "rgba(159, 196, 255, 0.60)",
+  border: "rgba(159, 196, 255, 0.16)",
+  grid: "rgba(125, 160, 230, 0.10)",
+  limb: "rgba(150, 200, 255, 0.40)",
 };
 
 /** Switch the globe's land, sea and glow to a theme's colours (remount the globe afterwards so it redraws). */
@@ -33,6 +40,12 @@ const VIEW_DEFAULTS = {
   flat: { lon: 0, lat: 12, k: 1.7 },
 };
 const K_LIMITS = { globe: [0.8, 14], flat: [1, 24] };
+
+// Idle rotation (spec 4.2): 2 degrees per second, 8 s after the last interaction, ramping up over 1.2 s.
+const IDLE_DEG_PER_MS = 0.002;
+const IDLE_RESUME_MS = 8000;
+const IDLE_RAMP_MS = 1200;
+const RADAR_PERIOD_MS = 2200;
 
 function buildProjection(mode, v, w, h) {
   if (mode === "globe") {
@@ -52,6 +65,7 @@ function buildProjection(mode, v, w, h) {
 }
 
 function withAlpha(hex, alpha) {
+  if (!hex || hex[0] !== "#") return hex;
   const n = parseInt(hex.slice(1), 16);
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`;
 }
@@ -104,16 +118,17 @@ function drawPin(ctx, x, y, pin, now, reduced) {
   }
 }
 
+/** Data-scan sweep while a request is in flight (spec 4.5): one sweep per 2.2 s. Never drawn with reduced motion. */
 function drawRadar(ctx, x, y, color, now) {
   for (let i = 0; i < 3; i += 1) {
-    const phase = (now / 1100 + i / 3) % 1;
+    const phase = (now / RADAR_PERIOD_MS + i / 3) % 1;
     ctx.beginPath();
     ctx.arc(x, y, 8 + 70 * phase, 0, Math.PI * 2);
     ctx.strokeStyle = withAlpha(color, (1 - phase) * 0.7);
     ctx.lineWidth = 1.5;
     ctx.stroke();
   }
-  const angle = (now / 520) % (Math.PI * 2);
+  const angle = ((now / RADAR_PERIOD_MS) * Math.PI * 2) % (Math.PI * 2);
   if (ctx.createConicGradient) {
     const sweep = ctx.createConicGradient(angle - Math.PI * 0.7, x, y);
     sweep.addColorStop(0, withAlpha(color, 0));
@@ -136,11 +151,24 @@ function drawRadar(ctx, x, y, color, now) {
 /**
  * Interactive globe / flat map drawn on a canvas.
  *
+ * Existing props (unchanged; Explore and onboarding use them):
  * pins:   [{ lat, lon, color, label, phase }]
  * cells:  [{ lat, lon, fill, alpha, stroke, strokeWidth, dash, tip }] drawn as `cellHalf`-degree squares
- * dots:   [{ lat, lon, color, r, ring, tip }] data markers; clicking one calls onDotPick(dot)
+ * dots:   [{ lat, lon, color, r, ring, tip, sign?: "up"|"down", failed?: boolean }] markers; clicking one calls onDotPick(dot)
  * focus:  { lat, lon, k?, nonce } -> flies the camera there whenever `nonce` changes
  * modeRequest: { mode: "globe" | "flat", nonce } -> switches the map style
+ *
+ * V2 layer props (all optional; see docs/V2_GLOBE_HANDOFF.md):
+ * field:      local NASA POWER / forecast grid { key, flyKey, cells, half, kind, loading, extent, tag, swatchToken,
+ *             plan, prevCells, fadeMs, changedAt }  (built by components/globe/useGlobeLayers.js)
+ * markers:    news markers [{ id, lat, lon, tone, glyph, count, stale, open, verified, uncertaintyKm, name, lead }]
+ * renderMarkerCard(marker): closed card shown beside a hovered/focused marker
+ * onMarkerPick(marker): click / Enter / Space on a marker
+ * liveGlyph:  { lat, lon, model, label } Meteomatics point glyph (never an area)
+ * rotationPaused: external pause (drawer open, timeline playing …)
+ * onCellFocus(cell | null): hover on a field cell
+ * layerLabel: plain-text description of the active layer, appended to the globe's aria-label
+ * reducedMotion: the app's reduce-motion preference (OS setting and <html data-motion="reduced"> are also honoured)
  */
 export default function Globe({
   pins = [],
@@ -154,22 +182,41 @@ export default function Globe({
   busy = false,
   idleSpin = false,
   onPick,
+  field = null,
+  markers = [],
+  renderMarkerCard,
+  onMarkerPick,
+  liveGlyph = null,
+  rotationPaused = false,
+  onCellFocus,
+  layerLabel = "",
+  reducedMotion = false,
   children,
 }) {
-  const reduced = useReducedMotion();
+  const osReduced = useReducedMotion();
+  const reduced = osReduced || reducedMotion || motionReduced();
   const canvasRef = useRef(null);
   const wrapRef = useRef(null);
   const [mode, setMode] = useState("globe");
   const [hover, setHover] = useState(null);
+  const [userPaused, setUserPaused] = useState(false);
+  const [cardFor, setCardFor] = useState(null); // marker id whose closed card is showing
   const sizeRef = useRef({ w: 600, h: 600 });
   const [sizeTick, setSizeTick] = useState(0);
   const view = useRef({ ...VIEW_DEFAULTS.globe });
   const fly = useRef(null);
   const drag = useRef(null);
   const idleAt = useRef(0);
+  const spinSince = useRef(null);
+  const focusWithin = useRef(false);
   const dirty = useRef(true);
   const hoverKey = useRef("");
   const dotPositions = useRef([]);
+  const markerEls = useRef(new Map());
+  const markerPos = useRef(new Map());
+  const liveEl = useRef(null);
+  const tokens = useRef(null);
+  const patterns = useRef(null);
   const live = useRef({});
 
   const polys = useMemo(
@@ -184,11 +231,39 @@ export default function Globe({
     return { delays: dists.map((d) => (d / maxDist) * 650), total: 1100, at: performance.now() };
   }, [cells]);
 
-  live.current = { pins, cells, polys, cellHalf, selectedCell, dots, busy, idleSpin, reduced, mode, reveal, hoverCell: hover?.cell ?? -1, hoverDot: hover?.dot ?? -1 };
+  // The field's arrival ripple (once per new grid) and the start of each frame's cross-fade.
+  const fieldAnim = useRef({ flyKey: null, revealAt: 0, delays: [], changedAt: 0, key: null });
+  if (field && !field.loading) {
+    const fa = fieldAnim.current;
+    if (field.flyKey !== fa.flyKey) {
+      const center = field.extent ? [field.extent.lon, field.extent.lat] : [0, 0];
+      const dists = field.cells.map((c) => geoDistance([c.lon, c.lat], center));
+      const maxDist = Math.max(...dists) || 1;
+      fa.flyKey = field.flyKey;
+      fa.revealAt = performance.now();
+      fa.delays = dists.map((d) => (d / maxDist) * 650);
+    }
+    if (field.key !== fa.key) {
+      fa.key = field.key;
+      fa.changedAt = performance.now();
+    }
+  }
+
+  live.current = {
+    pins, cells, polys, cellHalf, selectedCell, dots, busy, idleSpin, reduced, mode, reveal,
+    hoverCell: hover?.cell ?? -1, hoverDot: hover?.dot ?? -1, hoverField: hover?.fieldCell ?? null,
+    field, markers, liveGlyph, rotationPaused, userPaused, cardFor,
+  };
 
   useEffect(() => {
     dirty.current = true;
-  }, [pins, cells, selectedCell, dots, busy, mode, hover, sizeTick, reduced]);
+  }, [pins, cells, selectedCell, dots, busy, mode, hover, sizeTick, reduced, field, markers, liveGlyph, cardFor]);
+
+  // Canvas colours come from the CSS tokens (spec 2.1), read once per mount.
+  useEffect(() => {
+    tokens.current = readTokens();
+    patterns.current = null;
+  }, []);
 
   // Keep canvas size in sync with its container.
   useEffect(() => {
@@ -204,6 +279,11 @@ export default function Globe({
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
+
+  const interacted = () => {
+    idleAt.current = performance.now() + IDLE_RESUME_MS;
+    spinSince.current = null;
+  };
 
   const startFly = useCallback((to, duration = 1400, arc = true) => {
     const v = view.current;
@@ -223,6 +303,17 @@ export default function Globe({
     startFly({ lon: focus.lon, lat: clamp(focus.lat, -80, 80), k: clamp(k, ...K_LIMITS[m]) });
   }, [focus?.nonce]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // When a new local grid arrives, fly so it spans a readable part of the stage (capped at the zoom limit).
+  useEffect(() => {
+    if (!field?.flyKey || field.loading || !field.extent) return;
+    const m = live.current.mode;
+    const { w, h } = sizeRef.current;
+    const spanDeg = Math.max(field.extent.north - field.extent.south, field.extent.east - field.extent.west, 0.5);
+    const base = m === "globe" ? (Math.min(w, h) / 2) * 0.88 : (w * 0.94) / 5.41;
+    const want = (0.35 * Math.min(w, h)) / ((spanDeg * Math.PI) / 180) / base;
+    startFly({ lon: field.extent.lon, lat: clamp(field.extent.lat, -80, 80), k: clamp(want, ...K_LIMITS[m]) });
+  }, [field?.flyKey, field?.loading]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const switchMode = (next) => {
     setMode(next);
     const first = live.current.pins[0];
@@ -239,8 +330,28 @@ export default function Globe({
 
   const zoomBy = (factor) => {
     const m = live.current.mode;
+    interacted();
     startFly({ k: clamp(view.current.k * factor, ...K_LIMITS[m]) }, 380, false);
   };
+
+  /** Whether idle rotation may run right now (spec 4.2 pause rules). */
+  const spinAllowed = (L, now) =>
+    L.idleSpin &&
+    !L.reduced &&
+    !L.userPaused &&
+    !L.rotationPaused &&
+    !drag.current &&
+    !fly.current &&
+    !focusWithin.current &&
+    L.hoverField == null &&
+    L.hoverDot < 0 &&
+    L.cardFor == null &&
+    !L.field &&
+    !L.liveGlyph &&
+    L.mode === "globe" &&
+    view.current.k <= 1.2 &&
+    now > idleAt.current &&
+    (typeof document === "undefined" || document.visibilityState !== "hidden");
 
   // Animation loop.
   useEffect(() => {
@@ -263,16 +374,45 @@ export default function Globe({
         }
         return true;
       }
-      if (L.idleSpin && !L.reduced && !drag.current && now > idleAt.current && L.mode === "globe") {
-        v.lon = wrapLon(v.lon + dt * 0.006);
+      if (spinAllowed(L, now)) {
+        if (spinSince.current == null) spinSince.current = now;
+        const ramp = clamp((now - spinSince.current) / IDLE_RAMP_MS, 0, 1);
+        v.lon = wrapLon(v.lon + dt * IDLE_DEG_PER_MS * ramp);
         return true;
       }
+      spinSince.current = null;
       return false;
+    };
+
+    const placeOverlays = (proj, isGlobe, v) => {
+      const visible = (lon, lat) => !isGlobe || geoDistance([lon, lat], [v.lon, v.lat]) <= Math.PI / 2 - 0.03;
+      const positions = new Map();
+      for (const m of live.current.markers) {
+        const el = markerEls.current.get(m.id);
+        const pt = visible(m.lon, m.lat) ? proj([m.lon, m.lat]) : null;
+        if (pt) positions.set(m.id, pt);
+        if (!el) continue;
+        if (pt) {
+          el.style.transform = `translate(${pt[0]}px, ${pt[1]}px)`;
+          el.dataset.hidden = "false";
+        } else {
+          el.dataset.hidden = "true";
+        }
+      }
+      markerPos.current = positions;
+      const g = live.current.liveGlyph;
+      if (liveEl.current) {
+        const pt = g && visible(g.lon, g.lat) ? proj([g.lon, g.lat]) : null;
+        if (pt) {
+          liveEl.current.style.transform = `translate(${pt[0]}px, ${pt[1]}px)`;
+          liveEl.current.dataset.hidden = "false";
+        } else liveEl.current.dataset.hidden = "true";
+      }
     };
 
     const draw = (now) => {
       const canvas = canvasRef.current;
-      if (!canvas) return;
+      if (!canvas) return false;
       const { w, h } = sizeRef.current;
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
@@ -280,8 +420,11 @@ export default function Globe({
         canvas.height = Math.round(h * dpr);
       }
       const ctx = canvas.getContext("2d");
+      if (!ctx) return false;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, w, h);
+      if (!tokens.current) tokens.current = readTokens();
+      if (!patterns.current) patterns.current = makePatterns(ctx, tokens.current);
 
       const L = live.current;
       const v = view.current;
@@ -291,12 +434,13 @@ export default function Globe({
       const R = isGlobe ? proj.scale() : 0;
 
       if (isGlobe) {
-        const halo = ctx.createRadialGradient(w / 2, h / 2, R * 0.97, w / 2, h / 2, R * 1.24);
-        halo.addColorStop(0, `rgba(${PAL.atmosphere},0.36)`);
+        // Restrained atmosphere halo: R x 0.97 to R x 1.20, alpha 0.28 -> 0.
+        const halo = ctx.createRadialGradient(w / 2, h / 2, R * 0.97, w / 2, h / 2, R * 1.2);
+        halo.addColorStop(0, `rgba(${PAL.atmosphere},0.28)`);
         halo.addColorStop(1, `rgba(${PAL.atmosphere},0)`);
         ctx.fillStyle = halo;
         ctx.beginPath();
-        ctx.arc(w / 2, h / 2, R * 1.24, 0, Math.PI * 2);
+        ctx.arc(w / 2, h / 2, R * 1.2, 0, Math.PI * 2);
         ctx.fill();
       }
 
@@ -342,8 +486,24 @@ export default function Globe({
         ctx.fillStyle = shade;
         ctx.fill();
         ctx.lineWidth = 1.2;
-        ctx.strokeStyle = "rgba(130, 220, 255, 0.45)";
+        ctx.strokeStyle = PAL.limb ?? "rgba(150, 200, 255, 0.40)";
         ctx.stroke();
+      }
+
+      // Local field cells (V2): only the API's own cells, no smoothing.
+      let fieldAnimating = false;
+      if (L.field) {
+        const fa = fieldAnim.current;
+        const res = drawField(
+          ctx,
+          { path, proj, center: [v.lon, v.lat], isGlobe, R },
+          { ...L.field, revealAt: L.field.loading ? 0 : fa.revealAt, delays: fa.delays, changedAt: fa.changedAt },
+          tokens.current,
+          patterns.current,
+          now,
+          { reduced: L.reduced, hoverId: L.hoverField, selectedId: null },
+        );
+        fieldAnimating = res.animating;
       }
 
       // Scan cells (ripple in from the center).
@@ -380,55 +540,98 @@ export default function Globe({
         }
       }
 
-      // Data markers (one per place in the World view).
+      // Location-precision circle around an open news marker: dashed, no fill.
+      const openMarker = L.markers.find((m) => m.open && Number.isFinite(m.uncertaintyKm));
+      if (openMarker) {
+        const circle = geoCircle().center([openMarker.lon, openMarker.lat]).radius(openMarker.uncertaintyKm / 111.2)();
+        ctx.beginPath();
+        path(circle);
+        ctx.strokeStyle = tokens.current["--text-faint"];
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 4]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+
+      // Data markers (saved places on Main; sample sites in Explore > World).
       const positions = [];
       L.dots.forEach((dot, i) => {
         if (isGlobe && geoDistance([dot.lon, dot.lat], [v.lon, v.lat]) > Math.PI / 2 - 0.02) return;
         const pt = proj([dot.lon, dot.lat]);
         if (!pt) return;
-        const r = dot.r ?? 5;
+        const r = dot.failed ? 3.5 : dot.r ?? 5;
         positions.push({ i, x: pt[0], y: pt[1], r });
         ctx.beginPath();
         ctx.arc(pt[0], pt[1], r, 0, Math.PI * 2);
+        if (dot.failed) {
+          // A site that could not be measured: hollow, dotted, neutral.
+          ctx.strokeStyle = L.hoverDot === i ? "#ffffff" : tokens.current["--missing-fg"];
+          ctx.lineWidth = 1;
+          ctx.setLineDash([1.5, 2]);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          return;
+        }
         ctx.fillStyle = withAlpha(dot.color, dot.ring ? 0.9 : 0.55);
         ctx.shadowColor = dot.color;
-        ctx.shadowBlur = dot.ring ? 12 : 4;
+        ctx.shadowBlur = dot.ring ? 6 : 3;
         ctx.fill();
         ctx.shadowBlur = 0;
         ctx.lineWidth = dot.ring || L.hoverDot === i ? 2 : 1;
         ctx.strokeStyle = L.hoverDot === i ? "#ffffff" : dot.ring ? "rgba(255,255,255,0.85)" : "rgba(4,6,13,0.7)";
         ctx.stroke();
+        if ((dot.sign === "up" || dot.sign === "down") && r >= 6) {
+          // Second, non-colour direction cue: a small notch inside the dot.
+          const s = 2.5;
+          ctx.beginPath();
+          if (dot.sign === "up") {
+            ctx.moveTo(pt[0], pt[1] - s);
+            ctx.lineTo(pt[0] + s, pt[1] + s * 0.8);
+            ctx.lineTo(pt[0] - s, pt[1] + s * 0.8);
+          } else {
+            ctx.moveTo(pt[0], pt[1] + s);
+            ctx.lineTo(pt[0] + s, pt[1] - s * 0.8);
+            ctx.lineTo(pt[0] - s, pt[1] - s * 0.8);
+          }
+          ctx.closePath();
+          ctx.fillStyle = "rgba(5,7,13,0.85)";
+          ctx.fill();
+        }
       });
       dotPositions.current = positions;
 
       // Pins and the radar sweep.
+      const scanning = L.busy || !!L.field?.loading;
       L.pins.forEach((pin, idx) => {
         if (isGlobe && geoDistance([pin.lon, pin.lat], [v.lon, v.lat]) > Math.PI / 2 - 0.03) return;
         const pt = proj([pin.lon, pin.lat]);
         if (!pt) return;
-        if (L.busy && idx === 0 && !L.reduced) drawRadar(ctx, pt[0], pt[1], pin.color, now);
+        if (scanning && idx === 0 && !L.reduced) drawRadar(ctx, pt[0], pt[1], tokens.current["--accent"] ?? pin.color, now);
         drawPin(ctx, pt[0], pt[1], pin, now, L.reduced);
       });
 
-      return revealing || (L.busy && !L.reduced);
+      placeOverlays(proj, isGlobe, v);
+
+      return revealing || fieldAnimating || (scanning && !L.reduced);
     };
 
+    let animatingDraw = false;
     const loop = (now) => {
       const dt = Math.min(64, now - last);
       last = now;
       const L = live.current;
       const moved = step(dt, now);
-      const animating = !L.reduced && (L.idleSpin || L.pins.length > 0 || L.busy);
+      const animating = !L.reduced && (L.pins.length > 0 || L.busy);
       const revealing = L.reveal.total > 0 && now - L.reveal.at < L.reveal.total + 120;
-      if (moved || dirty.current || animating || revealing) {
+      if (moved || dirty.current || animating || revealing || animatingDraw) {
         dirty.current = false;
-        draw(now);
+        animatingDraw = draw(now);
       }
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Wheel zoom needs a non-passive listener to stop the page from scrolling.
   useEffect(() => {
@@ -437,6 +640,7 @@ export default function Globe({
     const onWheel = (e) => {
       e.preventDefault();
       fly.current = null;
+      interacted();
       const [lo, hi] = K_LIMITS[live.current.mode];
       view.current.k = clamp(view.current.k * Math.exp(-e.deltaY * 0.0012), lo, hi);
       dirty.current = true;
@@ -476,6 +680,7 @@ export default function Globe({
     if (e.pointerType === "mouse" && e.button !== 0) return;
     e.currentTarget.setPointerCapture(e.pointerId);
     fly.current = null;
+    interacted();
     drag.current = {
       id: e.pointerId, x0: e.clientX, y0: e.clientY,
       lon0: view.current.lon, lat0: view.current.lat, moved: false, t0: performance.now(),
@@ -502,23 +707,26 @@ export default function Globe({
       if (hoverKey.current) {
         hoverKey.current = "";
         setHover(null);
+        onCellFocus?.(null);
       }
       return;
     }
     const L = live.current;
     const cell = L.cells.findIndex((c) => cellContains(c, ll.lat, ll.lon, L.cellHalf));
+    const fc = L.field && !L.field.loading ? L.field.cells.find((c) => cellContains(c, ll.lat, ll.lon, L.field.half)) : null;
     const dot = dotAt(x, y);
-    const key = `${ll.lat.toFixed(1)}|${ll.lon.toFixed(1)}|${cell}|${dot}`;
+    const key = `${ll.lat.toFixed(1)}|${ll.lon.toFixed(1)}|${cell}|${dot}|${fc?.id ?? ""}`;
     if (key !== hoverKey.current) {
       hoverKey.current = key;
-      setHover({ ...ll, cell, dot, x, y });
+      setHover({ ...ll, cell, dot, fieldCell: fc?.id ?? null, fieldTip: fc?.tip ?? null, x, y });
+      onCellFocus?.(fc ?? null);
     }
   };
 
   const onPointerUp = (e) => {
     const d = drag.current;
     drag.current = null;
-    idleAt.current = performance.now() + 6000;
+    interacted();
     if (d && !d.moved && performance.now() - d.t0 < 700) {
       const [x, y] = eventPoint(e);
       const dot = dotAt(x, y);
@@ -534,9 +742,11 @@ export default function Globe({
   const onPointerLeave = () => {
     hoverKey.current = "";
     setHover(null);
+    onCellFocus?.(null);
   };
 
   const onKeyDown = (e) => {
+    if (e.target !== e.currentTarget) return; // keys on marker buttons and HUD controls are theirs
     const v = view.current;
     const [lo, hi] = K_LIMITS[live.current.mode];
     const step = 10 / Math.max(1, v.k);
@@ -552,17 +762,24 @@ export default function Globe({
     if (keys[e.key]) {
       e.preventDefault();
       fly.current = null;
+      interacted();
       keys[e.key]();
       dirty.current = true;
     } else if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
+      interacted();
       onPick?.(v.lat, v.lon);
     }
   };
 
   const hoveredCell = hover && hover.cell >= 0 ? cells[hover.cell] : null;
   const hoveredDot = hover && hover.dot >= 0 ? dots[hover.dot] : null;
+  const tipText = hoveredDot?.tip ?? hover?.fieldTip ?? hoveredCell?.tip ?? null;
   const primary = pins[0];
+  const dataVisible = !!(field || liveGlyph || markers.length || cells.length);
+  const showRotationToggle = idleSpin && !reduced;
+  const cardMarker = cardFor ? markers.find((m) => m.id === cardFor) : null;
+  const cardPos = cardMarker ? markerPos.current.get(cardMarker.id) : null;
 
   return (
     <div
@@ -570,8 +787,17 @@ export default function Globe({
       ref={wrapRef}
       tabIndex={0}
       role="application"
-      aria-label="Interactive map. Click to drop a pin. Arrow keys rotate, plus and minus zoom, Enter drops a pin at the center."
+      aria-label={`Interactive map. Click to drop a pin. Arrow keys rotate, plus and minus zoom, Enter drops a pin at the center.${layerLabel ? ` Showing ${layerLabel}.` : ""}`}
       onKeyDown={onKeyDown}
+      onFocus={() => {
+        focusWithin.current = true;
+      }}
+      onBlur={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget)) {
+          focusWithin.current = false;
+          interacted();
+        }
+      }}
     >
       <canvas
         ref={canvasRef}
@@ -583,7 +809,55 @@ export default function Globe({
         onPointerCancel={onPointerUp}
         onPointerLeave={onPointerLeave}
       />
-      <div className="globe-scan" aria-hidden="true" />
+      {/* The CRT scan-line overlay is removed while any data layer is visible: it hides hatch patterns. */}
+      {!dataVisible && <div className="globe-scan" aria-hidden="true" />}
+
+      {liveGlyph && (
+        <div className="gl-live-anchor" ref={liveEl} data-hidden="true" aria-hidden="true">
+          <LiveGlyph model={liveGlyph.model} reduced={reduced} />
+        </div>
+      )}
+
+      {markers.length > 0 && (
+        <ul className="gl-markers" aria-label="News context markers">
+          {markers.map((m) => (
+            <li
+              key={m.id}
+              className="gl-marker-anchor"
+              data-hidden="true"
+              ref={(el) => {
+                if (el) markerEls.current.set(m.id, el);
+                else markerEls.current.delete(m.id);
+              }}
+            >
+              <button
+                type="button"
+                className={`gl-marker gl-marker--${m.tone}${m.open ? " is-open" : ""}`}
+                aria-label={`News context near ${m.name}: ${m.count} ${m.count === 1 ? "story" : "stories"}${m.verified ? "" : ", unverified"}${m.stale ? ", saved earlier" : ""}. Opens the news panel.`}
+                aria-haspopup="dialog"
+                onClick={() => onMarkerPick?.(m)}
+                onPointerEnter={() => setCardFor(m.id)}
+                onPointerLeave={() => setCardFor((id) => (id === m.id ? null : id))}
+                onFocus={() => setCardFor(m.id)}
+                onBlur={() => setCardFor((id) => (id === m.id ? null : id))}
+              >
+                <span className="gl-marker-glyph" aria-hidden="true">{m.glyph}</span>
+                {m.count > 1 && <span className="gl-marker-count mono" aria-hidden="true">{m.count}</span>}
+                {m.stale && <span className="gl-marker-stale" aria-hidden="true">◔</span>}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {cardMarker && cardPos && renderMarkerCard && (
+        <div
+          className="gl-card-anchor"
+          style={{ left: Math.min(cardPos[0] + 22, sizeRef.current.w - 270), top: Math.max(8, Math.min(cardPos[1] - 20, sizeRef.current.h - 150)) }}
+          aria-hidden="true"
+        >
+          {renderMarkerCard(cardMarker)}
+        </div>
+      )}
 
       <div className="hud hud-tl" aria-live="off">
         <span className="hud-key">CURSOR</span>
@@ -609,6 +883,19 @@ export default function Globe({
             ◎
           </button>
         </div>
+        {showRotationToggle && (
+          <button
+            type="button"
+            className="btn btn-sm btn-ghost gl-rotate"
+            aria-pressed={userPaused}
+            onClick={() => {
+              setUserPaused((p) => !p);
+              spinSince.current = null;
+            }}
+          >
+            {userPaused ? "▶ Resume rotation" : "❚❚ Pause rotation"}
+          </button>
+        )}
       </div>
 
       <div className="hud hud-bl">{children}</div>
@@ -616,9 +903,9 @@ export default function Globe({
         <div className="hud hud-br hint" aria-hidden="true">drag · rotate &nbsp; scroll · zoom &nbsp; click · drop pin</div>
       )}
 
-      {(hoveredDot?.tip || hoveredCell?.tip) && (
+      {tipText && (
         <div className="globe-tip" style={{ left: Math.min(hover.x + 16, sizeRef.current.w - 230), top: Math.max(8, hover.y - 8) }}>
-          {hoveredDot?.tip ?? hoveredCell.tip}
+          {tipText}
         </div>
       )}
     </div>
