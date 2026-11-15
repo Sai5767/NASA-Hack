@@ -1,10 +1,15 @@
 """Shared helpers: synthetic monthly series so the whole pipeline can be tested offline."""
 
 import math
+import os
 import random
 import zlib
 
 import pytest
+
+# The suite must not depend on, or pick up, the developer's own backend/.env: it runs with no keys, offline.
+# (tests/test_env_file.py tests the loader directly, on temporary files.) Set before the app is imported.
+os.environ["TD_LOAD_ENV_FILE"] = "0"
 
 
 def make_monthly(

@@ -13,6 +13,9 @@ frontend/dist/
 .env.*
 backend/.env
 backend/.env.*
+# ...but the template with placeholder names only is meant to be committed
+!.env.example
+!backend/.env.example
 
 # Rally agent wiring, written by "npx rally-project-brain-mcp login". These hold a personal token and tell every agent to
 # upload its sessions, so they stay on this machine and are never committed.

@@ -31,6 +31,7 @@ from .analysis import (
 from .archetypes import build_archetypes
 from .context import build_context
 from .deploy import allowed_origins, frontend_dist, mount_frontend
+from .env_file import load_local_env
 from .explanations import (
     ExplanationRequest,
     explanation_health,
@@ -70,6 +71,10 @@ MAX_WORLD_CONCURRENCY = 4
 MAX_GRID_SIDE = 5           # up to 5 x 5 = 25 cells per scan
 MAX_CONCURRENT_FETCHES = 3  # be polite to the NASA POWER service
 GRADE_RANK = {"strong": 3, "moderate": 2, "weak": 1, "none": 0}
+
+# Optional local settings file (backend/.env). Real environment variables win; absent file is fine. See env_file.py.
+# Must run before anything below reads a setting (CORS origins are read on the next lines).
+load_local_env()
 
 app = FastAPI(title="Earth System Trend Detective API", version="0.4.0")
 app.add_middleware(

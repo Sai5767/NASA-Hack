@@ -9,3 +9,7 @@
 *.pdf
 docs
 tools
+# real settings files must never be baked into an image (the template is fine)
+**/.env
+**/.env.*
+!**/.env.example
