@@ -1,0 +1,13 @@
+- Add animations for the globe with timestamps to show how the data changes over time visually (Low Importance)
+- Change overall colourscheme (Low Importance)
+- Split into an overview and then more detail (visualise the details whilst retaining clarity for the technical information)(High Importance)
+- Potentially future predictions locally (using ML) 
+- Look at Google finance for layout, big globe in the middle which pops up with things that are suited to that user's specific needs/interests. 
+- Use free hosting and publish
+- Cross-reference the current website capabilities with what is actually required by the competition, and redefine basic functionality. 
+- Hover over words or technical text with a brief explanation of what that means, and that can link to a chatbot which explain in more detail if needed. 
+- Link back to major geo-weather events that have occurred and then when you click on that specifically you see a lot more detail. 
+
+- Make sure mathematical logic for signficance levels is correct.
+- Make a list of all questions each user needs to be asked
+= Make a list of all of the trends in the data (and order by p-value significance) and then link back to real-world reasoning for why this is the case. 
