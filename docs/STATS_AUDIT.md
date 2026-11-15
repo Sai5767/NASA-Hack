@@ -66,4 +66,8 @@ The unadjusted p-value is still shown beside it.
 - The Duel and the regional composite treat places as independent; spatial correlation makes them cautious, not liberal.
 - NASA POWER is reanalysis (a model constrained by observations), not raw measurement, and some inputs change over time.
 - Moran's I (permutation test) is covered by synthetic-pattern tests, but was not cross-checked against an external library.
+- Smooth, curving records are treated as persistent noise. Atmospheric CO2 has a signal 32 times its normal year-to-year swing
+  yet gets p = 0.001, because the residuals about a straight line are strongly autocorrelated (the curve), so the variance is
+  inflated to the cap. That is cautious, not wrong, but it makes p-value order a poor guide to strength of change. The trend
+  ledger therefore also orders by signal vs noise and by percent change.
 - Lag-1 persistence is a one-parameter summary; longer memory (for example decadal ocean cycles) is only partly captured.

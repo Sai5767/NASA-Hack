@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { fetchArchetypes, fetchDuel, fetchGrid, fetchPlaces, fetchSweep, fetchTrend, fetchVariables, fetchVitals, fetchWorld } from "./api.js";
+import { fetchArchetypes, fetchDuel, fetchGrid, fetchLedger, fetchPlaces, fetchSweep, fetchTrend, fetchVariables, fetchVitals, fetchWorld } from "./api.js";
 import Archetypes, { CLUSTER_COLORS } from "./components/Archetypes.jsx";
 import Boot from "./components/Boot.jsx";
 import Briefing from "./components/Briefing.jsx";
@@ -13,6 +13,7 @@ import ForYou from "./components/ForYou.jsx";
 import Globe from "./components/Globe.jsx";
 import Home from "./components/Home.jsx";
 import IntakeWizard from "./components/Intake.jsx";
+import Ledger from "./components/Ledger.jsx";
 import Loading from "./components/Loading.jsx";
 import Scan from "./components/Scan.jsx";
 import SetupPanel from "./components/SetupPanel.jsx";
@@ -37,6 +38,7 @@ const SCAN_STEPS = ["Contacting NASA POWER…", "Analyzing each place on the gri
 const DUEL_STEPS = ["Fetching both places…", "Fitting both trends…", "Testing whether the rates differ…"];
 const WORLD_STEPS = ["Asking NASA POWER about sample places around the world…", "Fitting a trend at each one…", "Applying false-discovery control…", "Placing the dots…"];
 const ARCH_STEPS = ["Fetching every variable at each sample place…", "Measuring each variable's change against its normal swings…", "Clustering similar fingerprints…", "Testing whether the groups are stable…"];
+const LEDGER_STEPS = ["Asking NASA POWER about every sample place…", "Testing all 19 variables at each…", "Correcting over a thousand tests together…", "Ranking by strength of evidence…", "Looking up published context…"];
 const VITALS_STEPS = ["Reading NASA GISTEMP…", "Reading NOAA CO₂ and NSIDC sea ice…", "Testing each vital sign…", "Checking the climate rhythms…"];
 
 const keys = {
@@ -47,6 +49,7 @@ const keys = {
   world: (w) => [w.variable, w.start, w.end].join("|"),
   vitals: (y) => [y.start, y.end].join("|"),
   archetypes: (y, k) => [y.start, y.end, k ?? "best"].join("|"),
+  ledger: (y) => [y.start, y.end].join("|"),
 };
 
 const toDraftPatch = (patch) => {
@@ -202,6 +205,7 @@ export default function App() {
   const [worldMode, setWorldMode] = useState("survey");
   const [archetypes, setArchetypes] = useState(EMPTY);
   const [archK, setArchK] = useState(null);
+  const [ledger, setLedger] = useState(EMPTY);
   const [storedProfile, setProfile] = useStoredState("td-profile", DEFAULT_PROFILE);
   const [watch, setWatch] = useStoredState("td-watch", []);
   const [viewPref, setViewPref] = useStoredState("td-view", null);
@@ -293,6 +297,7 @@ export default function App() {
     [run],
   );
   const runVitals = useCallback((y) => run("vitals", keys.vitals(y), setVitals, (s) => fetchVitals({ start_year: y.start, end_year: y.end }, s)), [run]);
+  const runLedger = useCallback((y) => run("ledger", keys.ledger(y), setLedger, (s) => fetchLedger({ start_year: y.start, end_year: y.end, limit: 1500 }, s)), [run]);
   const runArchetypes = useCallback(
     async (y, k) => {
       const data = await run("archetypes", keys.archetypes(y, k), setArchetypes, (s) =>
@@ -323,6 +328,7 @@ export default function App() {
     if (tab === "world" && worldMode === "survey" && world.key !== keys.world(worldParams)) runWorld(worldParams);
     if (tab === "world" && worldMode === "archetypes" && archetypes.key !== keys.archetypes(vitalsYears, archK)) runArchetypes(vitalsYears, archK);
     if (tab === "vitals" && vitals.key !== keys.vitals(vitalsYears)) runVitals(vitalsYears);
+    if (tab === "ledger" && ledger.key !== keys.ledger(vitalsYears)) runLedger(vitalsYears);
     if (!params) return;
     if (tab === "investigate" && trend.key !== keys.trend(params)) runTrend(params);
     if (tab === "sweep" && sweep.key !== keys.sweep(params)) runSweep(params);
@@ -520,6 +526,16 @@ export default function App() {
     setTab("investigate");
   };
 
+  const openLedgerRow = (row) => {
+    setActiveCase(null);
+    if (row.kind === "planet") {
+      setTab("vitals");
+      return;
+    }
+    commit({ variable: row.variable, lat: row.lat, lon: row.lon });
+    setTab("investigate");
+  };
+
   const placeNameFor = (lat, lon) => nearestPlace(places, lat, lon, 250)?.name ?? formatPlace(lat, lon);
   const watchItem = params ? { variable: params.variable, lat: params.lat, lon: params.lon, name: placeNameFor(params.lat, params.lon) } : null;
   const watched = !!watchItem && hasWatch(watch, watchItem);
@@ -574,6 +590,7 @@ export default function App() {
   const retry = () => {
     if (tab === "world") return worldMode === "archetypes" ? runArchetypes(vitalsYears, archK) : runWorld(worldParams);
     if (tab === "vitals") return runVitals(vitalsYears);
+    if (tab === "ledger") return runLedger(vitalsYears);
     if (!params) return undefined;
     if (tab === "investigate") return runTrend(params);
     if (tab === "sweep") return runSweep(params);
@@ -585,7 +602,7 @@ export default function App() {
     ...(params ? [{ lat: params.lat, lon: params.lon, color: COLORS.a, label: "A" }] : []),
     ...(tab === "duel" && pinB ? [{ lat: pinB.lat, lon: pinB.lon, color: COLORS.b, label: "B", phase: 0.5 }] : []),
   ];
-  const busy = trend.loading || sweep.loading || grid.loading || duel.loading || world.loading || vitals.loading || archetypes.loading;
+  const busy = trend.loading || sweep.loading || grid.loading || duel.loading || world.loading || vitals.loading || archetypes.loading || ledger.loading;
   const scanStale = !!params && !!grid.data && grid.key !== keys.grid(params, scanCfg);
   const briefingTab = activeCase?.tab;
   // Essentials are the challenge's required trio: one variable over time at a place, every variable at a place, a region.
@@ -596,6 +613,7 @@ export default function App() {
     { id: "duel", label: "Duel", hint: "two places" },
     { id: "world", label: "World", hint: places.length ? `${places.length} sites` : "sample sites" },
     { id: "vitals", label: "Vitals", hint: "the planet" },
+    { id: "ledger", label: "Ledger", hint: "every trend" },
     { id: "events", label: "Events", hint: "what happened" },
   ];
   const renderTab = (t) => (
@@ -843,6 +861,15 @@ export default function App() {
                 <ErrorCard message={vitals.error} onRetry={retry} />
               ) : vitals.data ? (
                 <Vitals key={vitals.key} data={vitals.data} />
+              ) : null)}
+
+            {tab === "ledger" &&
+              (ledger.loading ? (
+                <Loading title="Building the trend ledger" steps={LEDGER_STEPS} />
+              ) : ledger.error ? (
+                <ErrorCard message={ledger.error} onRetry={retry} />
+              ) : ledger.data ? (
+                <Ledger key={ledger.key} data={ledger.data} onOpen={openLedgerRow} />
               ) : null)}
 
             {tab === "events" && (

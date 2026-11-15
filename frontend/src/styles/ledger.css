@@ -1,0 +1,41 @@
+/* ---------- Trend ledger ---------- */
+
+.ledger { display: grid; gap: 14px; min-width: 0; }
+.ledger-head { padding: 18px; display: grid; gap: 10px; }
+.ledger-head h2 { font-size: 22px; letter-spacing: -0.01em; }
+.ledger-vars { display: flex; flex-wrap: wrap; gap: 6px; }
+.ledger-vars .up, .ledger-row .up { color: var(--up); }
+.ledger-vars .down, .ledger-row .down { color: var(--down); }
+.ledger-filters { padding: 14px 16px; display: grid; gap: 10px; }
+.ledger-filters .seg { justify-self: start; }
+.ledger-list { padding: 14px 16px; display: grid; gap: 10px; }
+.ledger-list ol { display: grid; gap: 6px; }
+.ledger-row { border: 1px solid var(--line); border-radius: 10px; background: rgba(255, 255, 255, 0.02); border-left-width: 3px; }
+.ledger-row.up { border-left-color: var(--up); }
+.ledger-row.down { border-left-color: var(--down); }
+.ledger-row.flat { border-left-color: var(--flat); }
+.ledger-main {
+  width: 100%; display: grid; grid-template-columns: 42px minmax(0, 1.5fr) minmax(88px, auto) 70px minmax(78px, auto);
+  align-items: center; gap: 8px; padding: 8px 10px; border: 0; background: transparent; text-align: left; border-radius: 10px;
+}
+.ledger-main:hover { background: rgba(255, 255, 255, 0.04); }
+.ledger-main .rank { color: var(--text-faint); font-size: 12px; }
+.ledger-main .what { display: grid; min-width: 0; }
+.ledger-main .what b { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ledger-main .what small { font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ledger-main .rate { display: grid; font-size: 13px; }
+.ledger-main .rate small { font-size: 10.5px; color: var(--text-faint); }
+.ledger-main .pv { font-size: 12px; color: var(--text-dim); }
+.ledger-main .fdr { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-faint); text-align: right; }
+.ledger-main .fdr.yes { color: var(--ok); }
+.ledger-row.up .rate b { color: var(--up); }
+.ledger-row.down .rate b { color: var(--down); }
+.ledger-detail { display: grid; gap: 8px; padding: 4px 14px 14px 52px; }
+.ledger-detail .why { display: grid; gap: 4px; padding: 9px 12px; border-left: 3px solid var(--accent); background: rgba(77, 255, 217, 0.05); border-radius: 0 8px 8px 0; }
+.ledger-detail .btn { justify-self: start; }
+.conf { margin-left: 6px; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--line-strong); font-size: 10.5px; letter-spacing: 0.04em; text-transform: none; }
+.conf.well-established { color: var(--ok); border-color: rgba(125, 255, 155, 0.5); }
+.conf.plausible { color: var(--amber); border-color: rgba(255, 194, 77, 0.5); }
+.conf.uncertain { color: var(--text-dim); }
+@container (max-width: 520px) { .ledger-main { grid-template-columns: 36px minmax(0, 1fr) auto; } .ledger-main .pv, .ledger-main .fdr { display: none; } }
+@media (max-width: 560px) { .ledger-main { grid-template-columns: 36px minmax(0, 1fr) auto; } .ledger-main .pv, .ledger-main .fdr { display: none; } .ledger-detail { padding-left: 14px; } }

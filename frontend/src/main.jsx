@@ -11,6 +11,7 @@ import "./styles/ml.css";
 import "./styles/overview.css";
 import "./styles/explainer.css";
 import "./styles/events.css";
+import "./styles/ledger.css";
 import "./styles/motion.css";
 import App from "./App.jsx";
 import ErrorBoundary from "./components/ErrorBoundary.jsx";

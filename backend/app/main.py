@@ -30,6 +30,7 @@ from .analysis import (
 from .archetypes import build_archetypes
 from .context import build_context
 from .forecast import run_forecast_lab
+from .ledger import build_ledger
 from .morans import morans_i
 from .nasa_power import VARIABLES, PowerError
 from .places import PLACES
@@ -375,6 +376,17 @@ async def world(
         "top_falling": sorted((e for e in solid if e["slope_per_decade"] < 0), key=lambda e: e["slope_per_decade"])[:5],
         "note": "These are sample sites around the world, not an evenly spaced or complete picture of the planet.",
     }
+
+
+@app.get("/api/ledger")
+async def ledger(
+    start_year: int = Query(FIRST_YEAR),
+    end_year: int = Query(date.today().year - 1),
+    limit: int = Query(300, ge=20, le=1500, description="How many of the top-ranked trends to return"),
+) -> dict:
+    """The trend ledger: every variable at every sample place plus the planet's vital signs, ranked by evidence."""
+    _check_years(start_year, end_year)
+    return await build_ledger(start_year, end_year, limit=limit)
 
 
 @app.get("/api/forecast")
