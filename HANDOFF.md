@@ -21,8 +21,12 @@ cd frontend && npm test && npm run build            # front-end unit tests and a
 ```
 
 Environment gotchas: Windows PowerShell 5.1 (no `&&`); git pushes work with the stored credentials; commit with
-`git commit -F <file>` (here-strings to `git commit -F -` fail in 5.1). End commit messages with the
-`Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>` trailer if an AI wrote the change.
+`git commit -F <file>` (here-strings to `git commit -F -` fail in 5.1). **Every commit carries both trailers**, as the last lines of
+the message: `Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>` (if an AI wrote the change) and
+`Co-authored-by: Yuvraj Singh <143264768+YuvixSinh@users.noreply.github.com>` (the team credit: Yuvraj + Sai built this together).
+All 20 earlier commits that were not Yuvraj's own were relabelled this way on 2026-11-15 (history rewritten and force-pushed; the old
+history is kept on the branch `backup/before-coauthor-labels`). Anyone with an older clone must run
+`git fetch origin` then `git checkout main` then `git reset --hard origin/main`.
 
 ## The To Do list (from the `To Do` file) and how each item is interpreted
 

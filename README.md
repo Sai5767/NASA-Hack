@@ -200,6 +200,8 @@ HANDOFF.md      working notes for whoever continues the project
 - **Map:** Natural Earth land and borders (public domain) via the `world-atlas` package. **Fonts:** Space Grotesk and JetBrains Mono
   (SIL Open Font License) via Fontsource. Both ship inside the app.
 - This is an independent project. It is **not affiliated with or endorsed by NASA** and uses no NASA logos.
+- **Team:** built together by **Yuvraj Singh** and **Sai** ([Sai5767](https://github.com/Sai5767)) for the 2026 NASA Space Apps Challenge.
+  Every commit credits both of them.
 - **AI assistance:** this project was built with the help of an AI coding assistant (Claude). If the competition asks teams to
   disclose AI use in the submission, mention it there.
 
