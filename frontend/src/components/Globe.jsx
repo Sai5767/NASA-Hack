@@ -61,11 +61,17 @@ const cssMs = (name, fallback) => {
 function earthPalette() {
   const pick = (name, fb) => cssVar(name) || fb;
   const atm = (cssVar("--earth-atmosphere-rgb") || cssVar("--globe-halo-rgb") || PAL.atmosphere).replace(/\s+/g, "");
-  const alpha = Number.parseFloat(cssVar("--earth-atmosphere-alpha"));
+  const num = (name, fb, lo, hi) => {
+    const v = Number.parseFloat(cssVar(name));
+    return Number.isFinite(v) ? Math.min(Math.max(v, lo), hi) : fb;
+  };
   return {
     atmosphere: atm,
-    // One shared strength for the thin blue limb on Welcome and Main (theme.css --earth-atmosphere-alpha).
-    atmosphereAlpha: Number.isFinite(alpha) ? Math.min(Math.max(alpha, 0), 0.4) : 0.18,
+    // The blue limb glow comes from tokens (theme.css): Main uses --earth-atmosphere-*, the welcome scene its own softer pair.
+    atmosphereAlpha: num("--earth-atmosphere-alpha", 0.42, 0, 0.7),
+    atmosphereSpread: num("--earth-atmosphere-spread", 1.1, 1.01, 1.2),
+    atmosphereAlphaWelcome: num("--earth-atmosphere-alpha-welcome", 0.3, 0, 0.7),
+    atmosphereSpreadWelcome: num("--earth-atmosphere-spread-welcome", 1.08, 1.01, 1.2),
     oceanA: pick("--earth-ocean-lit", PAL.oceanA),
     oceanB: pick("--earth-ocean-dark", PAL.oceanB),
     flatOcean: pick("--earth-flat-ocean", PAL.flatOcean),
@@ -219,6 +225,7 @@ export default function Globe({
   rotationPaused = false,
   controls = true,
   borders = true,
+  glow = "main",
   autoNews = true,
   newsPaused = false,
   newsHoldKey = null,
@@ -254,7 +261,7 @@ export default function Globe({
   const idle = useRef(IDLE_DEFAULTS);
   const patterns = useRef(null);
   const live = useRef({});
-  const layout = useRef({ at: 0, callouts: new Set(), clusters: new Map(), hidden: new Set(), kept: [], choice: new Map() });
+  const layout = useRef({ at: 0, crowded: new Set(), legend: null, callouts: new Set(), clusters: new Map(), hidden: new Set(), kept: [], choice: new Map() });
 
   const polys = useMemo(
     () => cells.map((c) => ({ type: "Polygon", coordinates: [cellRing(c.lat, c.lon, cellHalf)] })),
@@ -299,7 +306,7 @@ export default function Globe({
   live.current = {
     pins, cells, polys, cellHalf, selectedCell, dots, busy, idleSpin, reduced, mode, reveal,
     hoverCell: hover?.cell ?? -1, hoverDot: hover?.dot ?? -1, hoverField: hover?.fieldCell ?? null,
-    coarse, field, markers, savedPins, liveGlyph, rotationPaused, userPaused, reading, borders, autoNews, newsPaused,
+    coarse, field, markers, savedPins, liveGlyph, rotationPaused, userPaused, reading, borders, glow, autoNews, newsPaused,
   };
 
   // The automatic news cycle (lib/newsCycle.js): one active callout, takeover on any interaction. `newsHoldKey` is any value
@@ -479,6 +486,7 @@ export default function Globe({
         const out = fieldRect ? [{ x0: fieldRect.x0 - 6, y0: fieldRect.y0 - 28, x1: fieldRect.x1 + 6, y1: fieldRect.y1 + 6 }] : [];
         // Keep callouts clear of the floating timeline (bottom) and the globe controls (top right).
         out.push({ x0: 0, y0: h - 88, x1: w, y1: h }, { x0: w - 116, y0: 0, x1: w, y1: 64 });
+        if (lay.legend) out.push(lay.legend);
         for (const k of list) out.push({ x0: k.pt[0] - 16, y0: k.pt[1] - 16, x1: k.pt[0] + 16, y1: k.pt[1] + 16 });
         return out;
       };
@@ -496,9 +504,14 @@ export default function Globe({
         lay.at = now;
         lay.sizes = new Map();
         for (const [id, el] of newsEls.current) {
+          if (el.dataset.state === "hidden") continue; // idle capitals are not measured (about 200 of them)
           const c = el.querySelector(".gl-callout");
           if (c && c.offsetHeight) lay.sizes.set(id, [c.offsetWidth || CALLOUT_W, c.offsetHeight]);
         }
+        // The map key sits over the stage: callouts keep clear of it.
+        const wrapBox = wrapRef.current?.getBoundingClientRect();
+        const keyBox = wrapRef.current?.querySelector(".gl-legend")?.getBoundingClientRect();
+        lay.legend = wrapBox && keyBox && keyBox.width ? { x0: keyBox.left - wrapBox.left - 6, y0: keyBox.top - wrapBox.top - 6, x1: keyBox.right - wrapBox.left + 6, y1: keyBox.bottom - wrapBox.top + 6 } : null;
         const order = [...pts]
           .filter((p) => p.pt && p.fade > 0 && p.m.kind !== "capital") // capital dots stay hidden; they never cluster news
           .sort((a, b) => (b.m.id === L.reading) - (a.m.id === L.reading) || (b.m.open - a.m.open) || b.f - a.f);
@@ -513,46 +526,66 @@ export default function Globe({
           } else kept.push(p);
         }
         const callouts = new Set();
-        const avoid = baseAvoid(kept);
-        // Manual first: a marker the user hovers, focuses, taps or has open always shows its callout.
-        for (const p of kept) {
-          if (!(p.m.id === L.reading || p.m.open)) continue;
+        const capitals = pts.filter((p) => p.m.kind === "capital" && p.pt && p.fade > 0);
+        // Popups that were seen to overlap another one during the last second are tucked away now.
+        const crowded = lay.crowded;
+        lay.crowded = new Set();
+        // The dots of the capitals that are open count as obstacles too, like the news dots.
+        const avoid = baseAvoid([...kept, ...capitals.filter((p) => cycle.current.active.has(p.m.id))]);
+        const live = [...kept, ...capitals];
+        const byId = new Map(live.map((p) => [p.m.id, p]));
+        // A hovered or focused popup that has since gone out of sight (behind the Earth, clustered away) can never get its
+        // mouse-leave: stop treating it as "being read", or the whole cycle would stay frozen.
+        if (L.reading != null && L.markers.some((m) => m.id === L.reading) && !byId.has(L.reading)) queueMicrotask(() => setReading(null));
+        const place = (p) => {
           const e = calloutEnd(p.pt, isGlobe, cx, cy, R, w, h, avoid, lay.choice.get(p.m.id), calloutSize(p.m.id));
           avoid.push(e.rect);
           callouts.add(p.m.id);
+        };
+        // Manual first: a popup the user hovers, focuses, taps or has open is always shown.
+        for (const p of live) if (p.m.id === L.reading || p.m.open) place(p);
+        // Automatic popups (lib/newsCycle.js): several at once, never a crowd. Popups already open keep their place first.
+        const cyc = cycle.current;
+        for (const id of cyc.active.keys()) {
+          const p = byId.get(id);
+          if (p && !callouts.has(id)) place(p);
         }
-        // Automatic: exactly one callout at a time, chosen by the deterministic queue in lib/newsCycle.js.
         const orderOf = new Map(L.markers.map((m, i) => [m.id, i]));
-        // News markers and capital cities share this one queue, so there is never more than one automatic popup.
-        const capitals = pts.filter((p) => p.m.kind === "capital" && p.pt && p.fade > 0);
-        const candidates = [...kept, ...capitals].map((p) => {
-          const placeable = callouts.has(p.m.id) || calloutEnd(p.pt, isGlobe, cx, cy, R, w, h, avoid, lay.choice.get(p.m.id), calloutSize(p.m.id)).overlap === 0;
+        // 0 saved-place news, 1 capital with verified news, 2 capital with unverified news, 3 capital without news.
+        const rankFor = (m) => (m.kind !== "capital" ? 0 : m.count > 0 ? (m.verified ? 1 : 2) : 3);
+        const candidates = live.map((p) => {
+          const open = cyc.active.has(p.m.id);
+          const manual = callouts.has(p.m.id) && !open;
+          const placeable = (open && !crowded.has(p.m.id)) || (!open && !manual && calloutEnd(p.pt, isGlobe, cx, cy, R, w, h, avoid, lay.choice.get(p.m.id), calloutSize(p.m.id)).overlap === 0);
           return {
             id: p.m.id,
             kind: p.m.kind === "capital" ? "capital" : "news",
-            showcase: !!p.m.showcase,
+            rank: rankFor(p.m),
             order: orderOf.get(p.m.id) ?? 0,
-            eligible: isEligible({ fade: p.fade, clustered: false, hasStory: !!(p.m.lead || p.m.card), placeable }),
+            eligible: !manual && isEligible({ fade: p.fade, clustered: false, hasStory: !!(p.m.lead || p.m.card), placeable }),
           };
         });
         const enabled =
           L.autoNews &&
           !L.newsPaused &&
           !L.reduced &&
-          L.reading == null &&
-          !L.markers.some((m) => m.open) &&
           !drag.current &&
           !fly.current &&
           now > idleAt.current &&
           now > holdUntil.current &&
           (typeof document === "undefined" || document.visibilityState !== "hidden");
-        stepCycle(cycle.current, { enabled, candidates }, now);
-        const auto = cycle.current.activeId;
-        const autoPt = auto != null ? [...kept, ...capitals].find((p) => p.m.id === auto) : null;
-        if (autoPt && !callouts.has(auto)) {
-          const e = calloutEnd(autoPt.pt, isGlobe, cx, cy, R, w, h, avoid, lay.choice.get(auto), calloutSize(auto));
-          avoid.push(e.rect);
-          callouts.add(auto);
+        // Hovering or focusing a popup freezes the set so it can be reached and clicked.
+        // On a phone there is no hover, so the popups stay longer (and a touch on one holds it, see the callout's onPointerDown).
+        const phone = narrow(w);
+        stepCycle(
+          cyc,
+          { enabled, frozen: L.reading != null, candidates, max: phone ? CYCLE.maxActivePhone : CYCLE.maxActive },
+          now,
+          phone ? { ...CYCLE, dwellMs: CYCLE.dwellMs * 1.6 } : CYCLE,
+        );
+        for (const id of cyc.active.keys()) {
+          const p = byId.get(id);
+          if (p && !callouts.has(id)) place(p);
         }
         Object.assign(lay, { callouts, clusters, hidden, kept: kept.map((k) => k.m.id) });
       }
@@ -561,12 +594,17 @@ export default function Globe({
       // local grid (and its tag) and the callouts placed before it.
       const placed = new Map();
       if (lay.callouts.size) {
-        const keptPts = pts.filter((p) => p.pt && lay.kept?.includes(p.m.id));
+        const keptPts = pts.filter((p) => p.pt && (lay.kept?.includes(p.m.id) || (p.m.kind === "capital" && lay.callouts.has(p.m.id))));
         const avoid = baseAvoid(keptPts);
         for (const id of lay.callouts) {
           const p = pts.find((q) => q.m.id === id);
           if (!p?.pt) continue;
           const e = calloutEnd(p.pt, isGlobe, cx, cy, R, w, h, avoid, lay.choice.get(id), calloutSize(id));
+          // An automatic popup that ends up on top of something as the Earth turns is closed on the next pass.
+          if (e.overlap > 0 && cycle.current.active.has(id) && id !== live.current.reading && !lay.crowded.has(id)) {
+            lay.crowded.add(id);
+            lay.at = 0;
+          }
           lay.choice.set(id, e.choice);
           avoid.push(e.rect);
           placed.set(id, e);
@@ -583,8 +621,12 @@ export default function Globe({
         }
         const clustered = lay.hidden.has(p.m.id);
         const callout = !clustered && lay.callouts.has(p.m.id);
-        // A capital city is only ever drawn while it is the active popup; at rest its dot stays hidden.
-        el.dataset.state = clustered ? "hidden" : callout ? "callout" : p.m.kind === "capital" ? "hidden" : "marker";
+        // A capital city is only ever drawn while it is the active popup; at rest its dot stays hidden and costs nothing.
+        if (p.m.kind === "capital" && !callout) {
+          if (el.dataset.state !== "hidden") el.dataset.state = "hidden";
+          continue;
+        }
+        el.dataset.state = clustered ? "hidden" : callout ? "callout" : "marker";
         el.style.transform = `translate(${p.pt[0]}px, ${p.pt[1]}px)`;
         el.style.setProperty("--fade", p.fade.toFixed(3));
         const n = lay.clusters.get(p.m.id) ?? 0;
@@ -664,13 +706,19 @@ export default function Globe({
       const ly = cy - R * 0.38;
 
       if (isGlobe) {
-        // Thin atmosphere rim just outside the disc (within ~4% of the radius, max alpha 0.22).
-        const rim = ctx.createRadialGradient(cx, cy, R * 0.995, cx, cy, R * 1.04);
-        rim.addColorStop(0, `rgba(${E.atmosphere},${E.atmosphereAlpha})`);
-        rim.addColorStop(1, `rgba(${E.atmosphere},0)`);
+        // Blue atmosphere glow just outside the disc, fading to nothing (strength and reach are tokens, see earthPalette).
+        const welcome = L.glow === "welcome";
+        const gAlpha = welcome ? E.atmosphereAlphaWelcome : E.atmosphereAlpha;
+        const gSpread = welcome ? E.atmosphereSpreadWelcome : E.atmosphereSpread;
+        // Many stops on an ease-out curve (alpha falls as (1 - t)^2.4) so the glow is one smooth gradient: no hard edge, no banding.
+        const rim = ctx.createRadialGradient(cx, cy, R * 0.99, cx, cy, R * gSpread);
+        for (let i = 0; i <= 12; i += 1) {
+          const t = i / 12;
+          rim.addColorStop(t, `rgba(${E.atmosphere},${(gAlpha * (1 - t) ** 2.4).toFixed(4)})`);
+        }
         ctx.fillStyle = rim;
         ctx.beginPath();
-        ctx.arc(cx, cy, R * 1.04, 0, Math.PI * 2);
+        ctx.arc(cx, cy, R * gSpread, 0, Math.PI * 2);
         ctx.fill();
       }
 
@@ -767,7 +815,7 @@ export default function Globe({
         ctx.fill();
         const inner = ctx.createRadialGradient(cx, cy, R * 0.93, cx, cy, R);
         inner.addColorStop(0, `rgba(${E.atmosphere},0)`);
-        inner.addColorStop(1, `rgba(${E.atmosphere},${(E.atmosphereAlpha * 0.64).toFixed(3)})`);
+        inner.addColorStop(1, `rgba(${E.atmosphere},${(E.atmosphereAlpha * 0.32).toFixed(3)})`);
         ctx.fillStyle = inner;
         ctx.fill();
         ctx.lineWidth = 1;
@@ -1162,28 +1210,10 @@ export default function Globe({
 
       {markers.length > 0 && (
         <ul className="gl-news-layer" aria-label="News context markers">
-          {markers.map((m) => m.kind === "capital" ? (
-            // A capital city: purely decorative geography (aria-hidden, no interaction); only the active popup is drawn.
+          {markers.map((m) => (
             <li
               key={m.id}
-              className="gl-news gl-news--capital"
-              data-state="hidden"
-              aria-hidden="true"
-              ref={(el) => {
-                if (el) newsEls.current.set(m.id, el);
-                else newsEls.current.delete(m.id);
-              }}
-            >
-              <span className="gl-news-leader" aria-hidden="true"><i /></span>
-              <span className="gl-news-dot gl-news-dot--capital" />
-              <span className="gl-callout-pos">
-                <span className="gl-callout gl-callout--capital">{renderMarkerCard ? renderMarkerCard(m) : m.name}</span>
-              </span>
-            </li>
-          ) : (
-            <li
-              key={m.id}
-              className={`gl-news gl-news--${m.tone}${m.open ? " is-open" : ""}`}
+              className={`gl-news gl-news--${m.tone}${m.kind === "capital" ? " gl-news--is-capital" : ""}${m.open ? " is-open" : ""}`}
               data-state="hidden"
               ref={(el) => {
                 if (el) newsEls.current.set(m.id, el);
@@ -1194,7 +1224,11 @@ export default function Globe({
               <button
                 type="button"
                 className="gl-news-dot"
-                aria-label={`News context near ${m.name}: ${m.count} ${m.count === 1 ? "story" : "stories"}${m.verified ? "" : ", unverified news context"}${m.stale ? ", saved earlier" : ""}. Opens the details.`}
+                aria-label={
+                  m.kind === "capital"
+                    ? `${m.name}, capital of ${m.card?.country?.split(" · ")[0] ?? "this country"}${m.count > 0 ? `. ${m.count} ${m.count === 1 ? "news story" : "news stories"}${m.verified ? "" : ", unverified news context"}` : ""}. Opens an overview.`
+                    : `News context near ${m.name}: ${m.count} ${m.count === 1 ? "story" : "stories"}${m.verified ? "" : ", unverified news context"}${m.stale ? ", saved earlier" : ""}. Opens the details.`
+                }
                 aria-haspopup="dialog"
                 onPointerDown={() => {
                   tapState.current = { id: m.id, shown: newsEls.current.get(m.id)?.dataset.state === "callout" };
@@ -1215,6 +1249,12 @@ export default function Globe({
                   tabIndex={-1}
                   aria-hidden="true"
                   onClick={() => openNews(m)}
+                  onPointerDown={(e) => {
+                    // A touch has no hover: hold this popup (and the set) for a few seconds so the tap can land.
+                    if (e.pointerType === "mouse") return;
+                    setReading(m.id);
+                    setTimeout(() => setReading((r) => (r === m.id ? null : r)), 3500);
+                  }}
                   onPointerEnter={mouseOnly(readOn(m.id))}
                   onPointerLeave={mouseOnly(readOff(m.id))}
                   onBlur={blurOff(m.id)}

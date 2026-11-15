@@ -161,6 +161,11 @@
 .demo-note { font-size: var(--fs-small); color: var(--text-faint); line-height: var(--lh-snug); }
 
 /* Onboarding: no box. On desktop the Earth moves right and the question sits in open black space on the left. */
+/* Sign-in: the form in the middle of the screen, and the Earth as a semicircle standing on the bottom edge: its centre is the
+   middle of the bottom edge, so the flat diameter runs along the base of the screen (as wide as the screen when the screen
+   is tall enough, otherwise limited to 56% of the height so the form always has the upper part of the screen). */
+.welcome.welcome--signin { --we-r: min(50vw, 56vh); --we-x: 50vw; --we-y: 100vh; }
+.welcome--signin .welcome-main { justify-items: center; align-content: center; padding: var(--space-12) var(--space-4); }
 .welcome-flow { width: min(560px, 100%); animation: fade var(--dur-base) var(--ease-standard) both; }
 
 .onboarding { display: grid; gap: var(--space-6); }
@@ -242,7 +247,7 @@
   .welcome { --we-r: min(78vw, 46vh); --we-x: 50vw; --we-y: calc(100vh + var(--we-r) * 0.3); }
   .welcome--onboarding { --we-y: calc(100vh + var(--we-r) * 0.62); }
   .welcome-main { align-content: start; justify-items: center; padding: var(--space-12) var(--space-4) calc(var(--we-r) * 0.55); }
-  .welcome--signin .welcome-main { padding-top: 12dvh; padding-bottom: calc(var(--we-r) * 0.5); }
+  .welcome--signin .welcome-main { align-content: center; padding: var(--space-8) var(--space-4) calc(var(--we-r) * 0.45); }
 }
 @media (max-width: 767.98px) {
   .welcome-surface { padding: var(--space-6); }

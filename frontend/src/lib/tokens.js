@@ -23,12 +23,12 @@ export const FALLBACK = {
   "--evidence-off": "#3d3d3d",
   "--star": "#d9d9d9",
   // Earth exceptions (inside the globe only)
-  "--earth-ocean-lit": "#1d4a72",
-  "--earth-ocean-dark": "#061525",
-  "--earth-flat-ocean": "#0a2236",
-  "--earth-land": "#3f5236",
-  "--earth-land-dry": "#6e6146",
-  "--earth-ice": "#e6ebee",
+  "--earth-ocean-lit": "#173b5b",
+  "--earth-ocean-dark": "#050e1b",
+  "--earth-flat-ocean": "#081a2b",
+  "--earth-land": "#32422b",
+  "--earth-land-dry": "#584d38",
+  "--earth-ice": "#cfd5d9",
   // Data scales (data layer + legend only)
   "--data-warm-1": "#efd8b8",
   "--data-warm-2": "#e2b182",

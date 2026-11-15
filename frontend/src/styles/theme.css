@@ -57,23 +57,26 @@
   --evidence-off: #3d3d3d;    /* empty meter mark */
 
   /* ================= 2. Earth exceptions (inside the globe disc only) ================= */
-  --globe-ocean-lit: #1d4a72;     /* sunlit ocean */
-  --globe-ocean-dark: #061525;    /* night-side ocean */
-  --globe-flat-ocean: #0a2236;    /* flat-map ocean */
-  --globe-land: #3f5236;          /* temperate land, muted green */
+  --globe-ocean-lit: #173b5b;     /* sunlit ocean */
+  --globe-ocean-dark: #050e1b;    /* night-side ocean */
+  --globe-flat-ocean: #081a2b;    /* flat-map ocean */
+  --globe-land: #32422b;          /* temperate land, muted green */
   --globe-halo-rgb: 120, 170, 230;  /* atmosphere rim, max alpha 0.22, never outside ~4% of the radius */
   --earth-ocean-lit: var(--globe-ocean-lit);
   --earth-ocean-dark: var(--globe-ocean-dark);
   --earth-flat-ocean: var(--globe-flat-ocean);
   --earth-land: var(--globe-land);
-  --earth-land-dry: #6e6146;      /* arid land, muted brown */
-  --earth-ice: #e6ebee;           /* ice caps and cloud */
+  --earth-land-dry: #584d38;      /* arid land, muted brown */
+  --earth-ice: #cfd5d9;           /* ice caps and cloud */
   --earth-coast: rgba(225, 232, 225, 0.26);
   --earth-border: rgba(255, 255, 255, 0.07);
   --earth-graticule: rgba(255, 255, 255, 0.035);
-  --earth-atmosphere-rgb: var(--globe-halo-rgb);
-  --earth-atmosphere-alpha: 0.18;  /* strength of the thin blue limb; the same on Welcome and Main */
-  --earth-limb: rgba(150, 190, 235, 0.30);
+  --earth-atmosphere-rgb: 24, 112, 255;     /* deep, bright blue (the glow); --globe-halo-rgb above stays the legacy fallback */
+  --earth-atmosphere-alpha: 0.85;          /* blue limb glow on Main: strength at the edge of the planet */
+  --earth-atmosphere-spread: 1.17;         /* ... and how far it fades out, as a multiple of the planet's radius */
+  --earth-atmosphere-alpha-welcome: 0.6;  /* a slightly softer glow behind sign-in and the questions */
+  --earth-atmosphere-spread-welcome: 1.12;
+  --earth-limb: rgba(70, 150, 255, 0.55);
   --star: #d9d9d9;                /* sparse static stars, alpha 0.15-0.6 */
 
   /* ================= 3. Data scales (data layer + its legend ONLY) ================= */

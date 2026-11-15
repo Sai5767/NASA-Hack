@@ -15,6 +15,7 @@ import { GRID_SHORT_NOTE } from "../../lib/globeFrames.js";
 import { COARSE_LABEL, COARSE_NOTE, coarseLegendTokens, coarseScale, coverageLabel } from "../../lib/coarsePreview.js";
 import { CELL_STYLES } from "../../lib/globeDots.js";
 import { SEVERITY_NOTE, UNVERIFIED_LABEL } from "../../lib/globeNews.js";
+import { CAPITALS } from "../../lib/capitals.js";
 
 const num = (v) => (v == null ? "" : `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v).toFixed(1)}`);
 
@@ -28,16 +29,19 @@ function Ramp({ tokens, low, high }) {
   );
 }
 
+const CAPITAL_OPTIONS = [...CAPITALS].sort((a, b) => a.name.localeCompare(b.name));
+
 export default function GlobeLegend({
   timeline, variable, coarse, showField, showForecast, showNews, showLive, sampleSites = false, scanStyles = [], lapse = false,
-  savedPins = [],
+  savedPins = [], onPickCapital,
 }) {
   const [open, setOpen] = useState(false);
   const [more, setMore] = useState(false);
   const moreId = useId();
+  const capId = useId();
   const coarseOn = coarse?.status === "ready" && coarse.doc;
   const coarseMissing = variable && !showField && (coarse?.status === "unavailable" || coarse?.status === "loading");
-  const any = showField || showNews || showLive || sampleSites || coarseOn || coarseMissing || scanStyles.length || lapse || savedPins.length;
+  const any = showField || showNews || showLive || sampleSites || coarseOn || coarseMissing || scanStyles.length || lapse || savedPins.length || onPickCapital;
   if (!any) return null;
   const ramp = rampFor(timeline?.variable ?? variable);
   const sw = legendSwatches(ramp, timeline?.scale ?? null);
@@ -119,6 +123,19 @@ export default function GlobeLegend({
           <p className="gl-legend-row"><i className="gl-sw gl-sw-dot" style={{ background: "var(--data-up)" }} aria-hidden="true" /> Warmer or higher than this place usually is</p>
           <p className="gl-legend-row"><i className="gl-sw gl-sw-dot" style={{ background: "var(--data-down)" }} aria-hidden="true" /> Cooler or lower than this place usually is</p>
           <p className="gl-legend-row"><i className="gl-sw gl-sw-dot" style={{ background: "var(--data-flat)" }} aria-hidden="true" /> Near usual · stronger colour = more unusual</p>
+        </section>
+      )}
+
+      {onPickCapital && (
+        <section className="gl-legend-group" aria-label="Capital cities">
+          <label className="gl-legend-title" htmlFor={capId}>Capital cities</label>
+          <select id={capId} className="gl-legend-select" value="" onChange={(e) => e.target.value && onPickCapital(e.target.value)}>
+            <option value="">Open a capital's overview…</option>
+            {CAPITAL_OPTIONS.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}, {c.country}</option>
+            ))}
+          </select>
+          <p className="gl-legend-note">Capitals pop up as the Earth turns (not with reduced motion). This list works with the keyboard.</p>
         </section>
       )}
 

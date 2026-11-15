@@ -198,7 +198,7 @@ function WelcomeEarth({ focus, reduced }) {
   }, []);
   return (
     <div className="welcome-globe" ref={ref} aria-hidden="true">
-      <Globe idleSpin={!reduced} focus={focus} reducedMotion={reduced} controls={false} borders={false} />
+      <Globe idleSpin={!reduced} focus={focus} reducedMotion={reduced} controls={false} borders={false} glow="welcome" />
     </div>
   );
 }

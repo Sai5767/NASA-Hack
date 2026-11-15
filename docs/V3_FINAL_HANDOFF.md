@@ -61,7 +61,50 @@ VISHWA = Validated Insights on Significant Hydro-climate and Weather Anomalies (
    rate-limiting); it proved the mechanics (max one callout, takeover in ~140 ms, resume ~1.3 s after release, limb close,
    reduced motion, detail drawer text) but is not evidence of real stories. Not captured: screenshots or a recording.
 
-## Capital-city popups on Main (15 November 2026, late)
+## Capitals of every country, several popups at once (owner request, supersedes the two sections below)
+The owner asked for popups out of the capitals of every country, with the key news, a green/amber/red border by severity,
+smooth animation, several popups at the same time, click for a detailed overview, a darker Earth, a gradient glow, and a
+sign-in screen with the form in the middle and the Earth as a semicircle on the bottom edge.
+- Capitals: all 193 UN member states (`lib/capitals.js`, static hand-written geography, positions to about 0.1 degrees; the first
+  52 are the main countries and are preferred). Not a live source; none of it is climate data.
+- Several at once, never a crowd (`lib/newsCycle.js`, pure and tested): at most 4 open on a desktop and 2 on a phone, a new one
+  opens only every ~1.3 s, each stays ~7 s. Priority: saved-place news, capitals with verified news, capitals with only unverified
+  news, then the rest; least recently shown first; a long rest per capital. Popups avoid each other, the timeline and the controls.
+  Hovering or focusing a popup FREEZES the set (nothing expires or opens) so it can be reached and clicked; drag, timeline moves,
+  an open drawer or reduced motion close them all; the cycle resumes ~1.1 s after the interaction ends.
+- News for every capital (`lib/capitalNews.js`): gradual and polite, not a flood: batches of at most 5, one at a time, 8 s apart,
+  main countries first, at most 24 batches (120 capitals) per visit, a 60 s back-off when rate-limited, and it stops by itself after
+  3 failed batches in a row. It starts only after onboarding and after the saved places have answered. The old ten-city showcase
+  was removed (the capitals replace it). A capital with no news yet shows its geography card with a neutral border.
+- Severity border: a verified story's popup has a green, amber or red BORDER (colour never fills the box; the box stays near-black);
+  an unverified story is neutral, dashed and says "Unverified news context"; a capital with no story has a neutral border.
+- Click a popup: opens the capital overview in the side drawer: position, Sun time, distance from the equator, a fixed fact where
+  there is one, then every news story found for that capital (news context, not scientific evidence or an official warning).
+- Earth: palette about 20% darker (tokens in theme.css, theme.js, tokens.js). Glow: a deep bright blue (`--earth-atmosphere-rgb:
+  24, 112, 255`) drawn as a 13-stop ease-out radial gradient behind the planet, so it fades smoothly with no ring or banding.
+  Main: alpha 0.85, reach 1.17 x radius; sign-in: alpha 0.6, reach 1.12 (separate tokens `--earth-atmosphere-*` and
+  `--earth-atmosphere-*-welcome`).
+- Keyboard and reduced-motion access: the map Key (button on the stage) has a "Capital cities" list of all 193; choosing one opens
+  its overview, so capital information does not depend on catching a popup.
+- Review fixes applied after an independent read-only review: popups that end up on top of another popup or the map key are
+  closed on the next pass; the map key and the open capitals' dots count as obstacles; idle capital markers cost nothing (no
+  per-frame writes, no compositor layer, not measured); a touch on a popup holds it for 3.5 s and popups stay 1.6x longer on a
+  phone; the capital news runner rests five minutes after three failed batches and tries once more before giving up for the
+  visit; a hover that can no longer receive its mouse-leave cannot freeze the cycle.
+- Verified in a real browser (1440x900, 1024x768, 375x812): sign-in form centred with the Earth centred on the bottom edge
+  (diameter = 100% of the width on a phone, 84% at 1024x768, 70% at 1440x900 where it is capped at 56% of the height); on Main up
+  to four popups at once on a desktop, new ones about every 1.4 s, different capitals each time, none outside the stage, brief
+  overlaps close within a pass; hover freezes the set and a click opens the overview; phone showed up to three at once and none
+  outside the stage. The severity borders and the overview with a story were checked with a TEST-ONLY synthetic /api/news
+  response injected into the page (the real provider was rate-limiting); that is not evidence of real stories.
+- Tests: 143 front-end tests pass (new: tests/news-cycle.test.mjs); `npm run build` passes.
+- Sign-in: form in the middle; the Earth is a semicircle standing on the bottom edge (diameter along the base: as wide as the
+  screen when the screen is tall enough, otherwise 56% of the height). The two onboarding questions keep the earlier low-right /
+  bottom-arc composition.
+- Limits: with reduced motion nothing cycles, so capital popups are not shown; capital markers are hidden at rest and reached only
+  through the popups. A GDELT outage or rate limit means no capital news; the geography popups still run.
+
+## Capital-city popups on Main (15 November 2026, late) (earlier version, now superseded: single popup, 50 capitals)
 As the Earth rotates, a popup with a leader line comes out of a capital city: 50 main countries across every inhabited continent
 (`frontend/src/lib/capitals.js`, static hand-written geography, positions to about 0.01 degrees, nothing fetched).
 - Not crowded: capitals share the SAME single-popup queue as the news (`lib/newsCycle.js`): exactly one automatic popup at a

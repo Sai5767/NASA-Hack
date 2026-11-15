@@ -20,7 +20,7 @@ import Globe from "../Globe.jsx";
 import ForecastStatus from "../globe/ForecastStatus.jsx";
 import GlobeLegend from "../globe/GlobeLegend.jsx";
 import LiveWeatherCard from "../globe/LiveWeatherCard.jsx";
-import { CapitalCallout, NewsCallout, useOpenNews } from "../globe/News.jsx";
+import { CapitalCallout, NewsCallout, useOpenCapital, useOpenNews } from "../globe/News.jsx";
 import TimelineRail from "../globe/TimelineRail.jsx";
 import { GlobeLayersProvider, LayersBridge, useGlobeLayers, useNewsMarkers } from "../globe/useGlobeLayers.jsx";
 import { useShell } from "../shell/Drawer.jsx";
@@ -49,9 +49,15 @@ export function MainStage({ globeProps = {}, overlay, reducedMotion, onOpenNews,
   const shell = useShell();
   const newsOpen = shell.drawerId === "news";
   const markers = useNewsMarkers(newsOpen ? L?.openNewsPlace : null);
-  // Capital cities for the rotating popups: bundled geography, one popup at a time together with the news (lib/newsCycle.js).
-  const capitals = useMemo(() => capitalMarkers(), []);
+  // Capital cities for the rotating popups: bundled geography plus the news found for each capital so far. Several popups
+  // can be open at once, never a crowd (lib/newsCycle.js). The capital whose overview is open in the drawer stays shown.
+  const openCapitalId = newsOpen ? L?.openNewsPlace : null;
+  const capitals = useMemo(
+    () => capitalMarkers(L?.capitalStories ?? []).map((m) => (m.id === openCapitalId ? { ...m, open: true } : m)),
+    [L?.capitalStories, openCapitalId], // eslint-disable-line react-hooks/exhaustive-deps
+  );
   const globeMarkers = useMemo(() => [...markers, ...capitals], [markers, capitals]);
+  const openCapital = useOpenCapital();
   const openNewsPanel = useOpenNews();
   const forecastShown = !!L?.timeline && isForecastIndex(L.timeline, L.index);
   const frame = L?.frame;
@@ -64,8 +70,9 @@ export function MainStage({ globeProps = {}, overlay, reducedMotion, onOpenNews,
       : "",
   ].filter(Boolean).join("; ");
   const pickNews = (m) => {
+    if (m.kind === "capital") return openCapital(m.id);
     if (onOpenNews) return onOpenNews(m);
-    const p = [...(L?.places ?? []), ...(L?.showcasePlaces ?? [])].find((x) => x.id === m.placeId);
+    const p = (L?.places ?? []).find((x) => x.id === m.placeId);
     if (p) openNewsPanel(p);
     return undefined;
   };
@@ -100,6 +107,7 @@ export function MainStage({ globeProps = {}, overlay, reducedMotion, onOpenNews,
             showNews={markers.length > 0}
             showLive={!!L?.liveGlyph}
             savedPins={globeProps.savedPins ?? []}
+            onPickCapital={openCapital}
           />
         </Globe>
       </div>

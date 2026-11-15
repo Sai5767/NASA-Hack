@@ -22,15 +22,13 @@ import { frameMonthKey, monthLabel, pickCoarseMonth, useCoarsePreview } from "..
 import { classify, rampFor, tokenFor } from "../../lib/ramp.js";
 import { createMemoCache } from "../../lib/memoCache.js";
 import { filterByInterest, interestForVariable, locationsParam, markersFor, savedStories } from "../../lib/globeNews.js";
-import { showcaseBatches } from "../../lib/showcaseCities.js";
+import { capitalStoriesSnapshot, runCapitalNews, subscribeCapitalNews } from "../../lib/capitalNews.js";
 import { glyphModel, weatherState } from "../../lib/liveWeather.js";
 
 const framesCache = createMemoCache({ max: 8 });
 const forecastCache = createMemoCache({ max: 4 });
 const weatherCache = createMemoCache({ max: 6, ttlMs: 10 * 60 * 1000 });
-const newsCache = createMemoCache({ max: 6 }); // saved places + up to two showcase batches
-const SHOWCASE_PAUSE_MS = 6000; // gap before each showcase batch (provider limit is ~1 request per 5 s)
-const SHOWCASE_TOLERANCE = 0.6; // degrees: the server may snap a city to its own centroid
+const newsCache = createMemoCache({ max: 3 });
 
 const EMPTY = { key: null, data: null, error: null, loading: false, receivedAt: null };
 
@@ -387,44 +385,27 @@ export function GlobeLayersProvider({ place, variable, places = [], reducedMotio
     if (newsWanted && locParam) loadNews();
     if (!locParam) news.reset();
   }, [newsWanted, locParam]); // eslint-disable-line react-hooks/exhaustive-deps
-  // ---- showcase cities: a fixed set of main cities, after the saved places, one bounded batch at a time.
-  // Never before onboarding (this provider only mounts with the workspace), never blocks render, never for arbitrary
-  // coordinates. Each batch goes through the same cached, rate-limited /api/news flow; a batch starts only after the
-  // previous request has settled plus a pause (the news provider allows roughly one request per five seconds).
-  const showA = useRequest(newsCache);
-  const showB = useRequest(newsCache);
-  const placesKey = places.map((p) => `${p.id}:${p.lat}:${p.lon}`).join("|");
-  const batches = useMemo(() => showcaseBatches(places), [placesKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  // ---- capital cities: news for the capitals of every country, gradually (lib/capitalNews.js). Never before onboarding
+  // (this provider only mounts with the workspace), never blocks render, only the fixed capital list, in polite batches
+  // after the saved places have answered. The progress lives outside this component, so it carries on across Main/Explore.
   const settled = (r) => !r.loading && (r.data != null || r.error != null);
   const savedSettled = !locParam || settled(news.state);
-  const paramA = batches[0]?.param ?? null;
-  const paramB = batches[1]?.param ?? null;
   useEffect(() => {
-    if (!paramA) return showA.reset();
     if (!newsWanted || !savedSettled) return undefined;
-    const t = setTimeout(() => showA.run(paramA, (s) => fetchNews({ locations: paramA, limit: 30 }, s)), locParam ? SHOWCASE_PAUSE_MS : 0);
+    const t = setTimeout(
+      () => runCapitalNews({ fetchBatch: (param, signal) => fetchNews({ locations: param, limit: 30 }, signal) }),
+      locParam ? 6000 : 1500,
+    );
     return () => clearTimeout(t);
-  }, [newsWanted, savedSettled, paramA]); // eslint-disable-line react-hooks/exhaustive-deps
-  const aSettled = settled(showA.state);
-  useEffect(() => {
-    if (!paramB) return showB.reset();
-    if (!newsWanted || !aSettled) return undefined;
-    const t = setTimeout(() => showB.run(paramB, (s) => fetchNews({ locations: paramB, limit: 30 }, s)), SHOWCASE_PAUSE_MS);
-    return () => clearTimeout(t);
-  }, [newsWanted, aSettled, paramB]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [newsWanted, savedSettled]); // eslint-disable-line react-hooks/exhaustive-deps
+  const capStories = useSyncExternalStore(subscribeCapitalNews, () => capitalStoriesSnapshot().stories);
 
   const interest = interestForVariable(variable);
   const savedList = useMemo(() => savedStories(news.state.data, places), [news.state.data, places]);
-  const showcaseList = useMemo(
-    () => [
-      ...savedStories(paramA ? showA.state.data : null, batches[0]?.cities ?? [], SHOWCASE_TOLERANCE),
-      ...savedStories(paramB ? showB.state.data : null, batches[1]?.cities ?? [], SHOWCASE_TOLERANCE),
-    ],
-    [showA.state.data, showB.state.data, batches], // eslint-disable-line react-hooks/exhaustive-deps
-  );
-  const allStories = useMemo(() => [...savedList, ...showcaseList], [savedList, showcaseList]);
-  const stories = useMemo(() => (showAllNews ? allStories : filterByInterest(allStories, interest)), [allStories, showAllNews, interest]);
-  const showcasePlaces = useMemo(() => batches.flatMap((b) => b.cities), [batches]);
+  // Saved-place stories only: these become the news markers. Capital stories are matched to the capital popups below.
+  const allStories = useMemo(() => [...savedList, ...capStories], [savedList, capStories]);
+  const stories = useMemo(() => (showAllNews ? savedList : filterByInterest(savedList, interest)), [savedList, showAllNews, interest]);
+  const capitalStories = useMemo(() => (showAllNews ? capStories : filterByInterest(capStories, interest)), [capStories, showAllNews, interest]);
   const newsReq = locParam ? news.state : EMPTY;
 
   const value = {
@@ -439,7 +420,7 @@ export function GlobeLayersProvider({ place, variable, places = [], reducedMotio
     // weather
     weatherReq, weatherState: wState, weatherOpen, setWeatherOpen, showLive, setShowLive, hours, setHours, loadWeather, liveGlyph,
     // news
-    showcasePlaces,
+    capitalStories,
     newsReq, newsWanted, setNewsWanted, loadNews, stories, allStories, showAllNews, setShowAllNews, interest, openNewsPlace, setOpenNewsPlace,
   };
 

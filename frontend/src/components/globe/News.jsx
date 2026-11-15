@@ -7,6 +7,7 @@
  * never show a severity colour or `severity_label`. Nothing here is an official warning.
  */
 import { useEffect, useRef } from "react";
+import { CAPITALS, capitalCard } from "../../lib/capitals.js";
 import { newsCard, newsState, NEWS_LABEL, SEVERITY_NOTE, SLOW_TEXT, UNVERIFIED_LABEL, CATEGORY_LABEL, INTEREST_CATEGORIES } from "../../lib/globeNews.js";
 import { Badge, StateCard } from "../shell/ui.jsx";
 import { useShell } from "../shell/Drawer.jsx";
@@ -66,16 +67,120 @@ export function NewsCallout({ marker }) {
 export function CapitalCallout({ marker }) {
   const c = marker?.card;
   if (!c) return null;
+  const n = marker.lead;
+  // With a news story the popup stays compact (capital, key story); the full geography is in the overview. Without one it
+  // shows the geography card. A verified story's colour is the popup's border (see globe.css); unverified stays neutral.
   return (
     <span className="gl-callout-body">
       <span className="gl-callout-title">{c.title}</span>
       <span className="gl-callout-country">{c.country}</span>
-      {c.details.map((d) => (
-        <span key={d} className="gl-callout-detail">{d}</span>
-      ))}
-      {c.fact && <span className="gl-callout-fact">{c.fact}</span>}
+      {n ? (
+        <>
+          <span className="gl-callout-top">
+            {n.verified ? (
+              <span className={`gl-callout-glyph news-tone--${n.tone}`} aria-hidden="true">{n.glyph}</span>
+            ) : (
+              <span className="gl-callout-unverified">{UNVERIFIED_LABEL}</span>
+            )}
+            <span className="gl-callout-headline">{n.headline}</span>
+          </span>
+          <span className="gl-callout-meta">
+            {n.publisher}
+            {n.date ? ` · ${n.date}` : ""}
+            {marker.count > 1 ? ` · +${marker.count - 1} more` : ""}
+          </span>
+        </>
+      ) : (
+        <>
+          {c.details.map((d) => (
+            <span key={d} className="gl-callout-detail">{d}</span>
+          ))}
+          {c.fact && <span className="gl-callout-fact">{c.fact}</span>}
+        </>
+      )}
     </span>
   );
+}
+
+/**
+ * The detailed overview opened by clicking a capital popup (shell drawer): geography first (position, Sun time, distance
+ * from the equator, a fixed fact where there is one), then every news story found for the capital. News is context,
+ * not scientific evidence or an official warning; verified stories carry an attention colour, unverified ones do not.
+ */
+export function CapitalPanel({ capitalId }) {
+  const snap = useNewsSnapshot();
+  const cap = CAPITALS.find((c) => c.id === capitalId);
+  if (!cap) return null;
+  const card = capitalCard(cap, { full: true });
+  const list = snap.stories.filter((s) => s.place.id === capitalId);
+  const cards = list.map((s) => newsCard(s.item, { showcase: true }));
+  const verified = cards.filter((c) => c.verified);
+  const unverified = cards.filter((c) => !c.verified);
+  return (
+    <div className="news-panel capital-panel">
+      <p className="capital-country">{card.country}</p>
+      <ul className="capital-facts">
+        {card.details.map((d) => (
+          <li key={d}>{d}</li>
+        ))}
+        {card.fact && <li>{card.fact}</li>}
+      </ul>
+      <p className="small faint">Capital positions are approximate, from a fixed list, and are not climate data. Sun time is the Sun's own time, not the clock time.</p>
+      <h3 className="news-sub">News near {cap.name}</h3>
+      <p className="news-panel-label">News context, not scientific evidence or an official warning.</p>
+      {!cards.length && <p className="small dim">We have not found environmental news near {cap.name} yet. News is looked up gradually and may not be available.</p>}
+      {verified.length > 0 && (
+        <ul className="news-panel-list">
+          {verified.map((c) => (
+            <li key={c.id} className={`news-entry news-entry--${c.tone}`}>
+              <span className="news-glyph" aria-hidden="true">{c.glyph}</span>
+              <div>
+                <p className="news-headline full">{c.headline}</p>
+                <p className="news-meta">{[c.publisher, c.date, c.severityLabel, c.category].filter(Boolean).join(" · ")}</p>
+                {c.url && <a href={c.url} target="_blank" rel="noopener noreferrer nofollow">Read at {c.host} ↗</a>}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      {unverified.length > 0 && (
+        <>
+          <h3 className="news-sub">{UNVERIFIED_LABEL}</h3>
+          <ul className="news-panel-list">
+            {unverified.map((c) => (
+              <li key={c.id} className="news-entry news-entry--unverified">
+                <span className="news-glyph" aria-hidden="true">{c.glyph}</span>
+                <div>
+                  <p className="news-headline full">“{c.headline}”</p>
+                  <p className="news-meta">{[c.publisher, c.date].filter(Boolean).join(" · ")}</p>
+                  <p className="small dim">We could not confirm this publisher against our list.</p>
+                  {c.url && <a href={c.url} target="_blank" rel="noopener noreferrer nofollow">Read at {c.host} ↗</a>}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      {cards.length > 0 && <p className="small faint">{SEVERITY_NOTE}</p>}
+    </div>
+  );
+}
+
+/** Open the overview of one capital in the shell's single right-hand drawer. */
+export function useOpenCapital() {
+  const shell = useShell();
+  const L = useGlobeLayers();
+  return (capitalId) => {
+    const cap = CAPITALS.find((c) => c.id === capitalId);
+    if (!cap) return;
+    L?.setOpenNewsPlace(capitalId);
+    shell.openDrawer({
+      id: "news",
+      title: `${cap.name} · ${cap.country}`,
+      eyebrow: "Capital city overview",
+      render: () => <CapitalPanel capitalId={capitalId} />,
+    });
+  };
 }
 
 /** The panel body (rendered in the shell drawer). Reads live news state, so a retry or refresh updates it. */

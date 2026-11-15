@@ -110,11 +110,21 @@
   cursor: pointer;
 }
 .gl-news-dot::after { content: ""; position: absolute; inset: -11px; } /* 44px hit area */
-/* Capital city popup: neutral white, a small filled dot, nothing to click. */
+/* Capital city with no news yet: neutral white, a small filled dot. With news it takes the severity colour like any news marker. */
 .gl-news--capital { color: var(--text); }
-.gl-news-dot--capital { pointer-events: none; left: -4px; top: -4px; width: 8px; height: 8px; border: 0; background: currentColor; cursor: default; }
-.gl-news-dot--capital::after { content: none; }
-.gl-callout--capital { cursor: default; border-style: solid; }
+.gl-news--capital .gl-news-dot { left: -5px; top: -5px; width: 10px; height: 10px; border: 0; background: currentColor; }
+.gl-news--capital .gl-news-dot::after { inset: -17px; }
+.gl-news--capital .gl-news-glyph { display: none; }
+/* The popup's border carries the editorial attention colour (verified stories only); the box itself stays near-black. */
+.gl-news--green .gl-callout { border-color: var(--news-green); }
+.gl-news--amber .gl-callout { border-color: var(--news-amber); }
+.gl-news--red .gl-callout { border-color: var(--news-red); }
+.gl-news--green .gl-callout, .gl-news--amber .gl-callout, .gl-news--red .gl-callout { border-width: var(--news-border-width); }
+.gl-news--green .gl-callout:hover { border-color: var(--news-green); }
+.gl-news--amber .gl-callout:hover { border-color: var(--news-amber); }
+.gl-news--red .gl-callout:hover { border-color: var(--news-red); }
+.gl-news[data-state="callout"], .gl-news[data-state="marker"] { will-change: transform, opacity; } /* only the visible ones get a layer */
+.gl-legend-select { width: 100%; min-height: 36px; margin-top: var(--space-1); padding: 0 var(--space-2); border: var(--border-width) solid var(--border-control); border-radius: var(--radius-sm); background: var(--bg); color: var(--text); font: inherit; font-size: var(--fs-small); }
 .gl-callout-title { display: block; font-weight: var(--fw-medium); line-height: var(--lh-snug); }
 .gl-callout-country { display: block; font-size: var(--fs-label); color: var(--text-dim); }
 .gl-callout-detail { display: block; font-size: var(--fs-label); color: var(--text-faint); }

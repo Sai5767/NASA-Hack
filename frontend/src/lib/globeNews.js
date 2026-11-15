@@ -203,7 +203,7 @@ export function markersFor(list, { stale = false, openPlaceId = null } = {}) {
       stale,
       open: openPlaceId === place.id,
       uncertaintyKm: unc.length ? Math.max(...unc) : null,
-      lead: newsCard(lead, { showcase: place.showcase === true }),
+      lead: newsCard(lead, { showcase: place.showcase === true || place.capital === true }),
     };
   });
 }

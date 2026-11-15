@@ -15,10 +15,10 @@ export const THEMES = {
     // Earth exceptions (spec 3B): natural ocean, muted land, a subtle blue rim. Inside the globe only.
     globe: {
       atmosphere: "120,170,230",
-      oceanA: "#1d4a72",
-      oceanB: "#061525",
-      flatOcean: "#0a2236",
-      land: "#3f5236",
+      oceanA: "#173b5b",
+      oceanB: "#050e1b",
+      flatOcean: "#081a2b",
+      land: "#32422b",
       coast: "rgba(225, 232, 225, 0.26)",
       border: "rgba(255, 255, 255, 0.07)",
       grid: "rgba(255, 255, 255, 0.035)",
