@@ -41,7 +41,7 @@ Read these first, in full:
 Core constraints:
 1. Preserve FastAPI, the audited hand-written trend statistics, existing public-data behaviour, and backwards-compatible existing API fields.
 2. There is no real account system or profile database. Profiles and saved locations stay in the browser. Do not add authentication, Supabase, passwords, or a server database.
-3. Secrets are server-only environment variables. OPENAI_API_KEY and Meteomatics credentials must never reach frontend code, a response, logging, tests, a source file, or a commit. The application must work without either integration configured.
+3. Secrets are server-only environment variables. Read `OPENAI_API_KEY`, `OPENAI_EXPLANATION_MODEL`, `METEOMATICS_USERNAME`, and `METEOMATICS_PASSWORD` through the backend configuration layer. For local development, load the untracked `backend/.env`; for Azure, environment variables must take precedence. Secrets must never reach frontend code, a response, logging, tests, a source file, or a commit. The application must work without either integration configured.
 4. An AI explanation must never calculate/alter the trend, claim causation, invent citations, or make a risk/emergency decision. Statistics are server-produced facts. The AI produces a hedged, source-cited explanation of possible drivers only.
 5. No blind averaging of overlapping scientific products. NASA POWER is the primary V2 point/monthly source; other listed resources are registry/reference candidates unless you implement a tested adapter and visible provenance.
 6. All new external dependencies require timeout, bounded retry/concurrency, typed errors, a cache policy, an offline fake in tests, and a usable API response when unavailable.
@@ -49,6 +49,7 @@ Core constraints:
 Implement these deliverables in order.
 
 A. Contract and resilience foundation
+- Add a small backend configuration module that reads process environment first and, only for local development, loads `backend/.env` with `python-dotenv` or an equivalent safe mechanism. Do not require `.env` in production. Add/update `backend/.env.example` with placeholder names only, never values. Add a test proving absent keys do not crash startup.
 - Create docs/V2_API_CONTRACT.md containing request/response schemas and example payloads for every new/extended API below. It is the frontend handoff authority.
 - Add a common dependency/client layer with configuration read from environment, strict timeouts, cancellation where possible, bounded concurrency, structured non-secret errors, and bounded TTL caching. Do not make the production deployment depend on writeable local disk.
 - Extend GET /api/trend without removing existing fields. Add a stable evidence_trace sufficient for the UI to explain the actual calculation: complete years/months used, slope and interval, Mann–Kendall outcome, regression/serial-correlation adjustment outcome, raw p-value, correction status when applicable, evidence grade/checks, and caveats. Values must come from existing analysis results, never duplicate reimplementation.
@@ -71,7 +72,7 @@ C. Observed monthly grid and honest monthly forecast
 
 D. “Why might this be happening?” endpoint
 - Add POST /api/explanations. The browser submits only a short optional question and an analysis request/signature. Recompute/verify/retrieve the analysis server-side; never accept client-supplied p-values, slopes, source facts, or arbitrary hidden prompt text.
-- Use a backend-only OpenAI Responses API integration, configurable by OPENAI_API_KEY and OPENAI_EXPLANATION_MODEL. When live source research is enabled, use official/reputable science domain filtering where feasible and preserve the returned URL citations in a normalised response.
+- Use a backend-only OpenAI Responses API integration, configured only through the backend configuration layer’s `OPENAI_API_KEY` and `OPENAI_EXPLANATION_MODEL`. When live source research is enabled, use official/reputable science domain filtering where feasible and preserve the returned URL citations in a normalised response.
 - Validate structured model output on the server. Response shape: status, summary, drivers[], limitations[], citations[], generated_at, fallback. Each driver must distinguish evidence type and use citations; unsubstantiated drivers must be removed rather than displayed.
 - Provide an explicit system instruction enforcing: possible explanations not causation; supplied facts are authoritative; no invented facts/citations; say when evidence cannot explain the local trend; short high-school-friendly language; no medical/emergency/legal advice.
 - Add 24-hour analysis-signature cache plus rate limiting. When unavailable, use the existing curated reasons.py content where available; otherwise return an honest unavailable/no-evidence response with HTTP success if the trend itself was valid.

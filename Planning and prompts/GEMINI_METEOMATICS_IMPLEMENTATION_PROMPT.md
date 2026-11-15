@@ -21,6 +21,9 @@ The owner will configure these in the local backend environment and in Azure App
 
 Do not ask for their values, print them, log them, commit them, put them in a URL, return them from an endpoint, or reference them in frontend code. Use HTTPS Basic Authentication through the HTTP client’s authentication option, never a `username:password@host` URL. The app must still run normally when either variable is absent.
 
+Local secret-file rule
+Create or update a backend configuration module that reads operating-system environment variables first, then loads `backend/.env` only for local development. Add a safe `backend/.env.example` containing placeholder variable names only. `backend/.env` is local-only and must be ignored by Git. Never create a real `.env` file or ask for its values. Azure App Service environment variables take precedence over any file.
+
 Meteomatics reference query pattern
 
   https://api.meteomatics.com/{validdatetime}/{parameters}/{locations}/json

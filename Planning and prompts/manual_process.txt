@@ -1,13 +1,27 @@
 TREND DETECTIVE V2 - SIMPLE MANUAL PROCESS
 
-This file tells you what YOU need to do manually. The agents write code; you keep control of passwords, testing and deployment.
+Read and complete the sections in order. The agents write code; you keep control of passwords, testing and deployment.
 
-IMPORTANT SAFETY RULE
+====================================================================
+SECTION 0 - KEEP SECRETS SAFE
+====================================================================
 
 Do not put a real password, API key or token in GitHub, source code, a prompt, a README, a screenshot or browser code.
 If you shared a password in a chat or public place, change it before the final deployment.
 
-WHAT EXISTS ALREADY
+The safe local-secret file is:
+
+  backend/.env
+
+This file is ignored by Git and must stay only on your computer. The safe template file is:
+
+  backend/.env.example
+
+The template has placeholders only and is safe to upload to GitHub.
+
+====================================================================
+SECTION 1 - WHAT EXISTS AND WHAT V2 ADDS
+====================================================================
 
 The app already has NASA POWER trend analysis, statistics, a globe, a time-lapse, local browser preferences and forecast logic.
 V2 adds:
@@ -21,7 +35,9 @@ NASA POWER stays responsible for the long-term trend analysis.
 Meteomatics is for current and short-range weather.
 Do not average the two sources or label Meteomatics as NASA data.
 
-STEP 1 - READ THE PLANNING FILES
+====================================================================
+SECTION 2 - READ THE PLANNING FILES
+====================================================================
 
 Open these files in the “Planning and prompts” folder:
 
@@ -30,7 +46,9 @@ Open these files in the “Planning and prompts” folder:
 3. V2_AGENT_HANDOFF_PROMPTS.md - the main Gemini and Claude prompts.
 4. GEMINI_METEOMATICS_IMPLEMENTATION_PROMPT.md - the focused prompt for Meteomatics.
 
-STEP 2 - SEND GEMINI THE BACKEND TASK FIRST
+====================================================================
+SECTION 3 - SEND GEMINI THE BACKEND TASK FIRST
+====================================================================
 
 Give Gemini the backend prompt first. If you are doing Meteomatics first, use:
 
@@ -47,7 +65,9 @@ Gemini must:
 
 Do not give Gemini your password in a prompt. Gemini only needs to know the names of the environment variables.
 
-STEP 3 - ADD METEOMATICS CREDENTIALS FOR LOCAL TESTING
+====================================================================
+SECTION 4 - ADD METEOMATICS CREDENTIALS FOR LOCAL TESTING
+====================================================================
 
 Meteomatics uses a username and password. It does not use a separate API key for this account.
 
@@ -80,7 +100,53 @@ It must not show your username or password.
 Note: Double-clicking START.bat will not automatically use temporary values set in another PowerShell window.
 Use the manual backend command above when testing Meteomatics locally.
 
-STEP 4 - CHECK THE BACKEND BEFORE CLAUDE STARTS
+====================================================================
+SECTION 5 - SET UP THE OPENAI “WHY?” FEATURE
+====================================================================
+
+The “Why might this be happening?” button is optional. It uses an OpenAI API key only on the backend.
+It must never send the key to the browser.
+
+After Gemini adds the secure configuration loader, create this file yourself:
+
+  backend/.env
+
+Put your own values in it. Do not use quotation marks unless your key actually contains a space:
+
+  OPENAI_API_KEY=your_real_openai_key_here
+  OPENAI_EXPLANATION_MODEL=the_model_name_you_choose
+
+You can keep the Meteomatics values in the same local-only file:
+
+  METEOMATICS_USERNAME=your_meteomatics_username
+  METEOMATICS_PASSWORD=your_meteomatics_password
+
+The backend reads `OPENAI_API_KEY` from its process environment. For local development, Gemini will make it load `backend/.env`.
+For Azure, do NOT upload this file. Enter the same values by hand in Azure App Service instead:
+
+  App Services > your Trend Detective app > Settings > Environment variables > App settings
+
+Add these names one at a time:
+
+  OPENAI_API_KEY
+  OPENAI_EXPLANATION_MODEL
+  METEOMATICS_USERNAME
+  METEOMATICS_PASSWORD
+
+Save the settings. Azure restarts the backend and supplies the values as environment variables.
+
+How to test the Why feature:
+
+1. Start the backend with the local `backend/.env` file present.
+2. Run a normal trend analysis in the website first.
+3. Click “Why might this be happening?” only after the trend result appears.
+4. Check the answer has clickable sources and says these are possible explanations, not proof of a cause.
+5. Temporarily remove `OPENAI_API_KEY` from the local `.env` file and restart the backend. The website should show a safe fallback explanation or a clear unavailable message, not crash.
+6. Open browser developer tools and confirm the OpenAI key never appears in a request, response, page source, local storage or console log.
+
+====================================================================
+SECTION 6 - CHECK THE BACKEND BEFORE CLAUDE STARTS
+====================================================================
 
 Ask Gemini to confirm all backend tests pass. Then check that these files exist:
 
@@ -97,7 +163,9 @@ Check these situations manually:
 4. Provider failure: old cached weather is marked “stale”, or the app shows an honest empty state.
 5. Meteomatics weather is separate from NASA history and separate from the app’s internal climate forecast.
 
-STEP 5 - SEND CLAUDE THE FRONTEND TASK
+====================================================================
+SECTION 7 - SEND CLAUDE THE FRONTEND TASK
+====================================================================
 
 After the API contract exists, give Claude the frontend prompt in:
 
@@ -115,7 +183,9 @@ Claude must make:
 
 The “account” is only local browser storage for the demo. It is not a real secure login and it must not ask for a password.
 
-STEP 6 - RUN ALL TESTS LOCALLY
+====================================================================
+SECTION 8 - RUN ALL TESTS LOCALLY
+====================================================================
 
 Backend:
 
@@ -148,7 +218,9 @@ Manual checks:
 - Check every forecast says whether it is observed data or a prediction.
 - Check every data view shows its source and update time.
 
-STEP 7 - SET UP AZURE AFTER LOCAL TESTS PASS
+====================================================================
+SECTION 9 - SET UP AZURE AFTER LOCAL TESTS PASS
+====================================================================
 
 Do this only after the app works locally.
 
@@ -177,7 +249,9 @@ Do this only after the app works locally.
 
 The health endpoint must only report whether services are available. It must never reveal a secret.
 
-STEP 8 - FINAL DEMO CHECK
+====================================================================
+SECTION 10 - FINAL DEMO CHECK
+====================================================================
 
 Run this simple journey before the hackathon demo:
 
@@ -190,7 +264,9 @@ Run this simple journey before the hackathon demo:
 7. Show the globe news context and source links.
 8. Show one expected failure state, such as missing live weather, to prove the app does not break.
 
-FINAL RULES
+====================================================================
+SECTION 11 - FINAL RULES
+====================================================================
 
 - Do not deploy before tests pass.
 - Do not merge agent work into main until you have checked it.
