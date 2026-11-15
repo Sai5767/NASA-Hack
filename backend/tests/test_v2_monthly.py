@@ -9,7 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.monthly import evaluate_monthly_series
+from app.monthly import _extract_contiguous_monthly, evaluate_monthly_series
 from app.nasa_power import PowerError
 from tests.conftest import make_monthly
 
@@ -171,6 +171,42 @@ def test_monthly_forecast_withholds_on_sparse_or_short_record(monkeypatch):
     assert body["eligible"] is False
     assert body["reason_code"] == "sparse_monthly_data"
     assert body["frames"] == []
+
+
+def test_a_record_that_starts_late_is_not_treated_as_missing_data():
+    # Cloud cover begins in 1984, not 1981: the 42 months before it are "no record yet", not gaps.
+    series = make_monthly(1981, 2024, trend_per_year=0.05, noise_sd=0.3, seed=11)
+    for year in (1981, 1982, 1983):
+        for month in range(1, 13):
+            series[f"{year}{month:02d}"] = None
+    ym, vals, valid, expected = _extract_contiguous_monthly(series, 1981, 2024)
+    assert (ym[0], len(vals)) == ((1984, 1), 41 * 12)
+    assert valid == expected == 41 * 12  # no missing months inside the record
+
+    # A gap *inside* the record still counts, and still cuts the contiguous run.
+    series["200006"] = None
+    ym, vals, valid, expected = _extract_contiguous_monthly(series, 1981, 2024)
+    assert expected - valid == 1
+    assert ym[0] == (2000, 7)
+
+
+def test_monthly_forecast_is_not_withheld_for_sparseness_when_the_record_simply_starts_late(monkeypatch):
+    async def late_start_fetch(parameters, lat, lon, start, end):
+        series = make_monthly(start, end, trend_per_year=0.05, noise_sd=0.3, seed=12)
+        for year in (1981, 1982, 1983):
+            for month in range(1, 13):
+                series[f"{year}{month:02d}"] = None
+        return {p: series for p in parameters}
+
+    monkeypatch.setattr("app.analysis.fetch_monthly_multi", late_start_fetch)
+    res = client.get(
+        "/api/monthly-forecast",
+        params={"variable": "CLOUD_AMT", "lat": 28.6, "lon": 77.2, "start_year": 1981, "end_year": 2024, "n": 1},
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["reason_code"] != "sparse_monthly_data"
+    assert body["training_range"]["n_months"] == 41 * 12  # trained on the real record only
 
 
 def test_monthly_forecast_withholds_when_any_grid_cell_fails(monkeypatch):

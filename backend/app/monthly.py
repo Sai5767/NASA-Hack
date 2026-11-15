@@ -335,6 +335,11 @@ def _extract_contiguous_monthly(
     while all_pairs and all_pairs[-1][2] is None:
         all_pairs.pop()
 
+    # Trim leading missing months too: before a variable's own record begins (cloud cover starts in 1984, for example)
+    # there is no data to be missing. Gaps *inside* the record still count against it.
+    first_valid = next((i for i, (_, _, v) in enumerate(all_pairs) if v is not None), len(all_pairs))
+    all_pairs = all_pairs[first_valid:]
+
     total_expected = len(all_pairs)
     total_valid = sum(1 for _, _, v in all_pairs if v is not None)
     if not all_pairs:
