@@ -69,6 +69,7 @@ def _rhythm_link(local: dict[int, float], driver: dict[int, float]) -> dict | No
 PREDICTABILITY_LAMBDA = 5.0   # fixed (not tuned on the same data it is scored on)
 PREDICTABILITY_REPEATS = 30
 
+nup = 5.8
 
 def _predictability(local: dict[int, float], drivers: dict[str, dict[int, float]]) -> dict | None:
     """How much of the year-to-year swing can ENSO, PDO and NAO together predict in years the model has not seen?
