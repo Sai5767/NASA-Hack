@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { caseFileCsv, downloadText } from "../lib/csv.js";
+import { eventsNear } from "../lib/events.js";
 import { arrow, formatP, formatPlace, signed } from "../lib/format.js";
 import { noiseSentence, shapeSub, shapeWord } from "../lib/words.js";
 import { Count, Metric, Verdict } from "./CaseParts.jsx";
@@ -38,7 +39,7 @@ function Fold({ id, title, hint, open, onToggle, children }) {
   );
 }
 
-export default function CaseFile({ data, view, onView, onGo, watched, onToggleWatch, focusSection }) {
+export default function CaseFile({ data, view, onView, onGo, onEvent, watched, onToggleWatch, focusSection }) {
   const [play, setPlay] = useState(0);
   const [copied, setCopied] = useState(false);
   const [open, setOpen] = useState(OPEN_AT_FIRST);
@@ -86,13 +87,14 @@ export default function CaseFile({ data, view, onView, onGo, watched, onToggleWa
   const tone = stats.significant ? stats.sign : "flat";
   const coverage = Math.min(100, Math.round((quality.valid_months / Math.max(1, quality.expected_months)) * 100));
   const trimmed = robustness.filter((w) => w.same_direction).length;
+  const nearby = eventsNear(location.lat, location.lon, period);
 
   const sectionBody = {
     record: (
       <InView minHeight={380}>
         <section className="card chart-card">
           <h3>The record</h3>
-          <TrendChart data={data} />
+          <TrendChart data={data} events={nearby} onEvent={onEvent} />
           <Stripes annual={annual} units={units} />
         </section>
       </InView>
@@ -224,7 +226,7 @@ export default function CaseFile({ data, view, onView, onGo, watched, onToggleWa
       </div>
 
       {view === "overview" ? (
-        <Overview data={data} onDetail={goDetail} onGo={onGo} />
+        <Overview data={data} onDetail={goDetail} onGo={onGo} events={nearby} onEvent={onEvent} />
       ) : (
         <>
           <Verdict data={data} />

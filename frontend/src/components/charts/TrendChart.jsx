@@ -88,7 +88,7 @@ function nearest(points, px) {
   return best;
 }
 
-export default function TrendChart({ data }) {
+export default function TrendChart({ data, events = [], onEvent }) {
   const [mode, setMode] = useState("annual");
   const [hover, setHover] = useState(null);
   const wrapRef = useRef(null);
@@ -125,6 +125,7 @@ export default function TrendChart({ data }) {
               <li><i className="sw line" style={{ background: "var(--accent)" }} />yearly average</li>
               <li><i className="sw line" style={{ background: trendColor }} />trend (Sen)</li>
               <li><i className="sw box" style={{ background: "rgba(77,255,217,0.18)" }} />95% range of trend</li>
+              {events.length > 0 && <li><i className="sw box" style={{ background: "var(--amber)" }} />major event nearby</li>}
             </>
           ) : (
             <>
@@ -188,6 +189,32 @@ export default function TrendChart({ data }) {
               </g>
             )}
             <rect x={0} y={0} width={iw} height={ih} fill="transparent" onPointerMove={onMove} onPointerLeave={() => setHover(null)} />
+            {mode === "annual" &&
+              events.map((ev) => {
+                const x = view.xs(ev.year);
+                const open = () => onEvent?.(ev);
+                return (
+                  <g
+                    key={ev.id}
+                    className="event-marker"
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`${ev.year}: ${ev.name}. Open the event details.`}
+                    onClick={open}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        open();
+                      }
+                    }}
+                  >
+                    <rect x={x - 8} y={0} width={16} height={ih} fill="transparent" />
+                    <line x1={x} x2={x} y1={8} y2={ih} />
+                    <path d={`M${x},1 l6,6 l-6,6 l-6,-6 Z`} />
+                    <title>{ev.year}: {ev.name} (click for details)</title>
+                  </g>
+                );
+              })}
           </g>
         </svg>
       </div>

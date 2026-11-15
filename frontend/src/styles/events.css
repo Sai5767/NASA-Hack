@@ -1,0 +1,28 @@
+/* ---------- Events ---------- */
+
+.events-list { padding: 18px; display: grid; gap: 12px; }
+.events-list h2 { font-size: 22px; letter-spacing: -0.01em; }
+.events-list .case-grid { grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); }
+.event-detail { display: grid; gap: 14px; min-width: 0; }
+.event-detail > .btn { justify-self: start; }
+.event-head { padding: 18px; display: grid; gap: 10px; }
+.event-head h2 { font-size: 26px; letter-spacing: -0.02em; }
+.look-for { display: grid; gap: 3px; padding: 9px 12px; border-left: 3px solid var(--amber); background: rgba(255, 194, 77, 0.06); border-radius: 0 8px 8px 0; font-size: 14px; }
+.event-card { padding: 16px 18px; display: grid; gap: 10px; }
+.event-card h3 { font-size: 16px; }
+.event-evidence { display: grid; gap: 8px; }
+.event-bars { width: 100%; height: auto; }
+.event-bars .mean { stroke: var(--text-dim); stroke-dasharray: 4 4; stroke-width: 1; }
+.event-bars .event-year { fill: var(--amber); }
+.legend-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; color: var(--text-dim); }
+.legend-line i { display: inline-block; width: 11px; height: 11px; border-radius: 3px; margin-right: 4px; vertical-align: -1px; }
+.evidence-yes { border-left: 3px solid var(--amber); padding-left: 10px; }
+.evidence-no { border-left: 3px solid var(--flat); padding-left: 10px; }
+
+/* markers on the trend chart */
+.event-marker { cursor: pointer; }
+.event-marker line { stroke: var(--amber); stroke-dasharray: 3 4; opacity: 0.8; }
+.event-marker path { fill: var(--amber); }
+.event-marker:hover line, .event-marker:focus line { opacity: 1; stroke-width: 1.6; }
+.event-marker:focus { outline: none; }
+.events-strip { padding: 12px 16px; display: grid; gap: 8px; }

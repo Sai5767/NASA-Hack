@@ -49,7 +49,7 @@ Environment gotchas: Windows PowerShell 5.1 (no `&&`); git pushes work with the 
 - [x] 4. Question list (docs/USER_QUESTIONS.md) and the 5-question wizard (Intake.jsx, lib/profile.js, tests in frontend/tests/profile.test.mjs)
 - [ ] 5. Requirements matrix
 - [x] 6. Explainer chat and hover link: `lib/explain.js` (knowledge base + keyword matching, no AI model), `Explainer.jsx` (docked chat), `Term` is clickable via `ExplainContext`; "In this case" lines use the open case's numbers. Tests: `frontend/tests/explain.test.mjs`.
-- [ ] 7. Events catalogue, tab, chart markers
+- [x] 7. Events: `lib/events.js` (15 curated events, `eventsNear`, `eventStats`, `describeEvent`), `Events.jsx` (list, detail, live evidence), markers on TrendChart, "events near here" strip, globe dots on the Events tab. Each event's evidence sentence is computed from live data and says honestly when the data do not show it (a Cape Town drought entry was dropped because this grid product barely captures it; replaced by Hurricane Harvey). Tests: `frontend/tests/events.test.mjs`.
 - [ ] 8. Trend ledger and reasons
 - [ ] 9. Time-lapse
 - [ ] 10. Colour scheme and Classic theme

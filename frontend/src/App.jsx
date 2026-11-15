@@ -6,6 +6,7 @@ import Briefing from "./components/Briefing.jsx";
 import CaseFile from "./components/CaseFile.jsx";
 import { AboutDialog, CasesDialog, GlossaryDialog } from "./components/Dialogs.jsx";
 import Duel from "./components/Duel.jsx";
+import Events from "./components/Events.jsx";
 import { ExplainContext } from "./components/ExplainContext.js";
 import Explainer from "./components/Explainer.jsx";
 import ForYou from "./components/ForYou.jsx";
@@ -21,6 +22,7 @@ import Vitals from "./components/Vitals.jsx";
 import World from "./components/World.jsx";
 import { useStoredState } from "./hooks.js";
 import { CASES, FIRST_YEAR, LAST_FULL_YEAR, SURPRISES } from "./lib/cases.js";
+import { EVENTS, EVENT_BY_ID, KINDS } from "./lib/events.js";
 import { clamp, formatP, formatPlace, round2, signed } from "./lib/format.js";
 import { cellContains, nearestPlace } from "./lib/geo.js";
 import { DEFAULT_PROFILE, addWatch, defaultView, hasWatch, removeWatch, suggest, toggleWatch } from "./lib/profile.js";
@@ -205,6 +207,7 @@ export default function App() {
   const [viewPref, setViewPref] = useStoredState("td-view", null);
   const [detailFocus, setDetailFocus] = useState(null);
   const [forYouOpen, setForYouOpen] = useState(true);
+  const [eventId, setEventId] = useState(null);
   const [explainer, setExplainer] = useState({ started: false, open: false, request: null });
   const askExplainer = useCallback((request) => setExplainer({ started: true, open: true, request: request ? { ...request, nonce: Date.now() } : null }), []);
   const explainTerm = useCallback((id) => askExplainer({ id }), [askExplainer]);
@@ -373,11 +376,29 @@ export default function App() {
         : [],
     [home, watch],
   );
+  const eventDots = useMemo(
+    () =>
+      tab === "events"
+        ? EVENTS.map((ev) => ({
+            id: ev.id,
+            name: ev.name,
+            lat: ev.lat,
+            lon: ev.lon,
+            color: KINDS[ev.kind].color,
+            r: ev.id === eventId ? 8 : 5.5,
+            ring: ev.id === eventId,
+            tip: `${ev.year} · ${ev.name}`,
+            event: ev,
+          }))
+        : [],
+    [tab, eventId],
+  );
   const dots = useMemo(() => {
     if (worldFresh) return worldDots(world.data);
     if (archFresh) return archetypeDots(archetypes.data);
+    if (eventDots.length) return eventDots;
     return watchDots;
-  }, [worldFresh, archFresh, world.data, archetypes.data, watchDots]);
+  }, [worldFresh, archFresh, world.data, archetypes.data, eventDots, watchDots]);
 
   const handlePick = (lat, lon) => {
     const la = round2(lat);
@@ -486,6 +507,19 @@ export default function App() {
     setTab("investigate");
   };
 
+  const openEvent = (ev) => {
+    setEventId(ev.id);
+    setTab("events");
+    setSelectedCell(null);
+    setFocus({ lat: ev.lat, lon: ev.lon, k: 1.5, nonce: Date.now() });
+  };
+
+  const openEventCase = (ev) => {
+    setActiveCase(null);
+    commit({ variable: ev.variable, lat: ev.lat, lon: ev.lon });
+    setTab("investigate");
+  };
+
   const placeNameFor = (lat, lon) => nearestPlace(places, lat, lon, 250)?.name ?? formatPlace(lat, lon);
   const watchItem = params ? { variable: params.variable, lat: params.lat, lon: params.lon, name: placeNameFor(params.lat, params.lon) } : null;
   const watched = !!watchItem && hasWatch(watch, watchItem);
@@ -562,6 +596,7 @@ export default function App() {
     { id: "duel", label: "Duel", hint: "two places" },
     { id: "world", label: "World", hint: places.length ? `${places.length} sites` : "sample sites" },
     { id: "vitals", label: "Vitals", hint: "the planet" },
+    { id: "events", label: "Events", hint: "what happened" },
   ];
   const renderTab = (t) => (
     <button
@@ -625,7 +660,7 @@ export default function App() {
             cellHalf={cellHalf}
             selectedCell={selectedCell}
             dots={dots}
-            onDotPick={(d) => (d.watch ? openWatch(d.watch) : openPlace(d))}
+            onDotPick={(d) => (d.event ? openEvent(d.event) : d.watch ? openWatch(d.watch) : openPlace(d))}
             focus={focus}
             modeRequest={modeRequest}
             busy={busy}
@@ -717,6 +752,7 @@ export default function App() {
                   view={view}
                   onView={setViewPref}
                   onGo={(t) => { setTab(t); setSelectedCell(null); }}
+                  onEvent={openEvent}
                   watched={watched}
                   onToggleWatch={toggleCurrentWatch}
                   focusSection={detailFocus}
@@ -808,6 +844,19 @@ export default function App() {
               ) : vitals.data ? (
                 <Vitals key={vitals.key} data={vitals.data} />
               ) : null)}
+
+            {tab === "events" && (
+              <Events
+                selectedId={eventId}
+                onSelect={(id) => {
+                  setEventId(id);
+                  const ev = EVENT_BY_ID[id];
+                  if (ev) setFocus({ lat: ev.lat, lon: ev.lon, k: 1.5, nonce: Date.now() });
+                }}
+                onOpenCase={openEventCase}
+                onOpenVitals={() => setTab("vitals")}
+              />
+            )}
           </div>
         </div>
       </main>

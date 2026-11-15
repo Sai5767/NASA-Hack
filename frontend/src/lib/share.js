@@ -1,6 +1,6 @@
 /** Shareable links: the whole question lives in the URL hash, so a link reopens the same case. */
 
-export const TAB_IDS = ["investigate", "sweep", "scan", "duel", "world", "vitals"];
+export const TAB_IDS = ["investigate", "sweep", "scan", "duel", "world", "vitals", "events", "ledger"];
 
 export function encodeState({ tab, params, pinB }) {
   const q = new URLSearchParams();

@@ -84,7 +84,7 @@ function ForecastHeadline({ data, onMore }) {
 }
 
 /** The challenge's four questions, answered at a glance. Everything technical lives one click away in Detail. */
-export default function Overview({ data, onDetail, onGo }) {
+export default function Overview({ data, onDetail, onGo, events = [], onEvent }) {
   const { variable, location, period, quality, stats, grade } = data;
   const units = variable.units;
   const tone = stats.significant ? stats.sign : "flat";
@@ -121,9 +121,23 @@ export default function Overview({ data, onDetail, onGo }) {
       <InView minHeight={380}>
         <section className="card chart-card">
           <h3>The record</h3>
-          <TrendChart data={data} />
+          <TrendChart data={data} events={events} onEvent={onEvent} />
         </section>
       </InView>
+
+      {events.length > 0 && (
+        <section className="card events-strip reveal" style={{ "--d": "600ms" }}>
+          <p className="eyebrow">Major events near here</p>
+          <div className="chip-row">
+            {events.map((ev) => (
+              <button key={ev.id} type="button" className="chip" onClick={() => onEvent?.(ev)}>
+                {ev.year} · {ev.name}
+              </button>
+            ))}
+          </div>
+          <p className="faint small">Marked on the chart. Open one to see what the data show at that place and year.</p>
+        </section>
+      )}
 
       <ForecastHeadline data={data} onMore={() => onDetail("forecast")} />
 
