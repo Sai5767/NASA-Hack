@@ -309,19 +309,56 @@ def is_allowed_science_url(url: str | None) -> tuple[bool, str | None]:
     if not url or not isinstance(url, str):
         return False, None
     cleaned = url.strip()
+    # Anything Python and a browser could read differently is refused outright: a backslash ("https://evil.com\.nasa.gov"
+    # is evil.com in a browser), whitespace and control characters.
+    if any(ch.isspace() or ch == "\\" or ord(ch) < 32 for ch in cleaned):
+        return False, None
     try:
         parsed = urlparse(cleaned)
+        host = (parsed.hostname or "").lower()
     except ValueError:
         return False, None
-    if parsed.scheme not in ("https", "http") or not parsed.netloc:
+    if parsed.scheme != "https" or not host or parsed.username or parsed.password:
         return False, None
-    host = parsed.netloc.lower().split(":")[0]
+    if not re.fullmatch(r"[a-z0-9.-]+", host):
+        return False, None
     if host.startswith("www."):
         host = host[4:]
     for allowed in ALLOWED_SCIENCE_DOMAINS:
         if host == allowed or host.endswith("." + allowed):
             return True, host
     return False, host
+
+
+def url_match_key(url: str | None) -> str | None:
+    """A comparable form of a URL: lower-case host without "www.", no query string or fragment, no trailing slash.
+
+    The web-search tool appends tracking parameters (for example `?utm_source=openai`) to the links it returns, so a link
+    the model quotes from memory of its own search result must still match the one that was actually retrieved.
+    """
+    if not url or not isinstance(url, str):
+        return None
+    try:
+        parsed = urlparse(url.strip())
+        host = (parsed.hostname or "").lower()
+    except ValueError:
+        return None
+    if parsed.scheme != "https" or not host:
+        return None
+    if host.startswith("www."):
+        host = host[4:]
+    return f"{host}{parsed.path.rstrip('/')}"
+
+
+def trusted_curated_urls(trend_res: dict) -> set[str]:
+    """Match keys of the curated source links that are handed to the model in the prompt (see _call_openai_responses)."""
+    facts = _build_measured_facts(trend_res)
+    curated = reason_for(facts["variable_id"], facts["location"]["lat"], facts["location"]["lon"], facts["sign"])
+    keys = {
+        url_match_key(CURATED_SOURCE_URLS.get(name, ("https://www.ipcc.ch/report/ar6/wg1/", name))[0])
+        for name in curated.get("sources", [])
+    }
+    return {k for k in keys if k}
 
 
 def _build_measured_facts(trend_res: dict) -> dict:
@@ -475,19 +512,46 @@ def _build_curated_fallback(
     return out
 
 
+def _load_json_object_text(text: str) -> object:
+    """Parse the model's JSON, tolerating a markdown code fence or a sentence around it (a common deviation).
+
+    Anything that is still not valid JSON raises ValueError, and the caller falls back to the curated text.
+    """
+    cleaned = text.strip()
+    try:
+        return json.loads(cleaned)
+    except ValueError:
+        pass
+    fenced = re.match(r"^```(?:json)?\s*(.*?)\s*```$", cleaned, re.S | re.I)
+    if fenced:
+        try:
+            return json.loads(fenced.group(1))
+        except ValueError:
+            pass
+    start, end = cleaned.find("{"), cleaned.rfind("}")
+    if 0 <= start < end:
+        return json.loads(cleaned[start : end + 1])
+    raise ValueError("no JSON object found")
+
+
 def validate_and_normalize_ai_output(
     raw_payload: dict | str,
     url_annotations: list[dict] | None = None,
     *,
     default_limitations: list[str] | None = None,
+    trusted_urls: set[str] | None = None,
 ) -> dict:
     """Validate structured OpenAI output, filter citations by domain allow-list, and strip unsubstantiated drivers.
+
+    When `trusted_urls` is given (the live path always gives it), a citation must also be a link that really exists in what
+    the model was given or retrieved: a web-search result (`url_annotations`) or one of the curated sources in the prompt.
+    A plausible-looking address on an allowed domain that is in neither is an invented citation and is dropped.
 
     Raises ValueError if the payload is malformed, makes prohibited causal/advice claims, or has zero substantiated drivers.
     """
     if isinstance(raw_payload, str):
         try:
-            data = json.loads(raw_payload)
+            data = _load_json_object_text(raw_payload)
         except ValueError as exc:
             raise ValueError("AI output was not valid JSON.") from exc
     elif isinstance(raw_payload, dict):
@@ -523,6 +587,10 @@ def validate_and_normalize_ai_output(
                     }
                 )
 
+    provenance: set[str] | None = None
+    if trusted_urls is not None:
+        provenance = set(trusted_urls) | {k for k in (url_match_key(a.get("url")) for a in (url_annotations or [])) if k}
+
     valid_citations: dict[str, dict] = {}
     seen_urls: set[str] = set()
     for idx, item in enumerate(raw_citations, start=1):
@@ -537,6 +605,8 @@ def validate_and_normalize_ai_output(
         allowed, domain = is_allowed_science_url(url)
         if not allowed or not domain:
             continue
+        if provenance is not None and url_match_key(url) not in provenance:
+            continue  # not retrieved and not supplied: an invented citation, however official the domain looks
         valid_citations[cid] = {
             "id": cid,
             "title": title[:200],
@@ -783,6 +853,7 @@ async def generate_explanation(
             raw_content,
             url_annotations,
             default_limitations=trend_res.get("caveats"),
+            trusted_urls=trusted_curated_urls(trend_res),
         )
     except (UpstreamServiceError, ValueError, KeyError, TypeError) as exc:
         HEALTH_REGISTRY.record_failure("openai_explanations", redact_secrets(type(exc).__name__))

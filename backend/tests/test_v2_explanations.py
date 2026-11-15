@@ -140,7 +140,25 @@ def test_explanations_validates_live_ai_output_and_strips_unsubstantiated_driver
 
     async def fake_caller(request_body, cfg):
         calls.append(request_body)
-        return {"output_text": json.dumps(fake_ai_json)}
+        # A real Responses API reply: the text, plus the web pages the search tool actually retrieved (with the tracking
+        # parameter OpenAI appends). Only these links, or the curated ones in the prompt, may be cited.
+        return {
+            "output": [
+                {
+                    "content": [
+                        {
+                            "type": "output_text",
+                            "text": json.dumps(fake_ai_json),
+                            "annotations": [
+                                {"type": "url_citation", "url": "https://www.ipcc.ch/report/ar6/wg1/?utm_source=openai", "title": "IPCC AR6 WG1"},
+                                {"type": "url_citation", "url": "https://data.giss.nasa.gov/gistemp/", "title": "GISTEMP"},
+                                {"type": "url_citation", "url": "https://unverified-weather-blog.example.com/post", "title": "Blog"},
+                            ],
+                        }
+                    ]
+                }
+            ]
+        }
 
     req = exp_module.ExplanationRequest(variable="T2M", lat=42.0, lon=-93.6, start_year=1981, end_year=2024, question="Why is it warming?")
     first = asyncio.run(exp_module.generate_explanation(req, client_ip="127.0.0.1", openai_caller=fake_caller))
@@ -158,6 +176,69 @@ def test_explanations_validates_live_ai_output_and_strips_unsubstantiated_driver
     second = asyncio.run(exp_module.generate_explanation(req, client_ip="127.0.0.1", openai_caller=fake_caller))
     assert second["cached"] is True
     assert len(calls) == 1
+
+
+def test_citation_links_must_be_https_on_an_allowed_domain_and_unambiguous():
+    ok = exp_module.is_allowed_science_url
+    assert ok("https://www.nasa.gov/earth/")[0] and ok("https://data.giss.nasa.gov/gistemp/")[0]
+    for bad in (
+        "http://nasa.gov/page",                  # not https
+        "https://evil.com\\.nasa.gov/page",      # a browser reads the host as evil.com
+        "https://evil.com@nasa.gov/page",        # credentials in the URL
+        "https://nasa.gov@evil.com/page",
+        "https://nasa.gov.evil.com/page",        # allowed name used as a prefix
+        "https://evilnasa.gov/page",             # allowed name used as a suffix without a dot
+        "https://nasa.gov/a page",               # whitespace
+        "javascript:alert(1)",
+        "",
+        None,
+    ):
+        assert not ok(bad)[0], bad
+
+
+def test_a_citation_that_was_not_retrieved_or_supplied_is_an_invention_even_on_an_official_domain():
+    fabricated = "https://www.nasa.gov/earth/studies/this-page-was-made-up-by-the-model"
+    payload = {
+        "summary": "Warming here matches wider greenhouse warming.",
+        "drivers": [
+            {
+                "title": "Greenhouse forcing",
+                "explanation": "More greenhouse gas traps more heat near the surface.",
+                "evidence_type": "physical_mechanism",
+                "confidence": "plausible",
+                "citation_ids": ["c1"],
+            }
+        ],
+        "citations": [{"id": "c1", "title": "NASA study", "url": fabricated, "source_label": "NASA"}],
+    }
+    # Not retrieved by search and not in the curated list: the only driver loses its only citation and is removed.
+    with pytest.raises(ValueError, match="No substantiated drivers"):
+        exp_module.validate_and_normalize_ai_output(payload, [], trusted_urls=set())
+
+    # The same citation passes once the search tool really retrieved it (tracking parameters do not matter)...
+    ok = exp_module.validate_and_normalize_ai_output(payload, [{"url": fabricated + "?utm_source=openai", "title": "NASA study"}], trusted_urls=set())
+    assert ok["drivers"][0]["citation_ids"] == ["c1"]
+    # ...or when it is one of the curated sources that were handed to the model.
+    ok = exp_module.validate_and_normalize_ai_output(payload, [], trusted_urls={exp_module.url_match_key(fabricated)})
+    assert len(ok["citations"]) == 1
+
+
+def test_json_wrapped_in_a_code_fence_or_a_sentence_is_still_read_and_junk_is_not():
+    body = json.dumps({"summary": "Warming matches wider trends.", "drivers": [], "citations": []})
+    for wrapped in (body, f"```json\n{body}\n```", f"```\n{body}\n```", f"Here is the answer:\n{body}\nHope that helps."):
+        assert exp_module._load_json_object_text(wrapped)["summary"] == "Warming matches wider trends."
+    for junk in ("", "no json here", "{broken json", "```json\nnot json\n```"):
+        with pytest.raises(ValueError):
+            exp_module._load_json_object_text(junk)
+
+
+def test_curated_sources_given_to_the_model_are_trusted_for_citation(fake_power):
+    from app import analysis
+
+    trend = asyncio.run(analysis.analyze_point("T2M", 70.0, -150.0, 1981, 2024, detail=True))
+    trusted = exp_module.trusted_curated_urls(trend)
+    assert trusted  # the Arctic case has curated, linkable sources
+    assert all(not key.startswith(("http", "www.")) and "?" not in key for key in trusted)
 
 
 def test_explanations_falls_back_when_ai_makes_causal_overclaim_or_malformed_json(fake_power, monkeypatch):
