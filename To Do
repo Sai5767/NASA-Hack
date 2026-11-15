@@ -24,3 +24,4 @@ To Do list V2
 - keep all the sources used for data but ensure that all the sources from "https://www.spaceappschallenge.org/2026/challenges/earth-system-trend-detective/?tab=resources" are also used. We want to have as much data as we can and if there is the same kind of data clashing from 2 databases just take the average of these 2.
 - spend more time on the ML base analysing all of the data we have sorted to make predictions on the particular area or if we are doing animations like the ios weather app for temperature, cloud cover etc changing in an area based on colour, make sure the animation continues for the furture few months based on thee ML model.
 - Look at all the failure points possible on this web app and create backup options so that nothing fails when testing this application
+- Globe needs to display key locations, would be cool to have a map with more interesting graphics (some sattelite view/cooler thing)
