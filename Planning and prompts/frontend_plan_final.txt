@@ -1,0 +1,276 @@
+TREND DETECTIVE V2 - FINAL FRONTEND AND BACKEND-REPAIR BRIEF
+
+You are the implementation lead for a full V2 rebuild of the Trend Detective user experience. The app is an entry for the NASA Space Apps Challenge. The backend has been built and reviewed, but must pass the Phase 0 repair gate below before optional live features are wired into the public UI.
+
+The desired visual direction is:
+
+- Dark NASA mission-control atmosphere: near-black space background, restrained luminous data colours, precise labels, subtle stars/atmosphere and excellent contrast.
+- Apple Weather–style motion: fluid, calm, layered and useful. Motion must reveal changes over time, never act as decoration that hides data.
+- A globe-first home screen: rotating Earth in the centre, a personal dashboard on the left, an Account/Profile control on the top-right and a bottom timeline rail.
+- The user’s selected places and weather/data interests control what is loaded. Do not precompute or animate unrelated locations.
+- Technical tools remain available under Explore; the main screen stays welcoming for high-school users and the public.
+
+Read these files before doing anything:
+
+- README.md
+- HANDOFF.md
+- docs/REQUIREMENTS.md
+- docs/STATS_AUDIT.md
+- docs/V2_API_CONTRACT.md
+- docs/V2_BACKEND_HANDOFF.md
+- Planning and prompts/V2_EXECUTION_PLAN.md
+- Planning and prompts/V2_DATA_SOURCE_REGISTRY.md
+- Planning and prompts/manual_process.txt
+
+NON-NEGOTIABLE SCIENCE AND SAFETY RULES
+
+1. Keep the existing audited statistics. The frontend must display backend values; it must never recalculate or alter p-values, slopes, confidence intervals, evidence grades or forecast eligibility.
+2. NASA POWER provides historical/reanalysis trend data. Meteomatics provides current and 1–72 hour operational weather. The app’s internal monthly model provides 1–3 month statistical forecasts. These three sources must never be averaged, merged into one timeline scale without a boundary, or labelled as each other.
+3. News is context, not scientific evidence. Its green/amber/red border is a transparent editorial attention label, not an official emergency warning.
+4. “Why might this be happening?” is manual/opt-in only. It gives possible, cited explanations after a valid trend exists; it never proves a cause.
+5. Profiles, saved locations and preferences stay in browser localStorage only. This is a local demo profile, not a secure account system. No password, profile database, cookie authentication or cloud user record.
+6. Never expose OPENAI_API_KEY, Meteomatics credentials, a news-provider key, TD_CASE_SECRET or any other secret to browser code, logs, screenshots, Git or prompts.
+7. Preserve keyboard globe controls, responsive layout, focus visibility and prefers-reduced-motion. Motion must pause while the user drags/interacts with the globe and reduce to non-animated state changes when reduced motion is enabled.
+
+====================================================================
+PHASE 0 - REQUIRED BACKEND REPAIR GATE
+====================================================================
+
+Assign one dedicated Claude agent to this phase. This agent owns backend files, backend tests and backend documents only. Do not let frontend agents edit these files in parallel.
+
+Fix these review findings before frontend integration:
+
+A. OpenAI web-search upgrade - P1
+
+- Replace the deprecated `web_search_preview` request tool in backend/app/explanations.py with the current Responses API `web_search` tool.
+- Apply the science-domain allow-list through the tool’s `filters.allowed_domains`, not merely by telling the model what domains it should prefer. Continue server-side citation validation as a second defence.
+- Keep the response model configurable through OPENAI_EXPLANATION_MODEL. Do not hard-code a model name.
+- The owner wants a cost-conscious choice. Configure the deployment to use a current low-cost model that the owner’s account supports after one controlled smoke test. Keep web search manual only, cache answers by case/question for 24 hours, respect the existing rate limit, and set a practical returned-search-context budget.
+- Preserve the no-key, rate-limited, invalid-response and no-evidence curated fallbacks.
+- Add offline tests for the new request shape/domain filter and one short manual real-key smoke-test checklist. Do not put a key in tests.
+
+B. Meteomatics public-quota protection - P1
+
+- Add a bounded per-visitor rate limiter before the Meteomatics fetch. Reuse the project’s sliding-window limiter; do not create an unbounded data structure.
+- Return a safe, documented unavailable/rate-limited response with no credential or upstream body. Preserve the cached/stale result when it exists.
+- Configure trusted forwarded-header handling deliberately for Azure rather than trusting arbitrary forwarded headers. Document the proxy assumption and test it.
+- Stream provider responses while enforcing the maximum size; do not download an oversize response before rejecting it.
+
+C. News-source trust signal - P1
+
+- Add `publisher_verified: true | false` to every news item. Use a small transparent reputable-publisher/institution allow-list, or mark all other syntactically valid hosts false.
+- The frontend must display unverified stories only as “Unverified news context”, visually less prominent than verified stories. It must never make their severity sound like official advice.
+
+D. Test reliability and documentation - P1/P2
+
+- Every automated backend test must be offline: patch NASA POWER, OpenAI, Meteomatics and GDELT in tests. Fix the environment test that reaches live NASA POWER.
+- Make the suite work in the project’s Docker/Python 3.12 target, and document any Windows/Python 3.15 async-test limitation or repair it. A test run that silently waits on the network is not acceptable.
+- Clean the control character in docs/V2_BACKEND_HANDOFF.md.
+- Run the entire suite in the supported target, not only individual tests. Report exact totals and failures.
+- Do not change existing trend reference values unless a reproducible statistical defect is proven and docs/STATS_AUDIT.md plus reference tests are updated.
+
+Phase 0 exit gate:
+
+- All backend tests pass offline in the supported target.
+- The new API contract/fixtures are updated.
+- One owner-controlled real OpenAI call and one owner-controlled real Meteomatics call have been tested after secrets are configured, with no secret in the response or logs.
+- The backend agent writes docs/V2_BACKEND_REPAIR_HANDOFF.md with changes, tests, remaining limits and any contract change.
+
+====================================================================
+AGENT STRUCTURE AND FILE OWNERSHIP
+====================================================================
+
+Use multiple agents to work quickly, but give each agent separate file ownership. The integration lead alone resolves cross-cutting conflicts and runs the final checks. If the execution environment cannot spawn agents, execute these phases in the same order.
+
+MODEL AND AGENT ASSIGNMENT
+
+| Agent | Model/service | Job | Starts when | Must hand off |
+| --- | --- | --- | --- | --- |
+| Agent 0 | Claude Opus 5.5 | Backend repair and API/test security gate | Immediately | `docs/V2_BACKEND_REPAIR_HANDOFF.md` plus passing supported-target test result |
+| Agent 1 | Fable | Visual art direction, wireframes, motion and design-token specification | Immediately; read-only against production source | `docs/V2_FABLE_VISUAL_SPEC.md` |
+| Agent 2 | Claude Opus 5.5 | App shell, dashboard, local-only profile and navigation | After Agent 1 has the basic layout direction | Changed-file list, component tests and responsive checks |
+| Agent 3 | Claude Opus 5.5 | Globe, layers, timeline, Meteomatics/weather cards and news markers | After Agent 0 locks API contract and Agent 1 defines data-layer styles | Changed-file list, component tests and interaction/reduced-motion checks |
+| Agent 4 | Claude Opus 5.5 | Evidence verdict, calculation drawer, manual Why and Explore tools | After Agent 0 locks API contract | Changed-file list, component tests and all degraded-state checks |
+| Agent 5 | Claude Opus 5.5 | Integration, conflict resolution, accessibility, performance and release verification | Only after Agents 0–4 hand off | `docs/V2_FRONTEND_FINAL_HANDOFF.md`, build/test totals and smoke-test report |
+
+Use Claude Opus 5.5 for every code-owning agent because this is a connected React/FastAPI application with statistical and security constraints. Use Fable only for visual/system design; Claude converts the approved Fable specification into production React/CSS/canvas code. Do not ask Fable to call APIs, handle secrets or make statistical decisions.
+
+Agent 0 - Claude backend repair owner
+  Owns: backend/, backend/tests/, docs/V2_API_CONTRACT.md, docs/V2_BACKEND_HANDOFF.md.
+  Goal: complete Phase 0 and publish the repair handoff. No frontend redesign.
+
+Agent 1 - Fable visual director
+  Owns: a new frontend design specification only, for example docs/V2_FABLE_VISUAL_SPEC.md. Do not edit production React files in parallel with the implementation agents.
+  Goal: define dark mission-control tokens, typography, spacing, responsive wireframes, globe data-layer styles, motion storyboard, loading/error/stale states and visual hierarchy. It may propose licensed/public assets but must identify source/licence and provide a no-asset fallback.
+
+Agent 2 - Claude application-shell owner
+  Owns: App.jsx, layout/shell components, Account/Profile/Welcome components, profile storage helpers, navigation and their tests/styles.
+  Goal: build the local-only profile flow, main/explore navigation and left dashboard without modifying the globe renderer or data visualisation components owned by Agent 3.
+
+Agent 3 - Claude globe-and-timeline owner
+  Owns: Globe.jsx and new directly related globe/timeline/layer components, their styles and tests. Coordinate public props with the integration lead before altering Globe.jsx.
+  Goal: build the dynamic Earth layers, timeline rail, Meteomatics/weather display and news marker behaviour.
+
+Agent 4 - Claude case-insight-and-explore owner
+  Owns: CaseFile/Overview/evidence/why components, API-state hooks, Explore components and their tests/styles. It does not alter the shell layout or core Globe.jsx.
+  Goal: expose evidence_trace, manual Why, graceful optional-feature states, and move advanced tools into Explore.
+
+Agent 5 - Claude integration/quality owner
+  Owns: final integration changes only after agents 0–4 finish, test wiring, accessibility/performance checks, documentation and handoff. It should not begin conflict resolution until the other owners deliver their handoffs.
+
+Use worktrees or non-overlapping branches where possible. Before integration, every agent provides changed-file list, tests run, known limits and screenshots/recordings where relevant.
+
+Do not start Agent 3 or Agent 4 against an undocumented API shape. They use the repaired `docs/V2_API_CONTRACT.md` and deterministic V2 fixtures. Agent 5 is the only agent allowed to resolve ownership conflicts.
+
+====================================================================
+FABLE DESIGN SPECIFICATION
+====================================================================
+
+Fable should prepare the visual system before implementation. The design output must cover:
+
+1. Page structure
+
+   TOP BAR
+   - Brand at left.
+   - Compact Account/Profile button at top-right.
+   - Minimal controls only; avoid a crowded navigation strip.
+
+   MAIN DASHBOARD
+   - Left: personalised dashboard.
+   - Centre/right: dominant interactive globe.
+   - Bottom of globe: timeline and playback controls.
+   - Main content uses the user’s selected data types and saved places first.
+
+   EXPLORE PAGE
+   - Holds the “neeky”/advanced tools: Sweep, Scan, Duel, World, Vitals, Ledger, Events, statistical detail and learning resources.
+   - Must be reachable in one clear click and support browser back/forward/history state.
+
+2. Dark mission-control design tokens
+
+   - Near-black/navy background; deep ocean blue globe; restrained atmospheric halo.
+   - Data colours must be semantically consistent and colour-blind distinguishable:
+       temperature/positive anomaly: warm amber to red;
+       cooling/negative anomaly: cyan to blue;
+       rainfall/water: blue/teal;
+       cloud: pale slate/white;
+       missing data: patterned neutral, never a data colour;
+       news severity: green, amber, red border only;
+       forecast: a visually distinct dashed/hatched treatment.
+   - Use CSS variables so themes remain consistent across SVG/canvas/HTML.
+   - Maintain strong readable text contrast and avoid red/green as the only severity cue.
+
+3. Animation rules
+
+   - Globe idle rotation: slow, subtle; pause on focus, drag, keyboard input, hidden tab and reduced motion.
+   - Timeline: scrub by month; play/pause; speed choices; accessible keyboard range input; no forced autoplay.
+   - Data layers cross-fade or interpolate only between genuine adjacent frames. Missing cells are a pattern or transparent gap, never smoothed.
+   - Forecast begins at a clear observed/forecast divider. It uses a distinct label, border and legend.
+   - Loading state: show a radar/data-scan feeling without claiming data have arrived.
+
+4. Responsive wireframes
+
+   - Desktop: dashboard left, globe right/centre, timeline underneath globe.
+   - Tablet: dashboard becomes collapsible/drawer; globe remains primary.
+   - Mobile: full-width globe then timeline, dashboard as stacked cards/bottom sheet; no tiny controls.
+
+5. Asset rules
+
+   - When a real NASA/public layer is available and its use/licence/performance are documented, use it with an explicit source/attribution label.
+   - When it is not available, use a clearly decorative procedural atmosphere/cloud/lighting effect. Never imitate an unavailable live satellite product.
+   - No NASA logo and no unlicensed satellite image download.
+
+====================================================================
+CLAUDE FRONTEND IMPLEMENTATION REQUIREMENTS
+====================================================================
+
+1. Local welcome and profile
+
+- First run: show “Welcome, Trend Detective” rather than a misleading password login.
+- Ask in five short steps: display name or Demo Explorer; up to five saved locations; interests (heat, rain & water, clouds & sunlight, land & plants, wind & atmosphere, ice & oceans); primary goal; detail level.
+- Store a versioned `td-profile-v2` value in localStorage. Migrate old V1 preferences, tolerate corrupted/blocked storage and offer reset/export/import.
+- Account button opens an edit panel. It must say “Stored on this device for this demo.”
+- Load only selected locations and selected data interests in the home dashboard. Do not trigger global survey, news or forecasting on initial load.
+
+2. Main versus Explore navigation
+
+- Main is the dashboard/globe/data experience.
+- Explore contains advanced tools. Preserve the current capabilities rather than deleting them.
+- Use a clear URL/history-friendly page state, browser back/forward, and accessible tabs or navigation.
+- “Flip between pages” should feel immediate but must not trap focus or lose the current selected place/variable.
+
+3. Globe and historical timeline
+
+- Reuse the existing custom canvas globe rather than adding a heavy map package.
+- For a selected NASA variable/location, call GET /api/monthly-frames and visualise the local 1x1–3x3 observed grid as a dynamic heatmap/field on Earth.
+- The user can scrub backwards through past months, press play/pause and change speed. Every frame shows the month, source, unit and local-grid caveat.
+- The heatmap must not imply full-world high-resolution satellite coverage. It is a coarse local NASA POWER/reanalysis analysis grid.
+- On a globe-wide world-survey/explore mode, retain the existing sample-site time-lapse and label it as sample sites; do not invent a complete global field.
+- Render missing cells as missing. Do not interpolate or colour them like valid data.
+
+Important current capability boundary: the delivered backend does not provide a high-resolution globe-wide monthly raster. It provides a local 1×1–3×3 NASA POWER grid near the selected location and the existing global sample-site survey. Build a compelling local heatmap on the Earth, and use sample-site dots for the global view. Do not paint a smooth full-Earth “temperature map” from sparse points. A future true global raster requires a separately scoped backend/data-source phase and its own provenance/performance design.
+
+4. Three separate data modes on the globe/timeline
+
+   A. Observed history
+   - NASA POWER monthly local grid from /api/monthly-frames.
+   - Label: Observed/reanalysis, NASA POWER.
+
+   B. Internal climate forecast
+   - /api/monthly-forecast for T2M, PRECTOTCORR and CLOUD_AMT only.
+   - Only render frames when `eligible === true`.
+   - When withheld, leave the historical timeline usable and show the backend reason.
+   - Label exactly as forecast/not observed; surface backtest metrics in a detail drawer.
+
+   C. Meteomatics live weather
+   - /api/live-weather is point-based hourly operational weather for the next 1–72 hours.
+   - Present it as a local weather card and optional point/radial layer near the selected location, not a full global heatmap unless a separately documented gridded Meteomatics endpoint is implemented later.
+   - Show Meteomatics source, valid/fetch time, stale state and distinct `not NASA trend data` label.
+
+5. News markers
+
+- Fetch news lazily only for saved locations plus the selected interest/data category. Do not run a global news feed.
+- Markers appear at approximate saved-location coordinates and rotate with the globe.
+- Each closed marker/card shows: thin green/amber/red border, headline, publisher, date and one-line overview.
+- On click or keyboard activation, expand in place or open a focus-managed panel with the full available summary, source link, location precision, stale state and the fixed “news context, not scientific evidence” label.
+- `publisher_verified: false` stories must say “Unverified news context” and be visually less prominent. Do not claim an official severity level.
+- Handle loading, no stories, stale stories, provider error and slow first response without a blank panel.
+
+6. Evidence and manual Why
+
+- Use evidence_trace.verdict to render the four evidence states: Strong evidence of a trend; Some evidence — investigate carefully; No clear evidence yet; Not enough data to tell.
+- Lead with direction, rate, period, source and uncertainty. Do not lead with raw p-values.
+- Add an expandable “How did we test this?” section that explains each backend evidence_trace step in simple language, then exposes actual values/method names for technical users. It must not pretend calculation occurs in the browser.
+- Only after a valid analysis is complete, show a button: “Why might this be happening?”
+- Call POST /api/explanations with only the documented signed case and optional short question. On HTTP 422 from a stale case signature, refetch the trend then retry once.
+- Render summary, possible drivers, limitations and clickable citations. Always display: “These are possible explanations, not proof that one cause created this local trend.”
+- Support `ok`, `fallback`, `no_key`, `rate_limited` and `no_evidence` states intentionally.
+
+7. Failure, performance and accessibility
+
+- Use AbortController/cancellation for stale selection requests and cache only non-sensitive public responses in the browser.
+- Budget NASA grid requests; do not request a 3x3 grid and forecast for every saved location in the background.
+- Ensure every interactive canvas function has keyboard/ARIA alternate controls and plain-text state information.
+- Test desktop, tablet and mobile; normal, slow and failed API states; no keys; no Meteomatics account; stale weather/news; withheld forecast; missing localStorage; and reduced motion.
+
+====================================================================
+INTEGRATION AND ACCEPTANCE CHECKLIST
+====================================================================
+
+1. Read docs/V2_BACKEND_REPAIR_HANDOFF.md. If API shapes changed, update frontend API helpers, fixtures and tests deliberately.
+2. Build the Fable visual design into React; do not ship mock screenshots instead of working views.
+3. Run the backend suite in the supported target, `npm test`, and `npm run build`.
+4. Run a one-process production-style local smoke test after the frontend build.
+5. In Azure staging, configure secrets only in application settings. Test the real OpenAI and Meteomatics success paths once, then confirm no secret appears in browser tools, source, logs or responses.
+6. Complete this demo journey:
+   a. Welcome/profile → save a location and interest.
+   b. Main globe/dashboard → select a variable.
+   c. Scrub observed NASA history through time.
+   d. Show visual trend verdict and expandable evidence.
+   e. Click manual Why → cited, hedged response or honest fallback.
+   f. Show optional forecast only when eligible.
+   g. Toggle Meteomatics live weather and show it is separate.
+   h. Open a selected-location news marker and show source, severity meaning and context disclaimer.
+   i. Enter Explore and show advanced tabs remain available.
+7. Write docs/V2_FRONTEND_FINAL_HANDOFF.md with changed files, design decisions, test totals, screenshots/recordings, accessibility checks, API contract assumptions and unresolved risks.
+
+Do not deploy, merge to main or change Azure secrets without the owner’s explicit approval.
