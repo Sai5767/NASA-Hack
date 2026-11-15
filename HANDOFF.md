@@ -61,10 +61,21 @@ history is kept on the branch `backup/before-coauthor-labels`). Anyone with an o
 - [x] 11. Forecast headline in Overview (ForecastHeadline in Overview.jsx; all ML runs locally in pure Python)
 - [x] 12. Hosting config and docs (NOT published; needs the owner's account): `backend/app/deploy.py` (CORS origins from `TD_ALLOWED_ORIGINS`, serves `frontend/dist` at `/`), `Dockerfile`, `.dockerignore`, `render.yaml`, `docs/DEPLOY.md`; `frontend/src/api.js` is same-origin in production. One-process mode was run and verified on port 8010; the Docker image has NOT been built (no Docker here). Tests: `backend/tests/test_deploy.py`.
 - [x] 13. Final: 199 backend and 60 front-end tests pass, production build passes, README and docs updated, branch pushed. **Merged into `main`** by fast-forward on the owner's instruction (2026-11-15).
+- [x] 14. V2 Backend (`codex/v2-backend`): API contract (`docs/V2_API_CONTRACT.md`), resilience & health telemetry (`backend/app/resilience.py`, `GET /api/health/details`), `/api/trend` evidence trace & HMAC `case_signature` (`backend/app/analysis.py`), observed monthly frames & backtested 1–3 month forecasts (`backend/app/monthly.py`, `GET /api/monthly-frames`, `GET /api/monthly-forecast`), server-side OpenAI Responses API explanation synthesis with science-domain allow-list & curated fallback (`backend/app/explanations.py`, `POST /api/explanations`), live-news context provider (`backend/app/news.py`, `GET /api/news`), deterministic fixtures (`backend/tests/fixtures/v2_fixtures.json`), and frontend handoff (`docs/V2_BACKEND_HANDOFF.md`, minimal helpers in `frontend/src/api.js`). 236 backend tests and 63 front-end tests pass.
 
 ## Notes for the next agent
 
-2026-11-15, end of the To Do pass (branch `feature/todo-list`, 12 commits on top of `main` at `b9acd82`):
+### V2 Backend Handoff (`codex/v2-backend`, 2026-11-15)
+
+- **For the V2 Frontend Agent (`codex/v2-frontend`) and Audit Agent (`codex/v2-audit`):**
+  - Read [docs/V2_API_CONTRACT.md](docs/V2_API_CONTRACT.md) and [docs/V2_BACKEND_HANDOFF.md](docs/V2_BACKEND_HANDOFF.md) first.
+  - Deterministic offline fixtures for all V2 routes and degraded states are in `backend/tests/fixtures/v2_fixtures.json`.
+  - Minimal fetch helpers (`fetchHealthDetails`, `fetchMonthlyFrames`, `fetchMonthlyForecast`, `fetchExplanation`, `fetchNews`) are ready in `frontend/src/api.js`.
+  - **Environment variable names** (all optional locally; core analysis remains keyless): `OPENAI_API_KEY`, `OPENAI_EXPLANATION_MODEL`, `OPENAI_BASE_URL`, `OPENAI_TIMEOUT_SECONDS`, `OPENAI_WEB_SEARCH`, `EXPLANATION_CACHE_TTL_SECONDS`, `EXPLANATION_RATE_LIMIT_MAX`, `EXPLANATION_RATE_LIMIT_WINDOW_SECONDS`, `NEWS_PROVIDER`, `NEWS_API_URL`, `NEWS_API_KEY`, `NEWS_TIMEOUT_SECONDS`, `NEWS_CACHE_TTL_SECONDS`, `NASA_POWER_TIMEOUT_SECONDS`, `NASA_POWER_MAX_CONCURRENCY`, `NASA_POWER_CACHE_TTL_SECONDS`, `STREAMS_TIMEOUT_SECONDS`, `STREAMS_CACHE_TTL_SECONDS`, `TD_CASE_SECRET`, `TD_ALLOWED_ORIGINS`.
+  - **Local behavior without keys:** When `OPENAI_API_KEY` is unset, `POST /api/explanations` returns `status: "fallback"` with a deterministic explanation from `backend/app/reasons.py` and server-computed statistics. When upstream news is unreachable or disabled, `GET /api/news` returns `items: []` with an explicit status (`"unavailable"` or `"disabled"`) and never invents synthetic headlines.
+  - **Limitations to preserve in UI:** `GET /api/monthly-forecast` only forecasts `T2M`, `PRECTOTCORR`, and `CLOUD_AMT` (1–3 months) and withholds `frames` (`[]`) whenever `eligible` is `false`. Neither `/api/monthly-frames` nor `/api/monthly-forecast` interpolates missing cells. `POST /api/explanations` rejects client-supplied `p_value`, `slope`, or `stats` (`extra="forbid"`).
+
+### Earlier notes (end of the To Do pass, 2026-11-15)
 
 - **Nothing is half-done.** Every To Do item is implemented, tested and pushed. Hosting is *prepared* but deliberately not published.
 - **Not verified, be honest about it:** the `Dockerfile` has never been built (no Docker on the dev machine); the one-process mode it relies on was run and checked (page, assets, API and docs from one server on port 8010). Phone-width layout was checked for horizontal overflow only, not by eye. The wizard modal's width on a phone was not conclusively measured.
@@ -79,3 +90,4 @@ history is kept on the branch `backup/before-coauthor-labels`). Anyone with an o
   until it is updated (`git pull` there; it is clean) or deleted. Ask the owner before doing either.
 - **Untracked file left alone:** `AI-usage-report.pdf` (the model and token report the owner asked for).
 - **Ideas not done** (from an earlier list, the owner said to set them aside): persistent disk cache so restarts are fast, daily-data extremes, a CI workflow, cross-platform start script.
+
