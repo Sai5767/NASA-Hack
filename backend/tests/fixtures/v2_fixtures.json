@@ -1,0 +1,2425 @@
+{
+  "trend_with_evidence_trace": {
+    "variable": {
+      "id": "T2M",
+      "label": "Air temperature",
+      "units": "\u00b0C",
+      "group": "Heat",
+      "ratio": false,
+      "land_only": false,
+      "description": "Average temperature of the air about 2 m above the ground. Rising values mean warming.",
+      "tracks_global_temp": true
+    },
+    "location": {
+      "lat": 33.45,
+      "lon": -112.07
+    },
+    "period": {
+      "start_year": 1981,
+      "end_year": 2024
+    },
+    "quality": {
+      "years_used": 44,
+      "years_requested": 44,
+      "valid_months": 528,
+      "expected_months": 528
+    },
+    "stats": {
+      "n_years": 44,
+      "mann_kendall_s": 840.0,
+      "z": 8.4858660686626,
+      "p_value": 2.141179463958959e-17,
+      "p_naive": 2.141179463958959e-17,
+      "alpha": 0.05,
+      "significant": true,
+      "direction": "increasing",
+      "sign": "up",
+      "slope_per_year": 0.062434872012757534,
+      "slope_per_decade": 0.6243487201275754,
+      "ci_low_per_decade": 0.5806430397970404,
+      "ci_high_per_decade": 0.6566070676475034,
+      "total_change": 2.684699496548574,
+      "span_years": 43,
+      "percent_of_mean": null,
+      "noise_sd": 0.15221734690910663,
+      "signal_to_noise": 17.63727690084945,
+      "mean_value": 11.273101326675873,
+      "autocorr": {
+        "r1": -0.07449405663108666,
+        "adjusted": false,
+        "factor": 1.0
+      }
+    },
+    "ols": {
+      "slope_per_decade": 0.6205031801567438,
+      "se_per_decade": 0.018275477465133166,
+      "ci_low_per_decade": 0.5836217734740878,
+      "ci_high_per_decade": 0.6573845868393996,
+      "t": 33.9528,
+      "df": 42.0,
+      "p_value": 3.632846314409964e-32,
+      "r2": 0.9648474070355687,
+      "significant": true
+    },
+    "grade": {
+      "code": "strong",
+      "label": "Strong evidence",
+      "passed": 5,
+      "total": 5
+    },
+    "checks": [
+      {
+        "id": "mk",
+        "label": "The Mann\u2013Kendall test is significant",
+        "passed": true,
+        "detail": "p = < 0.001 (needs < 0.05)"
+      },
+      {
+        "id": "ols",
+        "label": "A straight-line regression (t-test) agrees",
+        "passed": true,
+        "detail": "slope +0.621 \u00b0C/decade, p = < 0.001"
+      },
+      {
+        "id": "months",
+        "label": "Most calendar months move the same way",
+        "passed": true,
+        "detail": "12 of 12 months share the overall direction"
+      },
+      {
+        "id": "stable",
+        "label": "The trend survives trimming 5 years from the ends",
+        "passed": true,
+        "detail": "3 of 3 trimmed versions are still significant; 3 keep the direction"
+      },
+      {
+        "id": "noise",
+        "label": "The change is bigger than normal year-to-year swings",
+        "passed": true,
+        "detail": "17.6\u00d7 the typical swing"
+      }
+    ],
+    "caveats": [
+      "Trends are straight-line summaries of annual averages. They cannot capture cycles, sudden jumps or curved change.",
+      "NASA POWER blends satellite observations with computer models (reanalysis) on a grid about half a degree wide, so points that are close together can share the same values.",
+      "A significant trend shows a consistent direction over this period, not its cause. A different start or end year can change the answer."
+    ],
+    "case_signature": "v2|T2M|33.450|-112.070|1981|2024|fixture000000000000000000",
+    "evidence_trace": {
+      "verdict": {
+        "code": "strong_evidence",
+        "label": "Strong evidence of a trend",
+        "tier": 3,
+        "direction": "increasing",
+        "sign": "up",
+        "summary": "Air temperature at (33.45, -112.07) rose over 1981\u20132024: +0.624 \u00b0C per decade (95% range +0.581 to +0.657), about +2.68 \u00b0C in total. That change is roughly 17.6\u00d7 the normal year-to-year swing. Strong evidence (5 of 5 checks passed).",
+        "ladder": [
+          {
+            "code": "strong_evidence",
+            "label": "Strong evidence of a trend",
+            "tier": 3
+          },
+          {
+            "code": "some_evidence",
+            "label": "Some evidence \u2014 investigate carefully",
+            "tier": 2
+          },
+          {
+            "code": "no_clear_evidence",
+            "label": "No clear evidence yet",
+            "tier": 1
+          },
+          {
+            "code": "insufficient_data",
+            "label": "Not enough data to tell",
+            "tier": 0
+          }
+        ]
+      },
+      "completeness": {
+        "start_year": 1981,
+        "end_year": 2024,
+        "complete_years": [
+          1981,
+          1982,
+          1983,
+          1984,
+          1985,
+          1986,
+          1987,
+          1988,
+          1989,
+          1990,
+          1991,
+          1992,
+          1993,
+          1994,
+          1995,
+          1996,
+          1997,
+          1998,
+          1999,
+          2000,
+          2001,
+          2002,
+          2003,
+          2004,
+          2005,
+          2006,
+          2007,
+          2008,
+          2009,
+          2010,
+          2011,
+          2012,
+          2013,
+          2014,
+          2015,
+          2016,
+          2017,
+          2018,
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024
+        ],
+        "years_used": 44,
+        "years_requested": 44,
+        "valid_months": 528,
+        "expected_months": 528,
+        "min_months_per_year": 12,
+        "min_years_required": 20,
+        "source": "NASA Langley Research Center (LaRC) POWER Project"
+      },
+      "slope_and_interval": {
+        "method": "Theil\u2013Sen median pairwise slope with Gilbert (1987) 95% confidence interval",
+        "units": "\u00b0C",
+        "slope_per_year": 0.062434872012757534,
+        "slope_per_decade": 0.6243487201275754,
+        "ci_low_per_decade": 0.5806430397970404,
+        "ci_high_per_decade": 0.6566070676475034,
+        "confidence_level": 0.95,
+        "total_change": 2.684699496548574,
+        "span_years": 43,
+        "mean_value": 11.273101326675873,
+        "percent_of_mean": null,
+        "noise_sd": 0.15221734690910663,
+        "signal_to_noise": 17.63727690084945
+      },
+      "mann_kendall": {
+        "method": "Two-sided Mann\u2013Kendall non-parametric trend test (tie- and continuity-corrected)",
+        "s": 840.0,
+        "z": 8.4858660686626,
+        "p_value": 2.141179463958959e-17,
+        "raw_p_value": 2.141179463958959e-17,
+        "alpha": 0.05,
+        "significant": true,
+        "direction": "increasing",
+        "sign": "up"
+      },
+      "regression_and_serial_correlation": {
+        "ols": {
+          "slope_per_decade": 0.6205031801567438,
+          "se_per_decade": 0.018275477465133166,
+          "ci_low_per_decade": 0.5836217734740878,
+          "ci_high_per_decade": 0.6573845868393996,
+          "t": 33.9528,
+          "df": 42.0,
+          "p_value": 3.632846314409964e-32,
+          "r2": 0.9648474070355687,
+          "significant": true
+        },
+        "tests_agree": true,
+        "serial_correlation": {
+          "method": "Marriott\u2013Pope (1954) bias-corrected lag-1 autocorrelation variance inflation (1+phi)/(1-phi)",
+          "lag1_r1": -0.07449405663108666,
+          "variance_factor": 1.0,
+          "adjusted": false,
+          "effective_df": 42.0,
+          "raw_p_value": 2.141179463958959e-17,
+          "adjusted_p_value": 2.141179463958959e-17
+        }
+      },
+      "correction_status": {
+        "method": "Benjamini\u2013Hochberg false-discovery rate (FDR) control",
+        "alpha": 0.05,
+        "primary_test_scope": "single_series",
+        "primary_p_fdr_adjusted": false,
+        "calendar_months_fdr_applied": true,
+        "calendar_months_tested": 12,
+        "calendar_months_significant_fdr": 12,
+        "explanation": "A single requested point trend is tested at alpha = 0.05 using the serial-correlation-adjusted p-value. Simultaneous families of tests (the 12 calendar months here, plus Sweep, Scan, World, and Ledger) apply Benjamini\u2013Hochberg false-discovery control at q = 0.05."
+      },
+      "grade": {
+        "code": "strong",
+        "label": "Strong evidence",
+        "passed": 5,
+        "total": 5
+      },
+      "checks": [
+        {
+          "id": "mk",
+          "label": "The Mann\u2013Kendall test is significant",
+          "passed": true,
+          "detail": "p = < 0.001 (needs < 0.05)"
+        },
+        {
+          "id": "ols",
+          "label": "A straight-line regression (t-test) agrees",
+          "passed": true,
+          "detail": "slope +0.621 \u00b0C/decade, p = < 0.001"
+        },
+        {
+          "id": "months",
+          "label": "Most calendar months move the same way",
+          "passed": true,
+          "detail": "12 of 12 months share the overall direction"
+        },
+        {
+          "id": "stable",
+          "label": "The trend survives trimming 5 years from the ends",
+          "passed": true,
+          "detail": "3 of 3 trimmed versions are still significant; 3 keep the direction"
+        },
+        {
+          "id": "noise",
+          "label": "The change is bigger than normal year-to-year swings",
+          "passed": true,
+          "detail": "17.6\u00d7 the typical swing"
+        }
+      ],
+      "steps": [
+        {
+          "step": 1,
+          "id": "completeness",
+          "title": "Count complete 12-month years",
+          "plain_explanation": "Used 44 complete 12-month years (1981\u20132024) from 528 valid monthly observations so no single season biases the annual average.",
+          "method_label": "Complete-year annual aggregation (12 valid months required per year)",
+          "values": {
+            "years_used": 44,
+            "years_requested": 44,
+            "valid_months": 528,
+            "expected_months": 528,
+            "start_year": 1981,
+            "end_year": 2024
+          }
+        },
+        {
+          "step": 2,
+          "id": "sen_slope",
+          "title": "Estimate rate of change (Theil\u2013Sen slope & 95% interval)",
+          "plain_explanation": "Compared every pair of years to find the median rate of change: +0.624 \u00b0C/decade (95% interval +0.581 to +0.657 \u00b0C/decade).",
+          "method_label": "Theil\u2013Sen estimator with Gilbert (1987) 95% confidence interval",
+          "values": {
+            "slope_per_year": 0.062434872012757534,
+            "slope_per_decade": 0.6243487201275754,
+            "ci_low_per_decade": 0.5806430397970404,
+            "ci_high_per_decade": 0.6566070676475034,
+            "total_change": 2.684699496548574,
+            "units": "\u00b0C"
+          }
+        },
+        {
+          "step": 3,
+          "id": "serial_correlation",
+          "title": "Check whether neighboring years resemble each other",
+          "plain_explanation": "Measured year-to-year persistence (lag-1 autocorrelation r1 = -0.07) and applied a variance factor of 1.00\u00d7 (no material persistence widening needed).",
+          "method_label": "Marriott\u2013Pope (1954) bias-corrected lag-1 autocorrelation adjustment (1+phi)/(1-phi)",
+          "values": {
+            "lag1_r1": -0.07449405663108666,
+            "variance_factor": 1.0,
+            "adjusted": false,
+            "raw_p_value": 2.141179463958959e-17,
+            "adjusted_p_value": 2.141179463958959e-17
+          }
+        },
+        {
+          "step": 4,
+          "id": "significance_tests",
+          "title": "Run non-parametric and regression significance tests",
+          "plain_explanation": "Mann\u2013Kendall p = < 0.001 (raw unadjusted p = < 0.001) and OLS regression t-test p = < 0.001 with 42.0 effective degrees of freedom.",
+          "method_label": "Tie-corrected Mann\u2013Kendall test + effective-df Student-t OLS regression",
+          "values": {
+            "mann_kendall_s": 840.0,
+            "mann_kendall_z": 8.4858660686626,
+            "p_value": 2.141179463958959e-17,
+            "raw_p_value": 2.141179463958959e-17,
+            "ols_t": 33.9528,
+            "ols_df": 42.0,
+            "ols_p_value": 3.632846314409964e-32,
+            "alpha": 0.05,
+            "significant": true,
+            "tests_agree": true
+          }
+        },
+        {
+          "step": 5,
+          "id": "evidence_grade",
+          "title": "Combine five robustness checks into the evidence verdict",
+          "plain_explanation": "Passed 5 of 5 evidence checks \u2192 Strong evidence of a trend.",
+          "method_label": "Five-check evidence rubric + Benjamini\u2013Hochberg FDR on calendar months",
+          "values": {
+            "verdict_code": "strong_evidence",
+            "verdict_label": "Strong evidence of a trend",
+            "grade_code": "strong",
+            "checks_passed": 5,
+            "checks_total": 5,
+            "month_agreement": 12,
+            "months_tested": 12,
+            "months_significant_fdr": 12
+          }
+        }
+      ],
+      "caveats": [
+        "Trends are straight-line summaries of annual averages. They cannot capture cycles, sudden jumps or curved change.",
+        "NASA POWER blends satellite observations with computer models (reanalysis) on a grid about half a degree wide, so points that are close together can share the same values.",
+        "A significant trend shows a consistent direction over this period, not its cause. A different start or end year can change the answer."
+      ]
+    }
+  },
+  "monthly_frames": {
+    "variable": {
+      "id": "T2M",
+      "label": "Air temperature",
+      "units": "\u00b0C",
+      "group": "Heat",
+      "ratio": false,
+      "land_only": false,
+      "description": "Average temperature of the air about 2 m above the ground. Rising values mean warming.",
+      "tracks_global_temp": true
+    },
+    "location": {
+      "lat": 33.45,
+      "lon": -112.07
+    },
+    "grid": {
+      "n": 2,
+      "size_degrees": 2.0,
+      "total_cells": 4,
+      "resolution_note": "Coarse local analysis grid around the selected location (~0.5\u00b0 NASA POWER reanalysis), not a global satellite raster. Missing cells are shown as missing and never interpolated."
+    },
+    "period": {
+      "start_year": 2024,
+      "end_year": 2024,
+      "climatology_start_year": 2005,
+      "climatology_end_year": 2024,
+      "start_month": "2024-01",
+      "end_month": "2024-12",
+      "total_months": 12
+    },
+    "provenance": {
+      "source_id": "nasa_power",
+      "source_name": "NASA Langley Research Center (LaRC) POWER Project",
+      "source_url": "https://power.larc.nasa.gov/",
+      "variable_id": "T2M",
+      "variable_label": "Air temperature",
+      "units": "\u00b0C",
+      "observation_state": "observed_reanalysis",
+      "spatial_resolution": "0.5\u00b0 x 0.625\u00b0 MERRA-2 / 1.0\u00b0 radiation grid (coarse local analysis grid, not a satellite image)",
+      "temporal_resolution": "monthly",
+      "requested_period": {
+        "start_year": 2024,
+        "end_year": 2024
+      },
+      "fetched_at": "2026-11-15T00:00:00Z",
+      "stale": false,
+      "caveat": "NASA POWER blends satellite observations with MERRA-2 reanalysis on a ~0.5\u00b0 grid; nearby points can share grid cells."
+    },
+    "coverage": {
+      "cells_requested": 4,
+      "cells_succeeded": 4,
+      "cells_failed": 0,
+      "cells_with_missing_months": 0,
+      "total_cell_months_expected": 48,
+      "total_cell_months_valid": 48,
+      "total_cell_months_missing": 0,
+      "coverage_fraction": 1.0,
+      "partial_failure": false
+    },
+    "cells": [
+      {
+        "cell_id": "r0_c0",
+        "row": 0,
+        "col": 0,
+        "lat": 32.45,
+        "lon": -113.07,
+        "ok": true,
+        "valid_months": 12,
+        "missing_months": 0,
+        "expected_months": 12,
+        "missing_fraction": 0.0,
+        "climatology": {
+          "1": 10.4974,
+          "2": 14.7676,
+          "3": 17.5889,
+          "4": 18.5956,
+          "5": 17.5345,
+          "6": 14.5518,
+          "7": 10.7163,
+          "8": 6.5912,
+          "9": 3.581,
+          "10": 2.5543,
+          "11": 3.6137,
+          "12": 6.4993
+        },
+        "error": null
+      },
+      {
+        "cell_id": "r0_c1",
+        "row": 0,
+        "col": 1,
+        "lat": 32.45,
+        "lon": -111.07,
+        "ok": true,
+        "valid_months": 12,
+        "missing_months": 0,
+        "expected_months": 12,
+        "missing_fraction": 0.0,
+        "climatology": {
+          "1": 10.5749,
+          "2": 14.5014,
+          "3": 17.4803,
+          "4": 18.4523,
+          "5": 17.6042,
+          "6": 14.7705,
+          "7": 10.6207,
+          "8": 6.5674,
+          "9": 3.7627,
+          "10": 2.6796,
+          "11": 3.7802,
+          "12": 6.7539
+        },
+        "error": null
+      },
+      {
+        "cell_id": "r1_c0",
+        "row": 1,
+        "col": 0,
+        "lat": 34.45,
+        "lon": -113.07,
+        "ok": true,
+        "valid_months": 12,
+        "missing_months": 0,
+        "expected_months": 12,
+        "missing_fraction": 0.0,
+        "climatology": {
+          "1": 10.6497,
+          "2": 14.6529,
+          "3": 17.5324,
+          "4": 18.5931,
+          "5": 17.5685,
+          "6": 14.6106,
+          "7": 10.4547,
+          "8": 6.6815,
+          "9": 3.6743,
+          "10": 2.6461,
+          "11": 3.6195,
+          "12": 6.6156
+        },
+        "error": null
+      },
+      {
+        "cell_id": "r1_c1",
+        "row": 1,
+        "col": 1,
+        "lat": 34.45,
+        "lon": -111.07,
+        "ok": true,
+        "valid_months": 12,
+        "missing_months": 0,
+        "expected_months": 12,
+        "missing_fraction": 0.0,
+        "climatology": {
+          "1": 10.4127,
+          "2": 14.6563,
+          "3": 17.4982,
+          "4": 18.6765,
+          "5": 17.44,
+          "6": 14.6939,
+          "7": 10.5966,
+          "8": 6.5127,
+          "9": 3.7856,
+          "10": 2.4951,
+          "11": 3.5792,
+          "12": 6.4004
+        },
+        "error": null
+      }
+    ],
+    "frames": [
+      {
+        "month": "2024-01",
+        "stamp": "202401",
+        "year": 2024,
+        "month_num": 1,
+        "label": "Jan 2024",
+        "kind": "observed",
+        "badge": "Observed (NASA POWER)",
+        "valid_cells": 4,
+        "missing_cells": 0,
+        "mean_value": 11.2319,
+        "mean_anomaly": 0.6983,
+        "cells": [
+          {
+            "cell_id": "r0_c0",
+            "row": 0,
+            "col": 0,
+            "lat": 32.45,
+            "lon": -113.07,
+            "value": 11.3332,
+            "anomaly": 0.8358,
+            "missing": false
+          },
+          {
+            "cell_id": "r0_c1",
+            "row": 0,
+            "col": 1,
+            "lat": 32.45,
+            "lon": -111.07,
+            "value": 11.6481,
+            "anomaly": 1.0732,
+            "missing": false
+          },
+          {
+            "cell_id": "r1_c0",
+            "row": 1,
+            "col": 0,
+            "lat": 34.45,
+            "lon": -113.07,
+            "value": 10.8942,
+            "anomaly": 0.2445,
+            "missing": false
+          },
+          {
+            "cell_id": "r1_c1",
+            "row": 1,
+            "col": 1,
+            "lat": 34.45,
+            "lon": -111.07,
+            "value": 11.0523,
+            "anomaly": 0.6396,
+            "missing": false
+          }
+        ]
+      },
+      {
+        "month": "2024-02",
+        "stamp": "202402",
+        "year": 2024,
+        "month_num": 2,
+        "label": "Feb 2024",
+        "kind": "observed",
+        "badge": "Observed (NASA POWER)",
+        "valid_cells": 4,
+        "missing_cells": 0,
+        "mean_value": 14.9224,
+        "mean_anomaly": 0.2779,
+        "cells": [
+          {
+            "cell_id": "r0_c0",
+            "row": 0,
+            "col": 0,
+            "lat": 32.45,
+            "lon": -113.07,
+            "value": 14.8556,
+            "anomaly": 0.088,
+            "missing": false
+          },
+          {
+            "cell_id": "r0_c1",
+            "row": 0,
+            "col": 1,
+            "lat": 32.45,
+            "lon": -111.07,
+            "value": 14.7808,
+            "anomaly": 0.2794,
+            "missing": false
+          },
+          {
+            "cell_id": "r1_c0",
+            "row": 1,
+            "col": 0,
+            "lat": 34.45,
+            "lon": -113.07,
+            "value": 15.8618,
+            "anomaly": 1.2089,
+            "missing": false
+          },
+          {
+            "cell_id": "r1_c1",
+            "row": 1,
+            "col": 1,
+            "lat": 34.45,
+            "lon": -111.07,
+            "value": 14.1916,
+            "anomaly": -0.4647,
+            "missing": false
+          }
+        ]
+      },
+      {
+        "month": "2024-03",
+        "stamp": "202403",
+        "year": 2024,
+        "month_num": 3,
+        "label": "Mar 2024",
+        "kind": "observed",
+        "badge": "Observed (NASA POWER)",
+        "valid_cells": 4,
+        "missing_cells": 0,
+        "mean_value": 18.2286,
+        "mean_anomaly": 0.7037,
+        "cells": [
+          {
+            "cell_id": "r0_c0",
+            "row": 0,
+            "col": 0,
+            "lat": 32.45,
+            "lon": -113.07,
+            "value": 18.6971,
+            "anomaly": 1.1082,
+            "missing": false
+          },
+          {
+            "cell_id": "r0_c1",
+            "row": 0,
+            "col": 1,
+            "lat": 32.45,
+            "lon": -111.07,
+            "value": 17.8698,
+            "anomaly": 0.3895,
+            "missing": false
+          },
+          {
+            "cell_id": "r1_c0",
+            "row": 1,
+            "col": 0,
+            "lat": 34.45,
+            "lon": -113.07,
+            "value": 17.6309,
+            "anomaly": 0.0985,
+            "missing": false
+          },
+          {
+            "cell_id": "r1_c1",
+            "row": 1,
+            "col": 1,
+            "lat": 34.45,
+            "lon": -111.07,
+            "value": 18.7167,
+            "anomaly": 1.2185,
+            "missing": false
+          }
+        ]
+      },
+      {
+        "month": "2024-04",
+        "stamp": "202404",
+        "year": 2024,
+        "month_num": 4,
+        "label": "Apr 2024",
+        "kind": "observed",
+        "badge": "Observed (NASA POWER)",
+        "valid_cells": 4,
+        "missing_cells": 0,
+        "mean_value": 19.156,
+        "mean_anomaly": 0.5766,
+        "cells": [
+          {
+            "cell_id": "r0_c0",
+            "row": 0,
+            "col": 0,
+            "lat": 32.45,
+            "lon": -113.07,
+            "value": 19.6372,
+            "anomaly": 1.0416,
+            "missing": false
+          },
+          {
+            "cell_id": "r0_c1",
+            "row": 0,
+            "col": 1,
+            "lat": 32.45,
+            "lon": -111.07,
+            "value": 18.6053,
+            "anomaly": 0.153,
+            "missing": false
+          },
+          {
+            "cell_id": "r1_c0",
+            "row": 1,
+            "col": 0,
+            "lat": 34.45,
+            "lon": -113.07,
+            "value": 19.5825,
+            "anomaly": 0.9894,
+            "missing": false
+          },
+          {
+            "cell_id": "r1_c1",
+            "row": 1,
+            "col": 1,
+            "lat": 34.45,
+            "lon": -111.07,
+            "value": 18.799,
+            "anomaly": 0.1225,
+            "missing": false
+          }
+        ]
+      },
+      {
+        "month": "2024-05",
+        "stamp": "202405",
+        "year": 2024,
+        "month_num": 5,
+        "label": "May 2024",
+        "kind": "observed",
+        "badge": "Observed (NASA POWER)",
+        "valid_cells": 4,
+        "missing_cells": 0,
+        "mean_value": 17.9867,
+        "mean_anomaly": 0.4499,
+        "cells": [
+          {
+            "cell_id": "r0_c0",
+            "row": 0,
+            "col": 0,
+            "lat": 32.45,
+            "lon": -113.07,
+            "value": 17.8227,
+            "anomaly": 0.2882,
+            "missing": false
+          },
+          {
+            "cell_id": "r0_c1",
+            "row": 0,
+            "col": 1,
+            "lat": 32.45,
+            "lon": -111.07,
+            "value": 17.9239,
+            "anomaly": 0.3197,
+            "missing": false
+          },
+          {
+            "cell_id": "r1_c0",
+            "row": 1,
+            "col": 0,
+            "lat": 34.45,
+            "lon": -113.07,
+            "value": 18.2413,
+            "anomaly": 0.6728,
+            "missing": false
+          },
+          {
+            "cell_id": "r1_c1",
+            "row": 1,
+            "col": 1,
+            "lat": 34.45,
+            "lon": -111.07,
+            "value": 17.959,
+            "anomaly": 0.519,
+            "missing": false
+          }
+        ]
+      },
+      {
+        "month": "2024-06",
+        "stamp": "202406",
+        "year": 2024,
+        "month_num": 6,
+        "label": "Jun 2024",
+        "kind": "observed",
+        "badge": "Observed (NASA POWER)",
+        "valid_cells": 4,
+        "missing_cells": 0,
+        "mean_value": 14.8607,
+        "mean_anomaly": 0.204,
+        "cells": [
+          {
+            "cell_id": "r0_c0",
+            "row": 0,
+            "col": 0,
+            "lat": 32.45,
+            "lon": -113.07,
+            "value": 14.7484,
+            "anomaly": 0.1966,
+            "missing": false
+          },
+          {
+            "cell_id": "r0_c1",
+            "row": 0,
+            "col": 1,
+            "lat": 32.45,
+            "lon": -111.07,
+            "value": 15.0631,
+            "anomaly": 0.2926,
+            "missing": false
+          },
+          {
+            "cell_id": "r1_c0",
+            "row": 1,
+            "col": 0,
+            "lat": 34.45,
+            "lon": -113.07,
+            "value": 14.6294,
+            "anomaly": 0.0188,
+            "missing": false
+          },
+          {
+            "cell_id": "r1_c1",
+            "row": 1,
+            "col": 1,
+            "lat": 34.45,
+            "lon": -111.07,
+            "value": 15.0019,
+            "anomaly": 0.308,
+            "missing": false
+          }
+        ]
+      },
+      {
+        "month": "2024-07",
+        "stamp": "202407",
+        "year": 2024,
+        "month_num": 7,
+        "label": "Jul 2024",
+        "kind": "observed",
+        "badge": "Observed (NASA POWER)",
+        "valid_cells": 4,
+        "missing_cells": 0,
+        "mean_value": 11.1904,
+        "mean_anomaly": 0.5933,
+        "cells": [
+          {
+            "cell_id": "r0_c0",
+            "row": 0,
+            "col": 0,
+            "lat": 32.45,
+            "lon": -113.07,
+            "value": 11.9128,
+            "anomaly": 1.1965,
+            "missing": false
+          },
+          {
+            "cell_id": "r0_c1",
+            "row": 0,
+            "col": 1,
+            "lat": 32.45,
+            "lon": -111.07,
+            "value": 11.213,
+            "anomaly": 0.5923,
+            "missing": false
+          },
+          {
+            "cell_id": "r1_c0",
+            "row": 1,
+            "col": 0,
+            "lat": 34.45,
+            "lon": -113.07,
+            "value": 10.4959,
+            "anomaly": 0.0412,
+            "missing": false
+          },
+          {
+            "cell_id": "r1_c1",
+            "row": 1,
+            "col": 1,
+            "lat": 34.45,
+            "lon": -111.07,
+            "value": 11.14,
+            "anomaly": 0.5434,
+            "missing": false
+          }
+        ]
+      },
+      {
+        "month": "2024-08",
+        "stamp": "202408",
+        "year": 2024,
+        "month_num": 8,
+        "label": "Aug 2024",
+        "kind": "observed",
+        "badge": "Observed (NASA POWER)",
+        "valid_cells": 4,
+        "missing_cells": 0,
+        "mean_value": 7.4958,
+        "mean_anomaly": 0.9077,
+        "cells": [
+          {
+            "cell_id": "r0_c0",
+            "row": 0,
+            "col": 0,
+            "lat": 32.45,
+            "lon": -113.07,
+            "value": 7.5545,
+            "anomaly": 0.9633,
+            "missing": false
+          },
+          {
+            "cell_id": "r0_c1",
+            "row": 0,
+            "col": 1,
+            "lat": 32.45,
+            "lon": -111.07,
+            "value": 7.3911,
+            "anomaly": 0.8237,
+            "missing": false
+          },
+          {
+            "cell_id": "r1_c0",
+            "row": 1,
+            "col": 0,
+            "lat": 34.45,
+            "lon": -113.07,
+            "value": 7.7169,
+            "anomaly": 1.0354,
+            "missing": false
+          },
+          {
+            "cell_id": "r1_c1",
+            "row": 1,
+            "col": 1,
+            "lat": 34.45,
+            "lon": -111.07,
+            "value": 7.3209,
+            "anomaly": 0.8082,
+            "missing": false
+          }
+        ]
+      },
+      {
+        "month": "2024-09",
+        "stamp": "202409",
+        "year": 2024,
+        "month_num": 9,
+        "label": "Sep 2024",
+        "kind": "observed",
+        "badge": "Observed (NASA POWER)",
+        "valid_cells": 4,
+        "missing_cells": 0,
+        "mean_value": 4.1652,
+        "mean_anomaly": 0.4643,
+        "cells": [
+          {
+            "cell_id": "r0_c0",
+            "row": 0,
+            "col": 0,
+            "lat": 32.45,
+            "lon": -113.07,
+            "value": 3.8668,
+            "anomaly": 0.2858,
+            "missing": false
+          },
+          {
+            "cell_id": "r0_c1",
+            "row": 0,
+            "col": 1,
+            "lat": 32.45,
+            "lon": -111.07,
+            "value": 3.6478,
+            "anomaly": -0.1149,
+            "missing": false
+          },
+          {
+            "cell_id": "r1_c0",
+            "row": 1,
+            "col": 0,
+            "lat": 34.45,
+            "lon": -113.07,
+            "value": 4.5044,
+            "anomaly": 0.8301,
+            "missing": false
+          },
+          {
+            "cell_id": "r1_c1",
+            "row": 1,
+            "col": 1,
+            "lat": 34.45,
+            "lon": -111.07,
+            "value": 4.6419,
+            "anomaly": 0.8563,
+            "missing": false
+          }
+        ]
+      },
+      {
+        "month": "2024-10",
+        "stamp": "202410",
+        "year": 2024,
+        "month_num": 10,
+        "label": "Oct 2024",
+        "kind": "observed",
+        "badge": "Observed (NASA POWER)",
+        "valid_cells": 4,
+        "missing_cells": 0,
+        "mean_value": 3.1223,
+        "mean_anomaly": 0.5286,
+        "cells": [
+          {
+            "cell_id": "r0_c0",
+            "row": 0,
+            "col": 0,
+            "lat": 32.45,
+            "lon": -113.07,
+            "value": 3.7994,
+            "anomaly": 1.2451,
+            "missing": false
+          },
+          {
+            "cell_id": "r0_c1",
+            "row": 0,
+            "col": 1,
+            "lat": 32.45,
+            "lon": -111.07,
+            "value": 3.0499,
+            "anomaly": 0.3703,
+            "missing": false
+          },
+          {
+            "cell_id": "r1_c0",
+            "row": 1,
+            "col": 0,
+            "lat": 34.45,
+            "lon": -113.07,
+            "value": 2.4585,
+            "anomaly": -0.1876,
+            "missing": false
+          },
+          {
+            "cell_id": "r1_c1",
+            "row": 1,
+            "col": 1,
+            "lat": 34.45,
+            "lon": -111.07,
+            "value": 3.1816,
+            "anomaly": 0.6865,
+            "missing": false
+          }
+        ]
+      },
+      {
+        "month": "2024-11",
+        "stamp": "202411",
+        "year": 2024,
+        "month_num": 11,
+        "label": "Nov 2024",
+        "kind": "observed",
+        "badge": "Observed (NASA POWER)",
+        "valid_cells": 4,
+        "missing_cells": 0,
+        "mean_value": 3.6582,
+        "mean_anomaly": 0.0101,
+        "cells": [
+          {
+            "cell_id": "r0_c0",
+            "row": 0,
+            "col": 0,
+            "lat": 32.45,
+            "lon": -113.07,
+            "value": 3.6606,
+            "anomaly": 0.0469,
+            "missing": false
+          },
+          {
+            "cell_id": "r0_c1",
+            "row": 0,
+            "col": 1,
+            "lat": 32.45,
+            "lon": -111.07,
+            "value": 3.4999,
+            "anomaly": -0.2803,
+            "missing": false
+          },
+          {
+            "cell_id": "r1_c0",
+            "row": 1,
+            "col": 0,
+            "lat": 34.45,
+            "lon": -113.07,
+            "value": 3.6329,
+            "anomaly": 0.0134,
+            "missing": false
+          },
+          {
+            "cell_id": "r1_c1",
+            "row": 1,
+            "col": 1,
+            "lat": 34.45,
+            "lon": -111.07,
+            "value": 3.8396,
+            "anomaly": 0.2604,
+            "missing": false
+          }
+        ]
+      },
+      {
+        "month": "2024-12",
+        "stamp": "202412",
+        "year": 2024,
+        "month_num": 12,
+        "label": "Dec 2024",
+        "kind": "observed",
+        "badge": "Observed (NASA POWER)",
+        "valid_cells": 4,
+        "missing_cells": 0,
+        "mean_value": 6.9684,
+        "mean_anomaly": 0.4011,
+        "cells": [
+          {
+            "cell_id": "r0_c0",
+            "row": 0,
+            "col": 0,
+            "lat": 32.45,
+            "lon": -113.07,
+            "value": 6.791,
+            "anomaly": 0.2917,
+            "missing": false
+          },
+          {
+            "cell_id": "r0_c1",
+            "row": 0,
+            "col": 1,
+            "lat": 32.45,
+            "lon": -111.07,
+            "value": 7.4014,
+            "anomaly": 0.6475,
+            "missing": false
+          },
+          {
+            "cell_id": "r1_c0",
+            "row": 1,
+            "col": 0,
+            "lat": 34.45,
+            "lon": -113.07,
+            "value": 7.219,
+            "anomaly": 0.6034,
+            "missing": false
+          },
+          {
+            "cell_id": "r1_c1",
+            "row": 1,
+            "col": 1,
+            "lat": 34.45,
+            "lon": -111.07,
+            "value": 6.4622,
+            "anomaly": 0.0618,
+            "missing": false
+          }
+        ]
+      }
+    ]
+  },
+  "monthly_forecast_eligible": {
+    "variable": {
+      "id": "T2M",
+      "label": "Air temperature",
+      "units": "\u00b0C",
+      "group": "Heat",
+      "ratio": false,
+      "land_only": false,
+      "description": "Average temperature of the air about 2 m above the ground. Rising values mean warming.",
+      "tracks_global_temp": true
+    },
+    "location": {
+      "lat": 33.45,
+      "lon": -112.07
+    },
+    "supported_variables": [
+      "T2M",
+      "PRECTOTCORR",
+      "CLOUD_AMT"
+    ],
+    "eligible": true,
+    "reason_code": "eligible",
+    "reason": null,
+    "label": "Forecast \u2014 not observed data",
+    "horizons_requested": 3,
+    "selected_model": "harmonic_damped_trend",
+    "selected_model_label": "Harmonic seasonality + damped trend",
+    "baseline_model": "seasonal_naive",
+    "models": [
+      {
+        "id": "seasonal_naive",
+        "label": "Seasonal naive (same month last year)",
+        "kind": "baseline",
+        "mae": 0.442,
+        "rmse": 0.5075,
+        "mae_by_horizon": [
+          0.4497,
+          0.4416,
+          0.4348
+        ],
+        "rmse_by_horizon": [
+          0.5128,
+          0.5055,
+          0.5041
+        ],
+        "skill_vs_seasonal_naive": 0.0,
+        "skill_by_horizon": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "beats_baseline_all_horizons": false,
+        "is_selected": false
+      },
+      {
+        "id": "harmonic_damped_trend",
+        "label": "Harmonic seasonality + damped trend",
+        "kind": "statistical",
+        "mae": 0.3477,
+        "rmse": 0.4132,
+        "mae_by_horizon": [
+          0.3509,
+          0.352,
+          0.3404
+        ],
+        "rmse_by_horizon": [
+          0.4156,
+          0.4196,
+          0.4044
+        ],
+        "skill_vs_seasonal_naive": 0.2134,
+        "skill_by_horizon": [
+          0.2198,
+          0.2029,
+          0.2173
+        ],
+        "beats_baseline_all_horizons": true,
+        "is_selected": true
+      },
+      {
+        "id": "regularised_ar",
+        "label": "Regularised seasonal autoregression (Ridge)",
+        "kind": "learned",
+        "mae": 0.3559,
+        "rmse": 0.4146,
+        "mae_by_horizon": [
+          0.3596,
+          0.3611,
+          0.3469
+        ],
+        "rmse_by_horizon": [
+          0.4175,
+          0.4186,
+          0.4077
+        ],
+        "skill_vs_seasonal_naive": 0.1949,
+        "skill_by_horizon": [
+          0.2002,
+          0.1823,
+          0.2022
+        ],
+        "beats_baseline_all_horizons": true,
+        "is_selected": false
+      },
+      {
+        "id": "seasonal_trend_ar1",
+        "label": "Seasonal trend + AR(1) persistence",
+        "kind": "statistical",
+        "mae": 0.3569,
+        "rmse": 0.4125,
+        "mae_by_horizon": [
+          0.3554,
+          0.3654,
+          0.3498
+        ],
+        "rmse_by_horizon": [
+          0.4114,
+          0.4187,
+          0.4073
+        ],
+        "skill_vs_seasonal_naive": 0.1927,
+        "skill_by_horizon": [
+          0.2096,
+          0.1725,
+          0.1956
+        ],
+        "beats_baseline_all_horizons": true,
+        "is_selected": false
+      },
+      {
+        "id": "monthly_ensemble",
+        "label": "Seasonal trend + Ridge AR ensemble",
+        "kind": "ensemble",
+        "mae": 0.3506,
+        "rmse": 0.4102,
+        "mae_by_horizon": [
+          0.354,
+          0.3587,
+          0.3393
+        ],
+        "rmse_by_horizon": [
+          0.4114,
+          0.4158,
+          0.4032
+        ],
+        "skill_vs_seasonal_naive": 0.2067,
+        "skill_by_horizon": [
+          0.2128,
+          0.1878,
+          0.2198
+        ],
+        "beats_baseline_all_horizons": true,
+        "is_selected": false
+      }
+    ],
+    "calibration": {
+      "nominal_coverage": 0.8,
+      "empirical_coverage": 0.8519,
+      "min_required_coverage": 0.6,
+      "n_test_origins": 27,
+      "interval_half_width_by_horizon": [
+        0.6042,
+        0.5601,
+        0.4859
+      ],
+      "passed": true
+    },
+    "training_range": {
+      "start_month": "1981-01",
+      "end_month": "2024-12",
+      "n_months": 528,
+      "n_backtest_origins": 24
+    },
+    "grid": {
+      "n": 2,
+      "size_degrees": 2.0,
+      "total_cells": 4
+    },
+    "provenance": {
+      "source_id": "nasa_power",
+      "source_name": "NASA Langley Research Center (LaRC) POWER Project",
+      "source_url": "https://power.larc.nasa.gov/",
+      "variable_id": "T2M",
+      "variable_label": "Air temperature",
+      "units": "\u00b0C",
+      "observation_state": "statistical_forecast_from_reanalysis",
+      "spatial_resolution": "0.5\u00b0 x 0.625\u00b0 MERRA-2 / 1.0\u00b0 radiation grid (coarse local analysis grid, not a satellite image)",
+      "temporal_resolution": "monthly",
+      "requested_period": {
+        "start_year": 1981,
+        "end_year": 2024
+      },
+      "fetched_at": "2026-11-15T00:00:00Z",
+      "stale": false,
+      "caveat": "Forecast \u2014 not observed data. Statistical extrapolation from NASA POWER monthly records. NASA POWER blends satellite observations with MERRA-2 reanalysis on a ~0.5\u00b0 grid; nearby points can share grid cells."
+    },
+    "cells": [
+      {
+        "cell_id": "r0_c0",
+        "row": 0,
+        "col": 0,
+        "lat": 32.45,
+        "lon": -113.07,
+        "ok": true,
+        "eligible": true,
+        "selected_model": "harmonic_damped_trend",
+        "selected_model_label": "Harmonic seasonality + damped trend",
+        "forecasts": [
+          {
+            "horizon": 1,
+            "year": 2025,
+            "month_num": 1,
+            "month": "2025-01",
+            "stamp": "202501",
+            "label": "Jan 2025",
+            "value": 12.3594,
+            "anomaly": 1.1869,
+            "lo": 11.8114,
+            "hi": 12.9074
+          },
+          {
+            "horizon": 2,
+            "year": 2025,
+            "month_num": 2,
+            "month": "2025-02",
+            "stamp": "202502",
+            "label": "Feb 2025",
+            "value": 16.5753,
+            "anomaly": 1.1404,
+            "lo": 16.0318,
+            "hi": 17.1189
+          },
+          {
+            "horizon": 3,
+            "year": 2025,
+            "month_num": 3,
+            "month": "2025-03",
+            "stamp": "202503",
+            "label": "Mar 2025",
+            "value": 19.4669,
+            "anomaly": 1.1588,
+            "lo": 18.9235,
+            "hi": 20.0103
+          }
+        ]
+      },
+      {
+        "cell_id": "r0_c1",
+        "row": 0,
+        "col": 1,
+        "lat": 32.45,
+        "lon": -111.07,
+        "ok": true,
+        "eligible": true,
+        "selected_model": "seasonal_trend_ar1",
+        "selected_model_label": "Seasonal trend + AR(1) persistence",
+        "forecasts": [
+          {
+            "horizon": 1,
+            "year": 2025,
+            "month_num": 1,
+            "month": "2025-01",
+            "stamp": "202501",
+            "label": "Jan 2025",
+            "value": 12.473,
+            "anomaly": 1.2207,
+            "lo": 11.8204,
+            "hi": 13.1257
+          },
+          {
+            "horizon": 2,
+            "year": 2025,
+            "month_num": 2,
+            "month": "2025-02",
+            "stamp": "202502",
+            "label": "Feb 2025",
+            "value": 16.4796,
+            "anomaly": 1.2254,
+            "lo": 15.8277,
+            "hi": 17.1314
+          },
+          {
+            "horizon": 3,
+            "year": 2025,
+            "month_num": 3,
+            "month": "2025-03",
+            "stamp": "202503",
+            "label": "Mar 2025",
+            "value": 19.4479,
+            "anomaly": 1.23,
+            "lo": 18.7997,
+            "hi": 20.0961
+          }
+        ]
+      },
+      {
+        "cell_id": "r1_c0",
+        "row": 1,
+        "col": 0,
+        "lat": 34.45,
+        "lon": -113.07,
+        "ok": true,
+        "eligible": true,
+        "selected_model": "harmonic_damped_trend",
+        "selected_model_label": "Harmonic seasonality + damped trend",
+        "forecasts": [
+          {
+            "horizon": 1,
+            "year": 2025,
+            "month_num": 1,
+            "month": "2025-01",
+            "stamp": "202501",
+            "label": "Jan 2025",
+            "value": 12.6892,
+            "anomaly": 1.2793,
+            "lo": 12.085,
+            "hi": 13.2934
+          },
+          {
+            "horizon": 2,
+            "year": 2025,
+            "month_num": 2,
+            "month": "2025-02",
+            "stamp": "202502",
+            "label": "Feb 2025",
+            "value": 16.5889,
+            "anomaly": 1.3118,
+            "lo": 16.0288,
+            "hi": 17.1491
+          },
+          {
+            "horizon": 3,
+            "year": 2025,
+            "month_num": 3,
+            "month": "2025-03",
+            "stamp": "202503",
+            "label": "Mar 2025",
+            "value": 19.5939,
+            "anomaly": 1.2756,
+            "lo": 19.108,
+            "hi": 20.0799
+          }
+        ]
+      },
+      {
+        "cell_id": "r1_c1",
+        "row": 1,
+        "col": 1,
+        "lat": 34.45,
+        "lon": -111.07,
+        "ok": true,
+        "eligible": true,
+        "selected_model": "seasonal_trend_ar1",
+        "selected_model_label": "Seasonal trend + AR(1) persistence",
+        "forecasts": [
+          {
+            "horizon": 1,
+            "year": 2025,
+            "month_num": 1,
+            "month": "2025-01",
+            "stamp": "202501",
+            "label": "Jan 2025",
+            "value": 12.6196,
+            "anomaly": 1.3575,
+            "lo": 11.9548,
+            "hi": 13.2844
+          },
+          {
+            "horizon": 2,
+            "year": 2025,
+            "month_num": 2,
+            "month": "2025-02",
+            "stamp": "202502",
+            "label": "Feb 2025",
+            "value": 16.6715,
+            "anomaly": 1.3626,
+            "lo": 16.0112,
+            "hi": 17.3319
+          },
+          {
+            "horizon": 3,
+            "year": 2025,
+            "month_num": 3,
+            "month": "2025-03",
+            "stamp": "202503",
+            "label": "Mar 2025",
+            "value": 19.5619,
+            "anomaly": 1.3677,
+            "lo": 18.9045,
+            "hi": 20.2192
+          }
+        ]
+      }
+    ],
+    "frames": [
+      {
+        "horizon": 1,
+        "month": "2025-01",
+        "stamp": "202501",
+        "year": 2025,
+        "month_num": 1,
+        "label": "Jan 2025",
+        "kind": "forecast",
+        "badge": "Forecast \u2014 not observed data",
+        "valid_cells": 4,
+        "missing_cells": 0,
+        "mean_value": 12.5353,
+        "mean_anomaly": 1.2611,
+        "cells": [
+          {
+            "cell_id": "r0_c0",
+            "row": 0,
+            "col": 0,
+            "lat": 32.45,
+            "lon": -113.07,
+            "value": 12.3594,
+            "anomaly": 1.1869,
+            "lo": 11.8114,
+            "hi": 12.9074,
+            "model_id": "harmonic_damped_trend",
+            "missing": false
+          },
+          {
+            "cell_id": "r0_c1",
+            "row": 0,
+            "col": 1,
+            "lat": 32.45,
+            "lon": -111.07,
+            "value": 12.473,
+            "anomaly": 1.2207,
+            "lo": 11.8204,
+            "hi": 13.1257,
+            "model_id": "seasonal_trend_ar1",
+            "missing": false
+          },
+          {
+            "cell_id": "r1_c0",
+            "row": 1,
+            "col": 0,
+            "lat": 34.45,
+            "lon": -113.07,
+            "value": 12.6892,
+            "anomaly": 1.2793,
+            "lo": 12.085,
+            "hi": 13.2934,
+            "model_id": "harmonic_damped_trend",
+            "missing": false
+          },
+          {
+            "cell_id": "r1_c1",
+            "row": 1,
+            "col": 1,
+            "lat": 34.45,
+            "lon": -111.07,
+            "value": 12.6196,
+            "anomaly": 1.3575,
+            "lo": 11.9548,
+            "hi": 13.2844,
+            "model_id": "seasonal_trend_ar1",
+            "missing": false
+          }
+        ]
+      },
+      {
+        "horizon": 2,
+        "month": "2025-02",
+        "stamp": "202502",
+        "year": 2025,
+        "month_num": 2,
+        "label": "Feb 2025",
+        "kind": "forecast",
+        "badge": "Forecast \u2014 not observed data",
+        "valid_cells": 4,
+        "missing_cells": 0,
+        "mean_value": 16.5788,
+        "mean_anomaly": 1.2601,
+        "cells": [
+          {
+            "cell_id": "r0_c0",
+            "row": 0,
+            "col": 0,
+            "lat": 32.45,
+            "lon": -113.07,
+            "value": 16.5753,
+            "anomaly": 1.1404,
+            "lo": 16.0318,
+            "hi": 17.1189,
+            "model_id": "harmonic_damped_trend",
+            "missing": false
+          },
+          {
+            "cell_id": "r0_c1",
+            "row": 0,
+            "col": 1,
+            "lat": 32.45,
+            "lon": -111.07,
+            "value": 16.4796,
+            "anomaly": 1.2254,
+            "lo": 15.8277,
+            "hi": 17.1314,
+            "model_id": "seasonal_trend_ar1",
+            "missing": false
+          },
+          {
+            "cell_id": "r1_c0",
+            "row": 1,
+            "col": 0,
+            "lat": 34.45,
+            "lon": -113.07,
+            "value": 16.5889,
+            "anomaly": 1.3118,
+            "lo": 16.0288,
+            "hi": 17.1491,
+            "model_id": "harmonic_damped_trend",
+            "missing": false
+          },
+          {
+            "cell_id": "r1_c1",
+            "row": 1,
+            "col": 1,
+            "lat": 34.45,
+            "lon": -111.07,
+            "value": 16.6715,
+            "anomaly": 1.3626,
+            "lo": 16.0112,
+            "hi": 17.3319,
+            "model_id": "seasonal_trend_ar1",
+            "missing": false
+          }
+        ]
+      },
+      {
+        "horizon": 3,
+        "month": "2025-03",
+        "stamp": "202503",
+        "year": 2025,
+        "month_num": 3,
+        "label": "Mar 2025",
+        "kind": "forecast",
+        "badge": "Forecast \u2014 not observed data",
+        "valid_cells": 4,
+        "missing_cells": 0,
+        "mean_value": 19.5176,
+        "mean_anomaly": 1.258,
+        "cells": [
+          {
+            "cell_id": "r0_c0",
+            "row": 0,
+            "col": 0,
+            "lat": 32.45,
+            "lon": -113.07,
+            "value": 19.4669,
+            "anomaly": 1.1588,
+            "lo": 18.9235,
+            "hi": 20.0103,
+            "model_id": "harmonic_damped_trend",
+            "missing": false
+          },
+          {
+            "cell_id": "r0_c1",
+            "row": 0,
+            "col": 1,
+            "lat": 32.45,
+            "lon": -111.07,
+            "value": 19.4479,
+            "anomaly": 1.23,
+            "lo": 18.7997,
+            "hi": 20.0961,
+            "model_id": "seasonal_trend_ar1",
+            "missing": false
+          },
+          {
+            "cell_id": "r1_c0",
+            "row": 1,
+            "col": 0,
+            "lat": 34.45,
+            "lon": -113.07,
+            "value": 19.5939,
+            "anomaly": 1.2756,
+            "lo": 19.108,
+            "hi": 20.0799,
+            "model_id": "harmonic_damped_trend",
+            "missing": false
+          },
+          {
+            "cell_id": "r1_c1",
+            "row": 1,
+            "col": 1,
+            "lat": 34.45,
+            "lon": -111.07,
+            "value": 19.5619,
+            "anomaly": 1.3677,
+            "lo": 18.9045,
+            "hi": 20.2192,
+            "model_id": "seasonal_trend_ar1",
+            "missing": false
+          }
+        ]
+      }
+    ]
+  },
+  "monthly_forecast_withheld": {
+    "variable": {
+      "id": "WS2M",
+      "label": "Wind speed",
+      "units": "m/s",
+      "group": "Wind & pressure",
+      "ratio": true,
+      "land_only": false,
+      "description": "Average wind speed about 2 m above the ground."
+    },
+    "location": {
+      "lat": 33.45,
+      "lon": -112.07
+    },
+    "supported_variables": [
+      "T2M",
+      "PRECTOTCORR",
+      "CLOUD_AMT"
+    ],
+    "eligible": false,
+    "reason_code": "unsupported_variable",
+    "reason": "Forecast withheld: monthly forecasting is only enabled for Air temperature (T2M), Rainfall and snowfall (PRECTOTCORR), and Cloud cover (CLOUD_AMT), not Wind speed (WS2M).",
+    "horizons_requested": 3,
+    "selected_model": null,
+    "selected_model_label": null,
+    "baseline_model": "seasonal_naive",
+    "models": [],
+    "calibration": null,
+    "training_range": null,
+    "grid": {
+      "n": 2,
+      "size_degrees": 2.0,
+      "total_cells": 4
+    },
+    "provenance": {
+      "source_id": "nasa_power",
+      "source_name": "NASA Langley Research Center (LaRC) POWER Project",
+      "source_url": "https://power.larc.nasa.gov/",
+      "variable_id": "WS2M",
+      "variable_label": "Wind speed",
+      "units": "m/s",
+      "observation_state": "statistical_forecast_from_reanalysis",
+      "spatial_resolution": "0.5\u00b0 x 0.625\u00b0 MERRA-2 / 1.0\u00b0 radiation grid (coarse local analysis grid, not a satellite image)",
+      "temporal_resolution": "monthly",
+      "requested_period": {
+        "start_year": 1981,
+        "end_year": 2024
+      },
+      "fetched_at": "2026-11-15T00:00:00Z",
+      "stale": false,
+      "caveat": "Forecast \u2014 not observed data. Statistical extrapolation from NASA POWER monthly records. NASA POWER blends satellite observations with MERRA-2 reanalysis on a ~0.5\u00b0 grid; nearby points can share grid cells."
+    },
+    "cells": [],
+    "frames": []
+  },
+  "explanations_ok": {
+    "status": "ok",
+    "summary": "Possible explanations, not proof of cause. The Arctic is warming roughly two to four times faster than the planet. Melting sea ice and snow expose darker surfaces that soak up more sunlight, which amplifies the warming ('Arctic amplification').",
+    "disclaimer": "These are possible explanations, not proof that one cause created this local trend.",
+    "drivers": [
+      {
+        "title": "Measured local air temperature trend",
+        "explanation": "Across 44 complete years (1981\u20132024), air temperature moved +0.585 \u00b0C per decade (Mann\u2013Kendall p = 6.27e-18). This establishes what changed, not what caused it.",
+        "evidence_type": "measured_local_trend",
+        "confidence": "well established",
+        "citation_ids": [
+          "cit_nasa_power"
+        ],
+        "citations": [
+          {
+            "id": "cit_nasa_power",
+            "title": "NASA POWER Agroclimatology / MERRA-2 Reanalysis Archive",
+            "url": "https://power.larc.nasa.gov/",
+            "domain": "power.larc.nasa.gov",
+            "source_label": "NASA Langley Research Center (LaRC)"
+          }
+        ]
+      },
+      {
+        "title": "Published scientific context for this variable and region",
+        "explanation": "The Arctic is warming roughly two to four times faster than the planet. Melting sea ice and snow expose darker surfaces that soak up more sunlight, which amplifies the warming ('Arctic amplification').",
+        "evidence_type": "published_literature",
+        "confidence": "well established",
+        "citation_ids": [
+          "cit_1",
+          "cit_2"
+        ],
+        "citations": [
+          {
+            "id": "cit_1",
+            "title": "Rantanen et al. (2022), Communications Earth & Environment",
+            "url": "https://www.nature.com/articles/s43247-022-00498-3",
+            "domain": "nature.com",
+            "source_label": "Rantanen et al. 2022, Communications Earth & Environment"
+          },
+          {
+            "id": "cit_2",
+            "title": "Arctic Monitoring and Assessment Programme (AMAP)",
+            "url": "https://www.amap.no/",
+            "domain": "amap.no",
+            "source_label": "AMAP 2021"
+          }
+        ]
+      }
+    ],
+    "limitations": [
+      "Trends are straight-line summaries of annual averages. They cannot capture cycles, sudden jumps or curved change.",
+      "NASA POWER blends satellite observations with computer models (reanalysis) on a grid about half a degree wide, so points that are close together can share the same values.",
+      "A significant trend shows a consistent direction over this period, not its cause. A different start or end year can change the answer."
+    ],
+    "citations": [
+      {
+        "id": "cit_nasa_power",
+        "title": "NASA POWER Agroclimatology / MERRA-2 Reanalysis Archive",
+        "url": "https://power.larc.nasa.gov/",
+        "domain": "power.larc.nasa.gov",
+        "source_label": "NASA Langley Research Center (LaRC)"
+      },
+      {
+        "id": "cit_1",
+        "title": "Rantanen et al. (2022), Communications Earth & Environment",
+        "url": "https://www.nature.com/articles/s43247-022-00498-3",
+        "domain": "nature.com",
+        "source_label": "Rantanen et al. 2022, Communications Earth & Environment"
+      },
+      {
+        "id": "cit_2",
+        "title": "Arctic Monitoring and Assessment Programme (AMAP)",
+        "url": "https://www.amap.no/",
+        "domain": "amap.no",
+        "source_label": "AMAP 2021"
+      }
+    ],
+    "generated_at": "2026-11-15T00:00:00Z",
+    "fallback": false,
+    "fallback_reason": null,
+    "case_signature": "v2|T2M|70.000|-150.000|1981|2024|fixture000000000000000000",
+    "measured_facts": {
+      "variable_id": "T2M",
+      "variable_label": "Air temperature",
+      "units": "\u00b0C",
+      "location": {
+        "lat": 70.0,
+        "lon": -150.0
+      },
+      "period": {
+        "start_year": 1981,
+        "end_year": 2024
+      },
+      "years_used": 44,
+      "direction": "increasing",
+      "sign": "up",
+      "significant": true,
+      "slope_per_decade": 0.5849,
+      "ci_low_per_decade": 0.5519,
+      "ci_high_per_decade": 0.6239,
+      "total_change": 2.5151,
+      "p_value": 0.0,
+      "raw_p_value": 0.0,
+      "grade": {
+        "code": "strong",
+        "label": "Strong evidence",
+        "passed": 5,
+        "total": 5
+      },
+      "verdict": "Strong evidence of a trend"
+    },
+    "cached": false
+  },
+  "explanations_fallback": {
+    "status": "no_key",
+    "summary": "Possible explanations, not proof of cause. The Arctic is warming roughly two to four times faster than the planet. Melting sea ice and snow expose darker surfaces that soak up more sunlight, which amplifies the warming ('Arctic amplification').",
+    "disclaimer": "These are possible explanations, not proof that one cause created this local trend.",
+    "drivers": [
+      {
+        "title": "Measured local air temperature trend",
+        "explanation": "Across 44 complete years (1981\u20132024), air temperature moved +0.585 \u00b0C per decade (Mann\u2013Kendall p = 6.27e-18). This establishes what changed, not what caused it.",
+        "evidence_type": "measured_local_trend",
+        "confidence": "well established",
+        "citation_ids": [
+          "cit_nasa_power"
+        ],
+        "citations": [
+          {
+            "id": "cit_nasa_power",
+            "title": "NASA POWER Agroclimatology / MERRA-2 Reanalysis Archive",
+            "url": "https://power.larc.nasa.gov/",
+            "domain": "power.larc.nasa.gov",
+            "source_label": "NASA Langley Research Center (LaRC)"
+          }
+        ]
+      },
+      {
+        "title": "Published scientific context for this variable and region",
+        "explanation": "The Arctic is warming roughly two to four times faster than the planet. Melting sea ice and snow expose darker surfaces that soak up more sunlight, which amplifies the warming ('Arctic amplification').",
+        "evidence_type": "published_literature",
+        "confidence": "well established",
+        "citation_ids": [
+          "cit_1",
+          "cit_2"
+        ],
+        "citations": [
+          {
+            "id": "cit_1",
+            "title": "Rantanen et al. (2022), Communications Earth & Environment",
+            "url": "https://www.nature.com/articles/s43247-022-00498-3",
+            "domain": "nature.com",
+            "source_label": "Rantanen et al. 2022, Communications Earth & Environment"
+          },
+          {
+            "id": "cit_2",
+            "title": "Arctic Monitoring and Assessment Programme (AMAP)",
+            "url": "https://www.amap.no/",
+            "domain": "amap.no",
+            "source_label": "AMAP 2021"
+          }
+        ]
+      }
+    ],
+    "limitations": [
+      "Trends are straight-line summaries of annual averages. They cannot capture cycles, sudden jumps or curved change.",
+      "NASA POWER blends satellite observations with computer models (reanalysis) on a grid about half a degree wide, so points that are close together can share the same values.",
+      "A significant trend shows a consistent direction over this period, not its cause. A different start or end year can change the answer."
+    ],
+    "citations": [
+      {
+        "id": "cit_nasa_power",
+        "title": "NASA POWER Agroclimatology / MERRA-2 Reanalysis Archive",
+        "url": "https://power.larc.nasa.gov/",
+        "domain": "power.larc.nasa.gov",
+        "source_label": "NASA Langley Research Center (LaRC)"
+      },
+      {
+        "id": "cit_1",
+        "title": "Rantanen et al. (2022), Communications Earth & Environment",
+        "url": "https://www.nature.com/articles/s43247-022-00498-3",
+        "domain": "nature.com",
+        "source_label": "Rantanen et al. 2022, Communications Earth & Environment"
+      },
+      {
+        "id": "cit_2",
+        "title": "Arctic Monitoring and Assessment Programme (AMAP)",
+        "url": "https://www.amap.no/",
+        "domain": "amap.no",
+        "source_label": "AMAP 2021"
+      }
+    ],
+    "generated_at": "2026-11-15T00:00:00Z",
+    "fallback": true,
+    "fallback_reason": "missing_api_key",
+    "case_signature": "v2|T2M|70.000|-150.000|1981|2024|fixture000000000000000000",
+    "measured_facts": {
+      "variable_id": "T2M",
+      "variable_label": "Air temperature",
+      "units": "\u00b0C",
+      "location": {
+        "lat": 70.0,
+        "lon": -150.0
+      },
+      "period": {
+        "start_year": 1981,
+        "end_year": 2024
+      },
+      "years_used": 44,
+      "direction": "increasing",
+      "sign": "up",
+      "significant": true,
+      "slope_per_decade": 0.5849,
+      "ci_low_per_decade": 0.5519,
+      "ci_high_per_decade": 0.6239,
+      "total_change": 2.5151,
+      "p_value": 0.0,
+      "raw_p_value": 0.0,
+      "grade": {
+        "code": "strong",
+        "label": "Strong evidence",
+        "passed": 5,
+        "total": 5
+      },
+      "verdict": "Strong evidence of a trend"
+    },
+    "cached": false
+  },
+  "news": {
+    "items": [
+      {
+        "id": "news_9f4b2c8e1a20",
+        "title": "Severe heatwave advisory issued across northern India as temperatures surge",
+        "publisher": "BBC News",
+        "canonical_url": "https://www.bbc.com/news/science-environment-101",
+        "url": "https://www.bbc.com/news/science-environment-101",
+        "published_at": "2026-11-14T12:00:00Z",
+        "category": "heat_wildfire",
+        "severity": "amber",
+        "severity_label": "Weather / environmental watch",
+        "lat": 28.61,
+        "lon": 77.21,
+        "location_id": "delhi",
+        "location_name": "Delhi",
+        "location_source": "saved_location",
+        "coordinate_precision": "city_centroid",
+        "uncertainty_km": 50,
+        "label": "news context, not scientific evidence"
+      },
+      {
+        "id": "news_3d1a7e904b11",
+        "title": "NASA and NOAA researchers publish new satellite study on long-term regional climate trends",
+        "publisher": "NASA Earth Observatory",
+        "canonical_url": "https://earthobservatory.nasa.gov/images/150001/climate-study",
+        "url": "https://earthobservatory.nasa.gov/images/150001/climate-study",
+        "published_at": "2026-11-14T09:00:00Z",
+        "category": "climate_science",
+        "severity": "green",
+        "severity_label": "Informational science / environment context",
+        "lat": 33.45,
+        "lon": -112.07,
+        "location_id": "phoenix",
+        "location_name": "Phoenix",
+        "location_source": "saved_location",
+        "coordinate_precision": "city_centroid",
+        "uncertainty_km": 50,
+        "label": "news context, not scientific evidence"
+      }
+    ],
+    "fetched_at": "2026-11-15T00:00:00Z",
+    "stale": false,
+    "cache_age_seconds": 0.0,
+    "provider": "gdelt",
+    "partial_failures": [],
+    "locations_queried": [
+      {
+        "id": "delhi",
+        "name": "Delhi",
+        "lat": 28.61,
+        "lon": 77.21,
+        "source": "saved_location"
+      },
+      {
+        "id": "phoenix",
+        "name": "Phoenix",
+        "lat": 33.45,
+        "lon": -112.07,
+        "source": "saved_location"
+      }
+    ],
+    "empty_reason": null,
+    "context_note": "News markers provide regional environmental context only; they are not scientific trend evidence."
+  },
+  "health_details": {
+    "status": "ok",
+    "checked_at": "2026-11-15T00:00:00Z",
+    "version": "v2-fixture",
+    "features": {
+      "nasa_power": {
+        "status": "available",
+        "configured": true,
+        "keyless": true,
+        "cache_entries": 0,
+        "cache_limit": 4000,
+        "ttl_seconds": 21600,
+        "newest_cache_age_seconds": null,
+        "oldest_cache_age_seconds": null,
+        "timeout_seconds": 30.0,
+        "max_concurrency": 3,
+        "last_status": "idle",
+        "last_success_at": null,
+        "last_error_at": null,
+        "last_error_code": null,
+        "consecutive_failures": 0
+      },
+      "planet_streams": {
+        "status": "available",
+        "configured": true,
+        "keyless": true,
+        "cached_streams": [],
+        "cache_entries": 0,
+        "ttl_seconds": 43200,
+        "newest_cache_age_seconds": null,
+        "oldest_cache_age_seconds": null,
+        "last_status": "idle",
+        "last_success_at": null,
+        "last_error_at": null,
+        "last_error_code": null,
+        "consecutive_failures": 0
+      },
+      "ai_explanations": {
+        "status": "fallback_only",
+        "configured": false,
+        "model": "gpt-4o-mini",
+        "web_search_enabled": true,
+        "allowed_domains_count": 30,
+        "fallback_available": true,
+        "fallback_source": "curated_literature_rules (reasons.py)",
+        "rate_limit_max_requests": 15,
+        "rate_limit_window_seconds": 300,
+        "entries": 0,
+        "fresh_entries": 0,
+        "stale_entries": 0,
+        "max_entries": 500,
+        "ttl_seconds": 86400,
+        "newest_age_seconds": null,
+        "oldest_age_seconds": null,
+        "hits": 0,
+        "misses": 1,
+        "stale_hits": 0,
+        "last_status": "idle",
+        "last_success_at": null,
+        "last_error_at": null,
+        "last_error_code": null,
+        "consecutive_failures": 0
+      },
+      "news": {
+        "status": "available",
+        "configured": true,
+        "provider": "gdelt",
+        "stale_available": false,
+        "timeout_seconds": 12.0,
+        "entries": 0,
+        "fresh_entries": 0,
+        "stale_entries": 0,
+        "max_entries": 120,
+        "ttl_seconds": 900,
+        "newest_age_seconds": null,
+        "oldest_age_seconds": null,
+        "hits": 0,
+        "misses": 0,
+        "stale_hits": 0,
+        "last_status": "idle",
+        "last_success_at": null,
+        "last_error_at": null,
+        "last_error_code": null,
+        "consecutive_failures": 0
+      },
+      "monthly_forecast": {
+        "status": "available",
+        "configured": true,
+        "supported_variables": [
+          "T2M",
+          "PRECTOTCORR",
+          "CLOUD_AMT"
+        ],
+        "max_horizon_months": 3,
+        "max_grid_side": 3,
+        "baseline_model": "seasonal_naive"
+      },
+      "meteomatics": {
+        "status": "unconfigured",
+        "available": false,
+        "configured": false,
+        "provider": "Meteomatics",
+        "parameters": [
+          "t_2m:C",
+          "precip_1h:mm",
+          "total_cloud_cover:p",
+          "wind_speed_10m:ms"
+        ],
+        "cache": {
+          "entries": 0,
+          "fresh_entries": 0,
+          "stale_entries": 0,
+          "max_entries": 128,
+          "ttl_seconds": 900,
+          "newest_age_seconds": null,
+          "oldest_age_seconds": null,
+          "hits": 0,
+          "misses": 0,
+          "stale_hits": 0
+        },
+        "telemetry": {
+          "last_status": "idle",
+          "last_success_at": null,
+          "last_error_at": null,
+          "last_error_code": null,
+          "consecutive_failures": 0
+        }
+      }
+    }
+  },
+  "live_weather_unconfigured": {
+    "available": false,
+    "status": "unconfigured",
+    "provider": "Meteomatics",
+    "label": "Meteomatics weather forecast \u2014 not NASA trend data",
+    "location": {
+      "lat": 52.52,
+      "lon": 13.46
+    },
+    "request": {
+      "hours": 3,
+      "interval": "PT1H",
+      "start": "2026-11-15T14:00:00Z",
+      "end": "2026-11-15T17:00:00Z"
+    },
+    "parameters": {
+      "temperature_c": "t_2m:C",
+      "precipitation_1h_mm": "precip_1h:mm",
+      "cloud_cover_percent": "total_cloud_cover:p",
+      "wind_speed_10m_ms": "wind_speed_10m:ms"
+    },
+    "parameter_details": {
+      "temperature_c": {
+        "parameter": "t_2m:C",
+        "label": "Air temperature (2 m)",
+        "unit": "\u00b0C"
+      },
+      "precipitation_1h_mm": {
+        "parameter": "precip_1h:mm",
+        "label": "Hourly precipitation",
+        "unit": "mm"
+      },
+      "cloud_cover_percent": {
+        "parameter": "total_cloud_cover:p",
+        "label": "Total cloud cover",
+        "unit": "%"
+      },
+      "wind_speed_10m_ms": {
+        "parameter": "wind_speed_10m:ms",
+        "label": "10 m wind speed",
+        "unit": "m/s"
+      }
+    },
+    "current": null,
+    "series": [],
+    "fetched_at": "2026-11-15T14:05:00Z",
+    "stale": false,
+    "reason": "Live weather is unavailable because METEOMATICS_USERNAME and METEOMATICS_PASSWORD are not configured on the server.",
+    "source_note": "Meteomatics operational weather data. It is separate from NASA POWER climate-trend analysis.",
+    "provider_metadata": {}
+  },
+  "live_weather_available": {
+    "available": true,
+    "status": "available",
+    "provider": "Meteomatics",
+    "label": "Meteomatics weather forecast \u2014 not NASA trend data",
+    "location": {
+      "lat": 52.52,
+      "lon": 13.46
+    },
+    "request": {
+      "hours": 3,
+      "interval": "PT1H",
+      "start": "2026-11-15T14:00:00Z",
+      "end": "2026-11-15T17:00:00Z"
+    },
+    "parameters": {
+      "temperature_c": "t_2m:C",
+      "precipitation_1h_mm": "precip_1h:mm",
+      "cloud_cover_percent": "total_cloud_cover:p",
+      "wind_speed_10m_ms": "wind_speed_10m:ms"
+    },
+    "parameter_details": {
+      "temperature_c": {
+        "parameter": "t_2m:C",
+        "label": "Air temperature (2 m)",
+        "unit": "\u00b0C"
+      },
+      "precipitation_1h_mm": {
+        "parameter": "precip_1h:mm",
+        "label": "Hourly precipitation",
+        "unit": "mm"
+      },
+      "cloud_cover_percent": {
+        "parameter": "total_cloud_cover:p",
+        "label": "Total cloud cover",
+        "unit": "%"
+      },
+      "wind_speed_10m_ms": {
+        "parameter": "wind_speed_10m:ms",
+        "label": "10 m wind speed",
+        "unit": "m/s"
+      }
+    },
+    "current": {
+      "time": "2026-11-15T14:00:00Z",
+      "temperature_c": 8.0,
+      "precipitation_1h_mm": 0.0,
+      "cloud_cover_percent": 40.0,
+      "wind_speed_10m_ms": 3.2
+    },
+    "series": [
+      {
+        "time": "2026-11-15T14:00:00Z",
+        "temperature_c": 8.0,
+        "precipitation_1h_mm": 0.0,
+        "cloud_cover_percent": 40.0,
+        "wind_speed_10m_ms": 3.2
+      },
+      {
+        "time": "2026-11-15T15:00:00Z",
+        "temperature_c": 8.5,
+        "precipitation_1h_mm": 0.0,
+        "cloud_cover_percent": 45.0,
+        "wind_speed_10m_ms": 3.2
+      },
+      {
+        "time": "2026-11-15T16:00:00Z",
+        "temperature_c": 9.0,
+        "precipitation_1h_mm": 0.0,
+        "cloud_cover_percent": 50.0,
+        "wind_speed_10m_ms": null
+      }
+    ],
+    "fetched_at": "2026-11-15T14:05:00Z",
+    "stale": false,
+    "reason": null,
+    "source_note": "Meteomatics operational weather data. It is separate from NASA POWER climate-trend analysis.",
+    "provider_metadata": {
+      "note": "fixture"
+    }
+  }
+}

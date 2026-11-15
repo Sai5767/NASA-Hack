@@ -297,3 +297,24 @@ def latest_value(series: dict[str, float | None]) -> tuple[str, float] | None:
         if series[stamp] is not None:
             return stamp, series[stamp]
     return None
+
+
+def cache_health() -> dict:
+    """Non-secret cache and availability telemetry for public planet streams."""
+    from .resilience import HEALTH_REGISTRY, load_config
+
+    cfg = load_config()
+    now = time.monotonic()
+    ages = [max(0.0, now - ts) for ts, _ in _series_cache.values()]
+    snap = HEALTH_REGISTRY.snapshot("planet_streams")
+    return {
+        "status": "degraded" if snap["consecutive_failures"] > 0 else "available",
+        "configured": True,
+        "keyless": True,
+        "cached_streams": sorted(str(k) for k in _series_cache),
+        "cache_entries": len(_series_cache),
+        "ttl_seconds": cfg.streams_cache_ttl_seconds,
+        "newest_cache_age_seconds": round(min(ages), 1) if ages else None,
+        "oldest_cache_age_seconds": round(max(ages), 1) if ages else None,
+        **snap,
+    }

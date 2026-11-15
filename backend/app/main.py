@@ -14,9 +14,10 @@ import asyncio
 import math
 from datetime import date
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 
+from . import streams
 from .analysis import (
     ALPHA,
     FIRST_YEAR,
@@ -30,12 +31,37 @@ from .analysis import (
 from .archetypes import build_archetypes
 from .context import build_context
 from .deploy import allowed_origins, frontend_dist, mount_frontend
+from .explanations import (
+    ExplanationRequest,
+    explanation_health,
+    generate_explanation,
+    resolve_case_parameters,
+)
 from .forecast import run_forecast_lab
 from .ledger import build_ledger
+from .monthly import (
+    DEFAULT_MONTHLY_GRID_SIZE_DEG,
+    FORECAST_VARIABLES,
+    MAX_FORECAST_HORIZON,
+    MAX_FRAME_YEARS,
+    MAX_MONTHLY_GRID_SIDE,
+    MAX_MONTHLY_GRID_SIZE_DEG,
+    build_monthly_forecast,
+    build_monthly_frames,
+)
 from .morans import morans_i
-from .nasa_power import VARIABLES, PowerError
+from .meteomatics import (
+    DEFAULT_HOURS as DEFAULT_LIVE_WEATHER_HOURS,
+    MAX_HOURS as MAX_LIVE_WEATHER_HOURS,
+    MIN_HOURS as MIN_LIVE_WEATHER_HOURS,
+    fetch_live_weather,
+    meteomatics_health,
+)
+from .nasa_power import VARIABLES, PowerError, cache_health as nasa_cache_health
+from .news import fetch_news_context, news_health
 from .places import PLACES
 from .planet import build_vitals
+from .resilience import utc_now_iso
 from .stats import benjamini_hochberg, t_critical, t_two_sided_p
 from .version import VERSION
 
@@ -45,11 +71,11 @@ MAX_GRID_SIDE = 5           # up to 5 x 5 = 25 cells per scan
 MAX_CONCURRENT_FETCHES = 3  # be polite to the NASA POWER service
 GRADE_RANK = {"strong": 3, "moderate": 2, "weak": 1, "none": 0}
 
-app = FastAPI(title="Earth System Trend Detective API", version="0.3.0")
+app = FastAPI(title="Earth System Trend Detective API", version="0.4.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins(),
-    allow_methods=["GET"],
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -514,6 +540,152 @@ def _trend_difference(a: dict, b: dict) -> dict:
         "significant": significant,
         "text": text,
     }
+
+
+# --------------------------------------------------------------------------- V2 endpoints
+
+
+@app.get("/api/health/details")
+def health_details() -> dict:
+    """Non-secret dependency availability and cache age. Never triggers upstream network requests or exposes keys."""
+    nasa_info = nasa_cache_health()
+    streams_info = streams.cache_health()
+    explain_info = explanation_health()
+    news_info = news_health()
+    mm_info = meteomatics_health()
+    overall = "ok"
+    if nasa_info["status"] == "degraded":
+        overall = "degraded"
+    return {
+        "status": overall,
+        "checked_at": utc_now_iso(),
+        "version": VERSION["version"],
+        "features": {
+            "nasa_power": nasa_info,
+            "planet_streams": streams_info,
+            "meteomatics": mm_info,
+            "ai_explanations": explain_info,
+            "news": news_info,
+            "monthly_forecast": {
+                "status": "available",
+                "configured": True,
+                "supported_variables": list(FORECAST_VARIABLES),
+                "max_horizon_months": MAX_FORECAST_HORIZON,
+                "max_grid_side": MAX_MONTHLY_GRID_SIDE,
+                "baseline_model": "seasonal_naive",
+            },
+        },
+    }
+
+
+@app.get("/api/live-weather")
+async def live_weather(
+    lat: float = Query(..., ge=-90, le=90),
+    lon: float = Query(..., ge=-180, le=180),
+    hours: int = Query(
+        DEFAULT_LIVE_WEATHER_HOURS,
+        ge=MIN_LIVE_WEATHER_HOURS,
+        le=MAX_LIVE_WEATHER_HOURS,
+        description="Forecast horizon in hours (1 to 72)",
+    ),
+) -> dict:
+    """Meteomatics operational current and short-range hourly weather for one location."""
+    return await fetch_live_weather(lat=lat, lon=lon, hours=hours)
+
+
+@app.get("/api/monthly-frames")
+async def monthly_frames(
+    variable: str,
+    lat: float = Query(..., ge=-90, le=90),
+    lon: float = Query(..., ge=-180, le=180),
+    start_year: int = Query(max(FIRST_YEAR, date.today().year - 3)),
+    end_year: int = Query(date.today().year - 1),
+    n: int = Query(3, ge=1, le=MAX_MONTHLY_GRID_SIDE, description="Local grid points per side (1 to 3)"),
+    size: float = Query(
+        DEFAULT_MONTHLY_GRID_SIZE_DEG,
+        gt=0.0,
+        le=MAX_MONTHLY_GRID_SIZE_DEG,
+        description="Width of the local analysis grid in degrees",
+    ),
+) -> dict:
+    """Observed monthly frames for a local analysis grid around one location."""
+    _check_variable(variable)
+    last_year = date.today().year
+    if not (FIRST_YEAR <= start_year <= end_year <= last_year):
+        raise HTTPException(400, f"Years must satisfy {FIRST_YEAR} <= start_year <= end_year <= {last_year}.")
+    if end_year - start_year + 1 > MAX_FRAME_YEARS:
+        raise HTTPException(
+            400,
+            f"Monthly frame requests are capped at {MAX_FRAME_YEARS} years ({MAX_FRAME_YEARS * 12} months) per request.",
+        )
+    try:
+        return await build_monthly_frames(variable, lat, lon, start_year, end_year, n=n, size=size)
+    except PowerError as exc:
+        raise HTTPException(502, str(exc)) from exc
+
+
+@app.get("/api/monthly-forecast")
+async def monthly_forecast(
+    variable: str,
+    lat: float = Query(..., ge=-90, le=90),
+    lon: float = Query(..., ge=-180, le=180),
+    start_year: int = Query(FIRST_YEAR),
+    end_year: int = Query(date.today().year - 1),
+    horizons: int = Query(MAX_FORECAST_HORIZON, ge=1, le=MAX_FORECAST_HORIZON, description="Forecast horizon in months (1 to 3)"),
+    n: int = Query(3, ge=1, le=MAX_MONTHLY_GRID_SIDE, description="Local grid points per side (1 to 3)"),
+    size: float = Query(
+        DEFAULT_MONTHLY_GRID_SIZE_DEG,
+        gt=0.0,
+        le=MAX_MONTHLY_GRID_SIZE_DEG,
+        description="Width of the local analysis grid in degrees",
+    ),
+) -> dict:
+    """Backtested 1–3 month forecast frames for T2M, PRECTOTCORR, and CLOUD_AMT on a local grid."""
+    _check_variable(variable)
+    last_year = date.today().year
+    if not (FIRST_YEAR <= start_year < end_year <= last_year):
+        raise HTTPException(400, f"Years must satisfy {FIRST_YEAR} <= start_year < end_year <= {last_year}.")
+    try:
+        return await build_monthly_forecast(
+            variable, lat, lon, start_year, end_year, horizons=horizons, n=n, size=size
+        )
+    except PowerError as exc:
+        raise HTTPException(502, str(exc)) from exc
+
+
+@app.post("/api/explanations")
+async def explanations(payload: ExplanationRequest, request: Request) -> dict:
+    """Server-verified, source-cited 'Why might this be happening?' explanation with curated fallback."""
+    try:
+        variable, _, _, start_year, end_year, _ = resolve_case_parameters(payload)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+    _check_variable(variable)
+    _check_years(start_year, end_year)
+
+    client_ip = request.client.host if request.client and request.client.host else "anonymous"
+    try:
+        return await generate_explanation(payload, client_ip=client_ip)
+    except AnalysisError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except PowerError as exc:
+        raise HTTPException(502, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@app.get("/api/news")
+async def news(
+    locations: str | None = Query(
+        None,
+        max_length=300,
+        description="Comma-separated saved place IDs or Name:lat:lon entries (up to 5)",
+    ),
+    limit: int = Query(18, ge=1, le=50, description="Maximum number of deduplicated news context items"),
+) -> dict:
+    """Regional environmental/weather news context near saved locations and the global rotation set."""
+    return await fetch_news_context(locations=locations, limit=limit)
 
 
 # One-process deployment: when the front-end has been built (npm run build) the API serves it too, so a single URL, and a

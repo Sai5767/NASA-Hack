@@ -157,6 +157,15 @@ API docs: http://127.0.0.1:8000/docs
 **Publishing.** After `npm run build` in `frontend/`, the API serves the built front-end too, so one process and one URL is all a host needs.
 `Dockerfile` and `render.yaml` are provided. Nothing is published yet; see [docs/DEPLOY.md](docs/DEPLOY.md).
 
+### Optional V2 environment variables
+
+All core Earth-system analysis, evidence traces, and monthly grid/forecast endpoints work locally without any API keys. Optional environment variables configure V2 integrations and operational limits:
+
+- `OPENAI_API_KEY`, `OPENAI_EXPLANATION_MODEL` (default `gpt-4o-mini`), `OPENAI_BASE_URL`, `OPENAI_TIMEOUT_SECONDS`, `OPENAI_WEB_SEARCH`: server-side OpenAI Responses API synthesis for `POST /api/explanations`. When `OPENAI_API_KEY` is unset, `/api/explanations` falls back cleanly to the curated knowledge base in `backend/app/reasons.py` and server-computed case statistics. Every citation must be a real, retrieved or supplied link on an allow-listed science domain.
+- `NEWS_PROVIDER` (`gdelt`, `json_feed`, or `disabled`), `NEWS_API_URL`, `NEWS_API_KEY`, `NEWS_TIMEOUT_SECONDS`, `NEWS_CACHE_TTL_SECONDS`: live-news context adapter for `GET /api/news`. Defaults to GDELT Doc 2.0 JSON, keeps only stories about weather, climate or the environment, and degrades to an explicit unavailable/empty state if offline.
+- `METEOMATICS_USERNAME`, `METEOMATICS_PASSWORD` (plus optional `METEOMATICS_BASE_URL`, `METEOMATICS_TIMEOUT_SECONDS`, `METEOMATICS_CACHE_TTL_SECONDS`): server-side Meteomatics hourly weather for `GET /api/live-weather`. Unset, that route reports `unconfigured` and nothing else changes. Meteomatics is a separate source from NASA POWER and is never mixed with it; see [docs/V2_METEOMATICS_HANDOFF.md](docs/V2_METEOMATICS_HANDOFF.md).
+- `NASA_POWER_TIMEOUT_SECONDS`, `NASA_POWER_MAX_CONCURRENCY`, `NASA_POWER_CACHE_TTL_SECONDS`, `STREAMS_TIMEOUT_SECONDS`, `STREAMS_CACHE_TTL_SECONDS`, `EXPLANATION_CACHE_TTL_SECONDS`, `EXPLANATION_RATE_LIMIT_MAX`, `EXPLANATION_RATE_LIMIT_WINDOW_SECONDS`, `TD_CASE_SECRET`, `TD_ALLOWED_ORIGINS`: resilience, cache TTL, rate-limiting, and CORS controls. Set only the **names** in the host's settings, never values in the repository. See [docs/V2_API_CONTRACT.md](docs/V2_API_CONTRACT.md) and [docs/V2_BACKEND_HANDOFF.md](docs/V2_BACKEND_HANDOFF.md) for the real defaults.
+
 ## Tests
 
 ```bash
@@ -181,11 +190,15 @@ requirements.txt  the Python libraries (points at backend/requirements.txt); fro
 backend/app/    nasa_power.py  streams.py  stats.py  analysis.py  context.py  planet.py  places.py  morans.py  main.py
                 ml.py (ridge, k-means, silhouette, stability)  forecast.py  archetypes.py
                 ledger.py  reasons.py (the trend ledger and its sourced context)  deploy.py (one-process hosting)
-backend/tests/  reference-value, pipeline, parser, ledger and API tests (199, all offline)
+                resilience.py  monthly.py  explanations.py  news.py  meteomatics.py
+                (V2: resilience, monthly frames/forecasts, AI explain, news, Meteomatics live weather)
+backend/tests/  reference-value, pipeline, parser, ledger, V2 contract and API tests (259, all offline)
 frontend/src/   components/ (Globe, CaseFile, Overview, Home, Watchlist, Intake, Explainer, Events, Ledger, TimeLapse, charts/…)
                 lib/ (profile, explain, events, lapse, theme …)  styles/
-frontend/tests/ logic tests (60)
+frontend/tests/ logic tests (63)
 docs/           STATS_AUDIT.md  REQUIREMENTS.md  USER_QUESTIONS.md  DEPLOY.md
+                V2_API_CONTRACT.md  V2_BACKEND_HANDOFF.md  V2_METEOMATICS_HANDOFF.md
+Planning and prompts/  V2 plan, data-source registry, agent prompts, the To Do list and the manual process
 tools/          stats_audit/ (reproducible audit against SciPy and friends; needs its own throwaway environment and requirements.txt)
 Dockerfile  render.yaml    one-image, one-process hosting (prepared, not published)
 HANDOFF.md      working notes for whoever continues the project
@@ -197,6 +210,10 @@ HANDOFF.md      working notes for whoever continues the project
 - [docs/STATS_AUDIT.md](docs/STATS_AUDIT.md): how the statistics were checked against reference libraries, and what was fixed.
 - [docs/USER_QUESTIONS.md](docs/USER_QUESTIONS.md): every question the app asks, and what each answer changes.
 - [docs/DEPLOY.md](docs/DEPLOY.md): publishing on free hosting.
+- [docs/V2_API_CONTRACT.md](docs/V2_API_CONTRACT.md): V2 API request/response schemas and sample payloads.
+- [docs/V2_BACKEND_HANDOFF.md](docs/V2_BACKEND_HANDOFF.md): V2 backend handoff notes, fixtures, and frontend contract rules.
+- [docs/V2_METEOMATICS_HANDOFF.md](docs/V2_METEOMATICS_HANDOFF.md): the Meteomatics live-weather route, how to enable it, and its limits.
+- [Planning and prompts/V2_EXECUTION_PLAN.md](Planning%20and%20prompts/V2_EXECUTION_PLAN.md) and [V2_DATA_SOURCE_REGISTRY.md](Planning%20and%20prompts/V2_DATA_SOURCE_REGISTRY.md): the V2 plan and the status of every data source.
 
 ## Credits and rules notes
 
@@ -207,13 +224,17 @@ HANDOFF.md      working notes for whoever continues the project
 - This is an independent project. It is **not affiliated with or endorsed by NASA** and uses no NASA logos.
 - **Team:** built together by **Yuvraj Singh** and **Sai** ([Sai5767](https://github.com/Sai5767)) for the 2026 NASA Space Apps Challenge.
   Every commit credits both of them.
-- **AI assistance:** this project was built with the help of an AI coding assistant (Claude). If the competition asks teams to
+- **AI assistance:** this project was built with the help of AI coding assistants (Claude, Gemini). If the competition asks teams to
   disclose AI use in the submission, mention it there.
 
 ## Honest limits
 
 - Trends are straight-line summaries; the shape check flags steps and humps, but cycles and curved change are not modeled.
-- NASA POWER is reanalysis on a grid about half a degree wide; cloud, radiation, soil and evaporation are flagged as model-derived.
-  GISTEMP bands are far larger than one grid cell, so the cross-check is a sanity check, not a match.
+- NASA POWER is reanalysis on a grid about half a degree wide (`~0.5° × 0.625°`); cloud, radiation, soil and evaporation are flagged as model-derived.
+  Monthly local grids (`GET /api/monthly-frames`, `GET /api/monthly-forecast`) represent coarse regional reanalysis cells, not street-level or city-block observations, and never interpolate across missing cells.
+- Monthly forecasts (`GET /api/monthly-forecast`) are limited to `T2M`, `PRECTOTCORR`, and `CLOUD_AMT` over a 1–3 month horizon and are withheld whenever rolling-origin backtests fail to beat seasonal naive or meet split-conformal coverage.
+- Live news (`GET /api/news`) is labelled as news context rather than scientific evidence, and AI explanations (`POST /api/explanations`) never compute or override p-values, slopes, or significance verdicts.
+- GISTEMP bands are far larger than one grid cell, so the cross-check is a sanity check, not a match.
 - A significant trend, or a linked climate pattern, shows direction or co-movement, not cause. A different start or end year can change the answer.
 - The world survey uses 68 sample sites, not an evenly spaced or complete picture of the planet.
+

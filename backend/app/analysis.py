@@ -441,8 +441,32 @@ def analyze_series(
             f"widened. The unadjusted p-value would be {_p(mk.p_naive)}.",
         )
 
+    summary_text = _summary(info, where, years, mk, total_change, snr, grade_label, passed, len(checks))
+    tests_agree = ols_res.significant == mk.significant and (not mk.significant or _sign(ols_res.slope) == full_sign)
+    grade_block = {"code": grade_code, "label": grade_label, "passed": passed, "total": len(checks)}
+    agreement_block = {"tests_agree": tests_agree}
+
+    from .resilience import make_case_signature
+
+    case_sig = make_case_signature(variable, lat, lon, years[0], years[-1])
+    evidence_trace = _build_evidence_trace(
+        info=info,
+        years=years,
+        quality=quality,
+        stats=stats,
+        ols_block=result["ols"],
+        grade_block=grade_block,
+        checks=checks,
+        ok_months=ok_months,
+        month_agree=agree,
+        tests_agree=tests_agree,
+        summary_text=summary_text,
+        caveats=caveats,
+    )
+
     result.update(
         {
+            "case_signature": case_sig,
             "monthly": [
                 {"y": y, "m": m, "v": round(v, 4), "a": round(v - clim[m], 4)} for y, m, v in records
             ],
@@ -463,16 +487,235 @@ def analyze_series(
             "robustness": robustness,
             "shape": shape,
             "checks": checks,
-            "grade": {"code": grade_code, "label": grade_label, "passed": passed, "total": len(checks)},
-            "agreement": {
-                "tests_agree": ols_res.significant == mk.significant
-                and (not mk.significant or _sign(ols_res.slope) == full_sign),
-            },
-            "summary": _summary(info, where, years, mk, total_change, snr, grade_label, passed, len(checks)),
+            "grade": grade_block,
+            "agreement": agreement_block,
+            "summary": summary_text,
             "caveats": caveats,
+            "evidence_trace": evidence_trace,
         }
     )
     return result
+
+
+VERDICT_LADDER = [
+    {"code": "strong_evidence", "label": "Strong evidence of a trend", "tier": 3},
+    {"code": "some_evidence", "label": "Some evidence — investigate carefully", "tier": 2},
+    {"code": "no_clear_evidence", "label": "No clear evidence yet", "tier": 1},
+    {"code": "insufficient_data", "label": "Not enough data to tell", "tier": 0},
+]
+
+
+def map_verdict(grade_code: str, significant: bool, years_used: int) -> dict:
+    """Map the server's statistical grade and significance into the V2 visual verdict ladder."""
+    if years_used < MIN_YEARS:
+        return dict(VERDICT_LADDER[3])
+    if grade_code == "strong":
+        return dict(VERDICT_LADDER[0])
+    if grade_code == "moderate" or (grade_code == "weak" and significant):
+        return dict(VERDICT_LADDER[1])
+    return dict(VERDICT_LADDER[2])
+
+
+def _build_evidence_trace(
+    *,
+    info: dict,
+    years: list[int],
+    quality: dict,
+    stats: dict,
+    ols_block: dict,
+    grade_block: dict,
+    checks: list[dict],
+    ok_months: list[dict],
+    month_agree: int,
+    tests_agree: bool,
+    summary_text: str,
+    caveats: list[str],
+) -> dict:
+    """Assemble the complete, non-duplicated calculation trace from existing analysis outputs."""
+    unit = info["units"]
+    verdict = map_verdict(grade_block["code"], stats["significant"], quality["years_used"])
+    months_fdr = sum(1 for row in ok_months if row["significant"])
+    autocorr = stats["autocorr"]
+
+    steps = [
+        {
+            "step": 1,
+            "id": "completeness",
+            "title": "Count complete 12-month years",
+            "plain_explanation": (
+                f"Used {quality['years_used']} complete 12-month years ({years[0]}–{years[-1]}) "
+                f"from {quality['valid_months']} valid monthly observations so no single season biases the annual average."
+            ),
+            "method_label": "Complete-year annual aggregation (12 valid months required per year)",
+            "values": {
+                "years_used": quality["years_used"],
+                "years_requested": quality["years_requested"],
+                "valid_months": quality["valid_months"],
+                "expected_months": quality["expected_months"],
+                "start_year": years[0],
+                "end_year": years[-1],
+            },
+        },
+        {
+            "step": 2,
+            "id": "sen_slope",
+            "title": "Estimate rate of change (Theil–Sen slope & 95% interval)",
+            "plain_explanation": (
+                f"Compared every pair of years to find the median rate of change: {_num(stats['slope_per_decade'])} {unit}/decade "
+                f"(95% interval {_num(stats['ci_low_per_decade'])} to {_num(stats['ci_high_per_decade'])} {unit}/decade)."
+            ),
+            "method_label": "Theil–Sen estimator with Gilbert (1987) 95% confidence interval",
+            "values": {
+                "slope_per_year": stats["slope_per_year"],
+                "slope_per_decade": stats["slope_per_decade"],
+                "ci_low_per_decade": stats["ci_low_per_decade"],
+                "ci_high_per_decade": stats["ci_high_per_decade"],
+                "total_change": stats["total_change"],
+                "units": unit,
+            },
+        },
+        {
+            "step": 3,
+            "id": "serial_correlation",
+            "title": "Check whether neighboring years resemble each other",
+            "plain_explanation": (
+                f"Measured year-to-year persistence (lag-1 autocorrelation r1 = {autocorr['r1']:.2f}) and "
+                + (
+                    f"widened uncertainty by a variance factor of {autocorr['factor']:.2f}× so persistent swings do not cause a false alarm."
+                    if autocorr["adjusted"]
+                    else f"applied a variance factor of {autocorr['factor']:.2f}× (no material persistence widening needed)."
+                )
+            ),
+            "method_label": "Marriott–Pope (1954) bias-corrected lag-1 autocorrelation adjustment (1+phi)/(1-phi)",
+            "values": {
+                "lag1_r1": autocorr["r1"],
+                "variance_factor": autocorr["factor"],
+                "adjusted": autocorr["adjusted"],
+                "raw_p_value": stats["p_naive"],
+                "adjusted_p_value": stats["p_value"],
+            },
+        },
+        {
+            "step": 4,
+            "id": "significance_tests",
+            "title": "Run non-parametric and regression significance tests",
+            "plain_explanation": (
+                f"Mann–Kendall p = {_p(stats['p_value'])} (raw unadjusted p = {_p(stats['p_naive'])}) and "
+                f"OLS regression t-test p = {_p(ols_block['p_value'])} with {ols_block['df']:.1f} effective degrees of freedom."
+            ),
+            "method_label": "Tie-corrected Mann–Kendall test + effective-df Student-t OLS regression",
+            "values": {
+                "mann_kendall_s": stats["mann_kendall_s"],
+                "mann_kendall_z": stats["z"],
+                "p_value": stats["p_value"],
+                "raw_p_value": stats["p_naive"],
+                "ols_t": ols_block["t"],
+                "ols_df": ols_block["df"],
+                "ols_p_value": ols_block["p_value"],
+                "alpha": stats["alpha"],
+                "significant": stats["significant"],
+                "tests_agree": tests_agree,
+            },
+        },
+        {
+            "step": 5,
+            "id": "evidence_grade",
+            "title": "Combine five robustness checks into the evidence verdict",
+            "plain_explanation": (
+                f"Passed {grade_block['passed']} of {grade_block['total']} evidence checks → {verdict['label']}."
+            ),
+            "method_label": "Five-check evidence rubric + Benjamini–Hochberg FDR on calendar months",
+            "values": {
+                "verdict_code": verdict["code"],
+                "verdict_label": verdict["label"],
+                "grade_code": grade_block["code"],
+                "checks_passed": grade_block["passed"],
+                "checks_total": grade_block["total"],
+                "month_agreement": month_agree,
+                "months_tested": len(ok_months),
+                "months_significant_fdr": months_fdr,
+            },
+        },
+    ]
+
+    return {
+        "verdict": {
+            **verdict,
+            "direction": stats["direction"],
+            "sign": stats["sign"],
+            "summary": summary_text,
+            "ladder": VERDICT_LADDER,
+        },
+        "completeness": {
+            "start_year": years[0],
+            "end_year": years[-1],
+            "complete_years": years,
+            "years_used": quality["years_used"],
+            "years_requested": quality["years_requested"],
+            "valid_months": quality["valid_months"],
+            "expected_months": quality["expected_months"],
+            "min_months_per_year": 12,
+            "min_years_required": MIN_YEARS,
+            "source": info.get("source", "NASA Langley Research Center (LaRC) POWER Project"),
+        },
+        "slope_and_interval": {
+            "method": "Theil–Sen median pairwise slope with Gilbert (1987) 95% confidence interval",
+            "units": unit,
+            "slope_per_year": stats["slope_per_year"],
+            "slope_per_decade": stats["slope_per_decade"],
+            "ci_low_per_decade": stats["ci_low_per_decade"],
+            "ci_high_per_decade": stats["ci_high_per_decade"],
+            "confidence_level": 1.0 - ALPHA,
+            "total_change": stats["total_change"],
+            "span_years": stats["span_years"],
+            "mean_value": stats["mean_value"],
+            "percent_of_mean": stats["percent_of_mean"],
+            "noise_sd": stats["noise_sd"],
+            "signal_to_noise": stats["signal_to_noise"],
+        },
+        "mann_kendall": {
+            "method": "Two-sided Mann–Kendall non-parametric trend test (tie- and continuity-corrected)",
+            "s": stats["mann_kendall_s"],
+            "z": stats["z"],
+            "p_value": stats["p_value"],
+            "raw_p_value": stats["p_naive"],
+            "alpha": stats["alpha"],
+            "significant": stats["significant"],
+            "direction": stats["direction"],
+            "sign": stats["sign"],
+        },
+        "regression_and_serial_correlation": {
+            "ols": ols_block,
+            "tests_agree": tests_agree,
+            "serial_correlation": {
+                "method": "Marriott–Pope (1954) bias-corrected lag-1 autocorrelation variance inflation (1+phi)/(1-phi)",
+                "lag1_r1": autocorr["r1"],
+                "variance_factor": autocorr["factor"],
+                "adjusted": autocorr["adjusted"],
+                "effective_df": ols_block["df"],
+                "raw_p_value": stats["p_naive"],
+                "adjusted_p_value": stats["p_value"],
+            },
+        },
+        "correction_status": {
+            "method": "Benjamini–Hochberg false-discovery rate (FDR) control",
+            "alpha": ALPHA,
+            "primary_test_scope": "single_series",
+            "primary_p_fdr_adjusted": False,
+            "calendar_months_fdr_applied": True,
+            "calendar_months_tested": len(ok_months),
+            "calendar_months_significant_fdr": months_fdr,
+            "explanation": (
+                "A single requested point trend is tested at alpha = 0.05 using the serial-correlation-adjusted p-value. "
+                "Simultaneous families of tests (the 12 calendar months here, plus Sweep, Scan, World, and Ledger) "
+                "apply Benjamini–Hochberg false-discovery control at q = 0.05."
+            ),
+        },
+        "grade": grade_block,
+        "checks": checks,
+        "steps": steps,
+        "caveats": caveats,
+    }
 
 
 # --------------------------------------------------------------------------- I/O wrappers

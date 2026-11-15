@@ -6,9 +6,11 @@ Read this first if you are an agent (or person) taking over. Keep it current: up
 
 - Project: **Trend Detective**, an entry for the 2026 NASA Space Apps Challenge "Be an Earth System Trend Detective".
   Python/FastAPI backend (`backend/`) + React/Vite front-end (`frontend/`). See `README.md` for what exists.
-- `main` on GitHub is stable. The whole **To Do** pass was merged into it (fast-forward to `223a8c6`) on the owner's instruction.
-  The branch `feature/todo-list` still exists at the same commit and can be deleted. For any new work: use a new branch, push it
-  often (it is the backup), and merge to `main` only when the project owner says so.
+- `main` on GitHub is stable and holds everything that has been checked: the whole **To Do** pass and the **V2 backend**
+  (resilience layer, evidence trace, monthly frames and forecast, AI explanations, news, Meteomatics live weather). Merged branches
+  are deleted; the only other branch is `backup/before-coauthor-labels` (old history, kept for old clones). The V2 **frontend** has not
+  been started (see "V2 status" below). For any new work: use a new branch, push it often (it is the backup), and merge to `main` only
+  when the project owner says so, after checking it.
 - Owner's standing rules: work only inside this folder (and GitHub only when asked); keep everything accurate and keyless
   (no API keys); be unique and fun but statistically honest; credits are limited, so be economical.
 
@@ -28,7 +30,7 @@ All 20 earlier commits that were not Yuvraj's own were relabelled this way on 20
 history is kept on the branch `backup/before-coauthor-labels`). Anyone with an older clone must run
 `git fetch origin` then `git checkout main` then `git reset --hard origin/main`.
 
-## The To Do list (from the `To Do` file) and how each item is interpreted
+## The To Do list (from the `To Do` file, now in `Planning and prompts/`) and how each item is interpreted
 
 | # | To Do item | Priority | Plan / acceptance |
 | - | --- | --- | --- |
@@ -61,16 +63,25 @@ history is kept on the branch `backup/before-coauthor-labels`). Anyone with an o
 - [x] 11. Forecast headline in Overview (ForecastHeadline in Overview.jsx; all ML runs locally in pure Python)
 - [x] 12. Hosting config and docs (NOT published; needs the owner's account): `backend/app/deploy.py` (CORS origins from `TD_ALLOWED_ORIGINS`, serves `frontend/dist` at `/`), `Dockerfile`, `.dockerignore`, `render.yaml`, `docs/DEPLOY.md`; `frontend/src/api.js` is same-origin in production. One-process mode was run and verified on port 8010; the Docker image has NOT been built (no Docker here). Tests: `backend/tests/test_deploy.py`.
 - [x] 13. Final: 199 backend and 60 front-end tests pass, production build passes, README and docs updated, branch pushed. **Merged into `main`** by fast-forward on the owner's instruction (2026-11-15).
+- [x] 14. V2 Backend (written by Gemini, reviewed, fixed and merged by Claude on 2026-11-15): API contract (`docs/V2_API_CONTRACT.md`), resilience & health telemetry (`backend/app/resilience.py`, `GET /api/health/details`), `/api/trend` evidence trace & HMAC `case_signature` (`backend/app/analysis.py`), observed monthly frames & backtested 1–3 month forecasts (`backend/app/monthly.py`, `GET /api/monthly-frames`, `GET /api/monthly-forecast`), server-side OpenAI Responses API explanation synthesis with a science-domain allow-list & curated fallback (`backend/app/explanations.py`, `POST /api/explanations`), live-news context (`backend/app/news.py`, `GET /api/news`), Meteomatics live weather (`backend/app/meteomatics.py`, `GET /api/live-weather`), deterministic fixtures (`backend/tests/fixtures/v2_fixtures.json`), and handoffs (`docs/V2_BACKEND_HANDOFF.md`, `docs/V2_METEOMATICS_HANDOFF.md`, helpers in `frontend/src/api.js`). 259 backend tests and 63 front-end tests pass.
 
 ## Notes for the next agent
 
-2026-11-15, end of the To Do pass (branch `feature/todo-list`, 12 commits on top of `main` at `b9acd82`):
+### V2 status (2026-11-15)
+
+- **Backend: done, merged, reviewed.** Read [docs/V2_API_CONTRACT.md](docs/V2_API_CONTRACT.md) (schemas and examples), [docs/V2_BACKEND_HANDOFF.md](docs/V2_BACKEND_HANDOFF.md) (how to call each route, real server-setting defaults, degraded states, limits) and [docs/V2_METEOMATICS_HANDOFF.md](docs/V2_METEOMATICS_HANDOFF.md). Fixtures for every route and degraded state: `backend/tests/fixtures/v2_fixtures.json`. Helpers: `frontend/src/api.js`.
+- **Frontend: not started.** The prompt for it is in `Planning and prompts/V2_AGENT_HANDOFF_PROMPTS.md` (Prompt 2). A first attempt at it (local demo profile, welcome flow, account panel, verdict ladder) was started and then **deliberately undone at the owner's request**: do not resume it unasked.
+- **Server settings** (names only; all optional, the app runs fully without any): `OPENAI_API_KEY`, `OPENAI_EXPLANATION_MODEL`, `OPENAI_BASE_URL`, `OPENAI_TIMEOUT_SECONDS`, `OPENAI_WEB_SEARCH`, `EXPLANATION_CACHE_TTL_SECONDS`, `EXPLANATION_RATE_LIMIT_MAX`, `EXPLANATION_RATE_LIMIT_WINDOW_SECONDS`, `NEWS_PROVIDER`, `NEWS_API_URL`, `NEWS_API_KEY`, `NEWS_TIMEOUT_SECONDS`, `NEWS_CACHE_TTL_SECONDS`, `METEOMATICS_USERNAME`, `METEOMATICS_PASSWORD`, `METEOMATICS_BASE_URL`, `METEOMATICS_TIMEOUT_SECONDS`, `METEOMATICS_CACHE_TTL_SECONDS`, `NASA_POWER_TIMEOUT_SECONDS`, `NASA_POWER_MAX_CONCURRENCY`, `NASA_POWER_CACHE_TTL_SECONDS`, `STREAMS_TIMEOUT_SECONDS`, `STREAMS_CACHE_TTL_SECONDS`, `TD_CASE_SECRET`, `TD_ALLOWED_ORIGINS`.
+- **What the review of Gemini's backend found and fixed** (all with regression tests): (1) cloud-cover forecasts could never be earned, because the months before that record begins (1984) were counted as missing data; (2) `/api/news` took over a minute and showed unrelated stories (a royal visit, film lists) as "environment context": it now keeps only weather, climate and environment stories, matches whole phrases, searches English, and has a 20-second budget with honest partial results; (3) AI citations were only checked for an allowed domain, so a made-up link on `nasa.gov` would have passed: a citation must now also be a link the web search retrieved or the curated list supplied, and link checks reject tricks such as `https://evil.com\.nasa.gov`; (4) upstream responses had no size cap in the shared HTTP helper; (5) the frontend handoff doc was wrong in many places (parameter names that would have been ignored or rejected, model, timeouts, rate-limit and status behaviour, fixture names), so it was rewritten from the code; (6) the Meteomatics route had no contract entry, handoff, fixture or frontend helper; (7) two stale copies of plan documents in `docs/` were removed (the originals live in `Planning and prompts/`), and the path references were corrected.
+- **Not verified, be honest about it:** the live OpenAI call (the `web_search_preview` tool together with JSON output mode) and the Meteomatics call have only run against offline fakes: no keys were available. Run each once with a real key before relying on them. The Docker image is still unbuilt. The forecast picks the best of four models and tests it on the same backtest (mildly optimistic; the safeguards are in the handoff doc). The explanation rate limit uses the client address the server sees, so behind a proxy that hides it, visitors share one allowance.
+- **Commit labelling:** Gemini's five commits on the old `codex/v2-backend` branch carry the `Co-Authored-By: Claude` trailer although Gemini wrote them. History was not rewritten to change that; keep it in mind when describing who did what (README credits both assistants).
+### Earlier notes (end of the To Do pass, 2026-11-15)
 
 - **Nothing is half-done.** Every To Do item is implemented, tested and pushed. Hosting is *prepared* but deliberately not published.
 - **Not verified, be honest about it:** the `Dockerfile` has never been built (no Docker on the dev machine); the one-process mode it relies on was run and checked (page, assets, API and docs from one server on port 8010). Phone-width layout was checked for horizontal overflow only, not by eye. The wizard modal's width on a phone was not conclusively measured.
 - **Decisions you might otherwise undo:** a Cape Town drought event was removed because the POWER grid barely captures it; replaced by Hurricane Harvey. The ledger offers three orders (p-value, signal vs noise, size) because curved records like CO2 get very cautious p-values (see `docs/STATS_AUDIT.md`). The explainer is deliberately a curated knowledge base with no AI model or network call.
 - **Statistics were changed on purpose** (bias-corrected, ungated serial-correlation adjustment; effective degrees of freedom in the regression; corrected Sen interval rank; Welch duel test). p-values for persistent series moved up slightly. Any new test that hard-codes an old p-value should be regenerated with `tools/stats_audit/`.
-- **Things the owner still decides** (do not do these unasked): merge to `main`; make the repository public (it is private); add a licence; remove `Test_yuvraj.txt` (a teammate's test file); publish on free hosting (needs their account); the competition submission itself (video with English subtitles, slides, form, rules page never read).
+- **Things the owner still decides** (do not do these unasked): merge to `main`; make the repository public (it is private); add a licence; publish on free hosting (needs their account); the competition submission itself (video with English subtitles, slides, form, rules page never read).
 - **Stale-version fix (2026-11-15):** the owner kept getting an old version when launching. Cause found: a second clone,
   `C:\Users\mahas\Documents\NASA-Hack - Copy` (clean, at commit `7c67765`, before the To Do pass), plus START.bat reusing whatever
   was already on the ports. Fixed in the real folder: `/api/version` (`backend/app/version.py`), `app-common.ps1` (identity and
@@ -79,3 +90,4 @@ history is kept on the branch `backup/before-coauthor-labels`). Anyone with an o
   until it is updated (`git pull` there; it is clean) or deleted. Ask the owner before doing either.
 - **Untracked file left alone:** `AI-usage-report.pdf` (the model and token report the owner asked for).
 - **Ideas not done** (from an earlier list, the owner said to set them aside): persistent disk cache so restarts are fast, daily-data extremes, a CI workflow, cross-platform start script.
+
