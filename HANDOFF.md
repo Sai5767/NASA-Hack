@@ -6,8 +6,9 @@ Read this first if you are an agent (or person) taking over. Keep it current: up
 
 - Project: **Trend Detective**, an entry for the 2026 NASA Space Apps Challenge "Be an Earth System Trend Detective".
   Python/FastAPI backend (`backend/`) + React/Vite front-end (`frontend/`). See `README.md` for what exists.
-- `main` on GitHub is stable (merge target). All new work from the **To Do** file is on branch **`feature/todo-list`**.
-  Do not merge to `main` unless the project owner says so. Push the branch often; it is the backup.
+- `main` on GitHub is stable. The whole **To Do** pass was merged into it (fast-forward to `223a8c6`) on the owner's instruction.
+  The branch `feature/todo-list` still exists at the same commit and can be deleted. For any new work: use a new branch, push it
+  often (it is the backup), and merge to `main` only when the project owner says so.
 - Owner's standing rules: work only inside this folder (and GitHub only when asked); keep everything accurate and keyless
   (no API keys); be unique and fun but statistically honest; credits are limited, so be economical.
 
@@ -55,7 +56,7 @@ Environment gotchas: Windows PowerShell 5.1 (no `&&`); git pushes work with the 
 - [x] 10. Colour scheme: new violet "Nebula" default plus the original as "Classic", switched live from the header (`td-theme`). CSS colours are tokens in `styles/theme.css` (`:root` and `:root[data-theme="classic"]`); other CSS points at them. JS-drawn colours (map dots, pins, globe, stars) come from `lib/theme.js`; the globe and starfield remount on change. Tests: `frontend/tests/theme.test.mjs`.
 - [x] 11. Forecast headline in Overview (ForecastHeadline in Overview.jsx; all ML runs locally in pure Python)
 - [x] 12. Hosting config and docs (NOT published; needs the owner's account): `backend/app/deploy.py` (CORS origins from `TD_ALLOWED_ORIGINS`, serves `frontend/dist` at `/`), `Dockerfile`, `.dockerignore`, `render.yaml`, `docs/DEPLOY.md`; `frontend/src/api.js` is same-origin in production. One-process mode was run and verified on port 8010; the Docker image has NOT been built (no Docker here). Tests: `backend/tests/test_deploy.py`.
-- [x] 13. Final: 199 backend and 60 front-end tests pass, production build passes, README and docs updated, branch pushed. **The branch is ready to merge into `main`** once the owner agrees (not merged yet).
+- [x] 13. Final: 199 backend and 60 front-end tests pass, production build passes, README and docs updated, branch pushed. **Merged into `main`** by fast-forward on the owner's instruction (2026-11-15).
 
 ## Notes for the next agent
 
