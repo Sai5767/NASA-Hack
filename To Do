@@ -1,3 +1,4 @@
+To Do list V1
 - Add animations for the globe with timestamps to show how the data changes over time visually (Low Importance)
 - Change overall colourscheme (Low Importance)
 - Split into an overview and then more detail (visualise the details whilst retaining clarity for the technical information)(High Importance)
@@ -11,3 +12,14 @@
 - Make sure mathematical logic for signficance levels is correct.
 - Make a list of all questions each user needs to be asked
 = Make a list of all of the trends in the data (and order by p-value significance) and then link back to real-world reasoning for why this is the case. 
+
+
+
+To Do list V2
+- "what is changing, where, how much, and is it statistically significant." INSTEAD OF just this, also consider why its changing in that partciular area and a summary of the possible causes if the user wants to see this data as well.
+- focus more on getting all fo the data from the NASA and space agency resourcces, use gemini for this and then claude for the final front end.
+- consider p values and test the significance for each of the variables and ouput the result visually rather than as a numerical value such that its easy to understand for high school students. For the neeks, they can click on it and see the calculations happening in the bacakground etc.
+- have a visual timeline with a slider on the bottom of the earth so that the user can go back in time for a particular variable and look at the trends from that date/month. 
+- have a login page where the user can create their own account and select their interests through 4-5 questions asked at the start when making the account. Also add a feature where they can manage their account and edit these preferences such that only these topics show up on their main page rather than all the data available to use
+- keep all the sources used for data but ensure that all the sources from "https://www.spaceappschallenge.org/2026/challenges/earth-system-trend-detective/?tab=resources" are also used. We want to have as much data as we can and if there is the same kind of data clashing from 2 databases just take the average of these 2.
+- spend more time on the ML base analysing all of the data we have sorted to make predictions on the particular area or if we are doing animations like the ios weather app for temperature, cloud cover etc changing in an area based on colour, make sure the animation continues for the furture few months based on thee ML model.
