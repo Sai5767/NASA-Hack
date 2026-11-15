@@ -1,4 +1,6 @@
-const API_BASE = import.meta.env.VITE_API_BASE || "http://127.0.0.1:8000";
+// In development the API is on port 8000. In a production build it is the same server that serves the page, so the
+// base is empty (same origin). VITE_API_BASE overrides both, for example to point a hosted page at a separate API.
+const API_BASE = import.meta.env.VITE_API_BASE ?? (import.meta.env.DEV ? "http://127.0.0.1:8000" : "");
 
 async function getJson(path, params = {}, signal) {
   const query = new URLSearchParams(params).toString();

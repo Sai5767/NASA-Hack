@@ -29,6 +29,7 @@ from .analysis import (
 )
 from .archetypes import build_archetypes
 from .context import build_context
+from .deploy import allowed_origins, frontend_dist, mount_frontend
 from .forecast import run_forecast_lab
 from .ledger import build_ledger
 from .morans import morans_i
@@ -46,7 +47,7 @@ GRADE_RANK = {"strong": 3, "moderate": 2, "weak": 1, "none": 0}
 app = FastAPI(title="Earth System Trend Detective API", version="0.3.0")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=allowed_origins(),
     allow_methods=["GET"],
     allow_headers=["*"],
 )
@@ -506,3 +507,8 @@ def _trend_difference(a: dict, b: dict) -> dict:
         "significant": significant,
         "text": text,
     }
+
+
+# One-process deployment: when the front-end has been built (npm run build) the API serves it too, so a single URL, and a
+# single free hosting service, is enough. Mounted last so every API route above keeps precedence.
+mount_frontend(app, frontend_dist())

@@ -32,7 +32,7 @@ How the app meets each part of the challenge text.
 | Seasonal cycle should be removed | Monthly anomalies; per-month trend fingerprint |
 | Longer records can make a trend significant | **Emergence chart**: how the evidence builds as years are added |
 | Trends can be non-linear; linear is a good start | Linear trends, plus a **shape check** (steady ramp vs step change, Pettitt test) that warns when a line misleads |
-| Beyond the brief | Backtested **forecasts** with calibrated bands, **archetype clustering** of places, and a **predictability** model (see Machine learning) |
+| Beyond the brief | Backtested **forecasts** with calibrated bands, **archetype clustering** of places, and a **predictability** model (see Machine learning); a trend **ledger**, real-world **events**, a world **time-lapse**, a built-in **explainer**. Full cross-reference: [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md) |
 
 ### Data streams
 
@@ -62,6 +62,20 @@ Not used, and why: NASA's Hydrology Data Rods (the request now returns a web pag
   deliberately not tested for a trend.
 - **Machine learning** (see below): a **forecast lab** with a replay slider, **trend archetypes and climate twins**, and a cross-validated
   **predictability** model.
+- **Overview and Detail:** a case file opens on an **Overview** that answers the challenge's four questions (what, where, how much, is it
+  real) with one chart and a local forecast headline; the **Detail** view holds the evidence locker, seasonal fingerprint, climate-rhythm
+  suspects and forecast lab in collapsible sections. The choice is remembered.
+- **Home:** a **watchlist** of places with sparklines and trends, personalised **For you** pop-ups over the globe, and a five-question
+  **Personalise** wizard ([docs/USER_QUESTIONS.md](docs/USER_QUESTIONS.md)). Everything about the user stays in the browser. Tabs are grouped
+  into **Essentials** (Case file, Sweep, Scan) and **Explore more**.
+- **Explainer:** click any dotted term for a fuller explanation, or ask a question. It is a curated, built-in knowledge base (no AI model, no
+  network) and quotes the open case's own numbers.
+- **Events:** 15 well-documented heat waves, droughts, floods and climate swings, shown as markers on case-file charts and in an Events tab
+  that measures what the data actually show at that place and year, including when they show nothing.
+- **Ledger:** every variable at every sample place plus the planet's vital signs (about 1,200 trends) corrected together for multiple testing and
+  ranked, with sourced, hedged context on why each solid trend might exist. Order by p-value, signal vs noise, or size of change.
+- **Time-lapse:** play the World survey year by year, each site coloured by how that year compared with its own average.
+- **Themes:** the violet *Nebula* default and the original cyan *Classic*, switched live.
 - **Shareable links** (the URL carries the whole question), CSV export, keyboard-accessible globe, `prefers-reduced-motion` respected,
   and an error screen instead of a blank page if something breaks.
 
@@ -129,6 +143,9 @@ npm run dev
 
 API docs: http://127.0.0.1:8000/docs
 
+**Publishing.** After `npm run build` in `frontend/`, the API serves the built front-end too, so one process and one URL is all a host needs.
+`Dockerfile` and `render.yaml` are provided. Nothing is published yet; see [docs/DEPLOY.md](docs/DEPLOY.md).
+
 ## Tests
 
 ```bash
@@ -151,9 +168,23 @@ Parsers are tested on samples copied from the real files, and a failing stream i
 START.bat       one-click start and stop on Windows (with STOP.bat, start-app.ps1, stop-app.ps1)
 backend/app/    nasa_power.py  streams.py  stats.py  analysis.py  context.py  planet.py  places.py  morans.py  main.py
                 ml.py (ridge, k-means, silhouette, stability)  forecast.py  archetypes.py
-backend/tests/  reference-value, pipeline, parser and API tests
-frontend/src/   components/ (Globe, CaseFile, Suspects, Sweep, Scan, Duel, World, Vitals, charts/…)  lib/  styles/
+                ledger.py  reasons.py (the trend ledger and its sourced context)  deploy.py (one-process hosting)
+backend/tests/  reference-value, pipeline, parser, ledger and API tests (199, all offline)
+frontend/src/   components/ (Globe, CaseFile, Overview, Home, Watchlist, Intake, Explainer, Events, Ledger, TimeLapse, charts/…)
+                lib/ (profile, explain, events, lapse, theme …)  styles/
+frontend/tests/ logic tests (60)
+docs/           STATS_AUDIT.md  REQUIREMENTS.md  USER_QUESTIONS.md  DEPLOY.md
+tools/          stats_audit/ (reproducible audit against SciPy and friends; needs its own throwaway environment)
+Dockerfile  render.yaml    one-image, one-process hosting (prepared, not published)
+HANDOFF.md      working notes for whoever continues the project
 ```
+
+## More documentation
+
+- [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md): the challenge's requirements, and where the app answers each.
+- [docs/STATS_AUDIT.md](docs/STATS_AUDIT.md): how the statistics were checked against reference libraries, and what was fixed.
+- [docs/USER_QUESTIONS.md](docs/USER_QUESTIONS.md): every question the app asks, and what each answer changes.
+- [docs/DEPLOY.md](docs/DEPLOY.md): publishing on free hosting.
 
 ## Credits and rules notes
 
