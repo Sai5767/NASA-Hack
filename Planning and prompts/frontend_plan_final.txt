@@ -28,7 +28,7 @@ NON-NEGOTIABLE SCIENCE AND SAFETY RULES
 2. NASA POWER provides historical/reanalysis trend data. Meteomatics provides current and 1–72 hour operational weather. The app’s internal monthly model provides 1–3 month statistical forecasts. These three sources must never be averaged, merged into one timeline scale without a boundary, or labelled as each other.
 3. News is context, not scientific evidence. Its green/amber/red border is a transparent editorial attention label, not an official emergency warning.
 4. “Why might this be happening?” is manual/opt-in only. It gives possible, cited explanations after a valid trend exists; it never proves a cause.
-5. Profiles, saved locations and preferences stay in browser localStorage only. This is a local demo profile, not a secure account system. No password, profile database, cookie authentication or cloud user record.
+5. Profiles, saved locations and preferences stay in browser localStorage only. The opening screen includes a basic email/password sign-in form for the one-account demo, but it is not real authentication: validate the form locally, discard the password immediately, and never save, hash, send or log it. Store only the email/display label and preferences in localStorage. A real account system would require a separately scoped authentication backend.
 6. Never expose OPENAI_API_KEY, Meteomatics credentials, a news-provider key, TD_CASE_SECRET or any other secret to browser code, logs, screenshots, Git or prompts.
 7. Preserve keyboard globe controls, responsive layout, focus visibility and prefers-reduced-motion. Motion must pause while the user drags/interacts with the globe and reduce to non-animated state changes when reduced motion is enabled.
 
@@ -91,7 +91,7 @@ MODEL AND AGENT ASSIGNMENT
 | Agent 2 | Claude Opus 5.5 | App shell, dashboard, local-only profile and navigation | After Agent 1 has the basic layout direction | Changed-file list, component tests and responsive checks |
 | Agent 3 | Claude Opus 5.5 | Globe, layers, timeline, Meteomatics/weather cards and news markers | After Agent 0 locks API contract and Agent 1 defines data-layer styles | Changed-file list, component tests and interaction/reduced-motion checks |
 | Agent 4 | Claude Opus 5.5 | Evidence verdict, calculation drawer, manual Why and Explore tools | After Agent 0 locks API contract | Changed-file list, component tests and all degraded-state checks |
-| Agent 5 | Claude Opus 5.5 | Integration, conflict resolution, accessibility, performance and release verification | Only after Agents 0–4 hand off | `docs/V2_FRONTEND_FINAL_HANDOFF.md`, build/test totals and smoke-test report |
+| Agent 5 | Claude Opus 5.5 | Integration, conflict resolution, accessibility, performance, final source inventory and release verification | Only after Agents 0–4 hand off | `docs/V2_FRONTEND_FINAL_HANDOFF.md`, updated root source inventory, build/test totals and smoke-test report |
 
 Use Claude Opus 5.5 for every code-owning agent because this is a connected React/FastAPI application with statistical and security constraints. Use Fable only for visual/system design; Claude converts the approved Fable specification into production React/CSS/canvas code. Do not ask Fable to call APIs, handle secrets or make statistical decisions.
 
@@ -116,7 +116,7 @@ Agent 4 - Claude case-insight-and-explore owner
   Goal: expose evidence_trace, manual Why, graceful optional-feature states, and move advanced tools into Explore.
 
 Agent 5 - Claude integration/quality owner
-  Owns: final integration changes only after agents 0–4 finish, test wiring, accessibility/performance checks, documentation and handoff. It should not begin conflict resolution until the other owners deliver their handoffs.
+  Owns: final integration changes only after agents 0–4 finish, test wiring, accessibility/performance checks, documentation, the root `DATA_SOURCES_APIS_AND_AI_MODELS.txt` inventory and final handoff. It should not begin conflict resolution until the other owners deliver their handoffs.
 
 Use worktrees or non-overlapping branches where possible. Before integration, every agent provides changed-file list, tests run, known limits and screenshots/recordings where relevant.
 
@@ -129,6 +129,11 @@ FABLE DESIGN SPECIFICATION
 Fable should prepare the visual system before implementation. The design output must cover:
 
 1. Page structure
+
+   OPENING FLOW
+   - First visit opens on a clean dark sign-in page before the globe/dashboard.
+   - Show email and password fields, a Sign in button and a short clear note: “Demo account — your password is not saved or sent.”
+   - After local form validation, immediately show the two preference questions below. Do not show the dashboard until the user finishes or explicitly skips onboarding.
 
    TOP BAR
    - Brand at left.
@@ -185,10 +190,13 @@ CLAUDE FRONTEND IMPLEMENTATION REQUIREMENTS
 
 1. Local welcome and profile
 
-- First run: show “Welcome, Trend Detective” rather than a misleading password login.
-- Ask in five short steps: display name or Demo Explorer; up to five saved locations; interests (heat, rain & water, clouds & sunlight, land & plants, wind & atmosphere, ice & oceans); primary goal; detail level.
-- Store a versioned `td-profile-v2` value in localStorage. Migrate old V1 preferences, tolerate corrupted/blocked storage and offer reset/export/import.
-- Account button opens an edit panel. It must say “Stored on this device for this demo.”
+- First run begins with a basic email/password sign-in page. Email must be syntactically valid and password non-empty, but this is a one-account demo gate only: discard the password immediately after validation and never save or transmit it.
+- After sign-in, ask exactly two required preference questions:
+  1. **Preferred locations** — choose/search/pin up to five places.
+  2. **Data types I care about** — Heat; rain & water; clouds & sunlight; land & plants; wind & atmosphere; ice & oceans.
+- Store a versioned `td-profile-v2` value in localStorage containing only a display-safe email/label, locations, interests, onboarding status and harmless UI preferences. Never include a password or auth token.
+- Migrate old V1 preferences, tolerate corrupted/blocked storage and offer reset/export/import. A reset must remove local profile data and return to the sign-in page.
+- Account button opens an edit panel. It must say “Stored on this device for this demo. This is not a secure online account.”
 - Load only selected locations and selected data interests in the home dashboard. Do not trigger global survey, news or forecasting on initial load.
 
 2. Main versus Explore navigation
@@ -271,6 +279,13 @@ INTEGRATION AND ACCEPTANCE CHECKLIST
    g. Toggle Meteomatics live weather and show it is separate.
    h. Open a selected-location news marker and show source, severity meaning and context disclaimer.
    i. Enter Explore and show advanced tabs remain available.
-7. Write docs/V2_FRONTEND_FINAL_HANDOFF.md with changed files, design decisions, test totals, screenshots/recordings, accessibility checks, API contract assumptions and unresolved risks.
+7. Update the root `DATA_SOURCES_APIS_AND_AI_MODELS.txt` only after verifying the final build. It must be the accurate final inventory, not a wish list:
+   - Separate **actively used**, **optional/configured only**, **planned but not implemented**, and **reference-only** sources.
+   - Include every actual data provider, API endpoint family, map/imagery/asset source, AI runtime model/tool and development assistant used in the final project.
+   - State each source’s purpose, whether it is observed/reanalysis/model/forecast/news/context, and how it is labelled in the UI.
+   - Include NASA POWER, GISTEMP, NOAA sources, NSIDC, Meteomatics, news provider, OpenAI Responses/web search, Natural Earth/world-atlas and fonts when actually used.
+   - List only environment-variable names, never secret values, URLs containing credentials or private account details.
+   - Remove or clearly mark any source that was considered but not integrated. Do not claim AppEEARS, Giovanni, RADARSAT, SWOT, a global raster or a model that the final code does not actually use.
+8. Write docs/V2_FRONTEND_FINAL_HANDOFF.md with changed files, design decisions, test totals, screenshots/recordings, accessibility checks, API contract assumptions and unresolved risks.
 
 Do not deploy, merge to main or change Azure secrets without the owner’s explicit approval.
