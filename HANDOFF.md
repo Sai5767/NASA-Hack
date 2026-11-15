@@ -67,5 +67,11 @@ Environment gotchas: Windows PowerShell 5.1 (no `&&`); git pushes work with the 
 - **Decisions you might otherwise undo:** a Cape Town drought event was removed because the POWER grid barely captures it; replaced by Hurricane Harvey. The ledger offers three orders (p-value, signal vs noise, size) because curved records like CO2 get very cautious p-values (see `docs/STATS_AUDIT.md`). The explainer is deliberately a curated knowledge base with no AI model or network call.
 - **Statistics were changed on purpose** (bias-corrected, ungated serial-correlation adjustment; effective degrees of freedom in the regression; corrected Sen interval rank; Welch duel test). p-values for persistent series moved up slightly. Any new test that hard-codes an old p-value should be regenerated with `tools/stats_audit/`.
 - **Things the owner still decides** (do not do these unasked): merge to `main`; make the repository public (it is private); add a licence; remove `Test_yuvraj.txt` (a teammate's test file); publish on free hosting (needs their account); the competition submission itself (video with English subtitles, slides, form, rules page never read).
+- **Stale-version fix (2026-11-15):** the owner kept getting an old version when launching. Cause found: a second clone,
+  `C:\Users\mahas\Documents\NASA-Hack - Copy` (clean, at commit `7c67765`, before the To Do pass), plus START.bat reusing whatever
+  was already on the ports. Fixed in the real folder: `/api/version` (`backend/app/version.py`), `app-common.ps1` (identity and
+  staleness checks, shared by START and STOP), a version line in START's output, and a footer version with a mismatch warning.
+  **The copy itself was not touched** (outside the workspace); it still contains the old launcher, so starting from it still runs old code
+  until it is updated (`git pull` there; it is clean) or deleted. Ask the owner before doing either.
 - **Untracked file left alone:** `AI-usage-report.pdf` (the model and token report the owner asked for).
 - **Ideas not done** (from an earlier list, the owner said to set them aside): persistent disk cache so restarts are fast, daily-data extremes, a CI workflow, cross-platform start script.

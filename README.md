@@ -125,6 +125,13 @@ For a desktop shortcut, right-click `START.bat` and choose Send to, then Desktop
 
 From a terminal the same thing is `.\START.bat` and `.\STOP.bat`. If a step fails, the window stays open and says what went wrong.
 
+**You always get the current version.** `START.bat` asks any server already on ports 8000 and 5173 which version it is and which
+folder it came from. If it is this folder's current code it is reused; if it is an older copy, a copy from another folder, or started
+before the code last changed, `START.bat` stops it and starts a fresh one, then prints `Version: <commit>`. The footer of the app shows the
+same version and warns if the page and the server disagree. `STOP.bat` also stops an older copy still holding the ports, and never
+touches other programs. Keep a single copy of the project: a second folder (for example "NASA-Hack - Copy") has its own, older
+launcher, and starting the app from it runs its older code.
+
 Manual setup, for other systems or if you prefer separate terminals:
 
 ```bash

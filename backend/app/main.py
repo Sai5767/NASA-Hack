@@ -37,6 +37,7 @@ from .nasa_power import VARIABLES, PowerError
 from .places import PLACES
 from .planet import build_vitals
 from .stats import benjamini_hochberg, t_critical, t_two_sided_p
+from .version import VERSION
 
 MAX_WORLD_CONCURRENCY = 4
 
@@ -70,6 +71,12 @@ def _check_variable(variable: str) -> None:
 
 
 # --------------------------------------------------------------------------- endpoints
+
+
+@app.get("/api/version")
+def version() -> dict:
+    """Which commit this server loaded, from which folder, and when it started. Lets the launcher spot a stale server."""
+    return VERSION
 
 
 @app.get("/api/variables")

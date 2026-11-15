@@ -31,3 +31,4 @@ export const fetchPlaces = (signal) => getJson("/api/places", {}, signal);
 export const fetchForecast = (params, signal) => getJson("/api/forecast", params, signal);
 export const fetchArchetypes = (params, signal) => getJson("/api/archetypes", params, signal);
 export const fetchLedger = (params, signal) => getJson("/api/ledger", params, signal);
+export const fetchVersion = (signal) => getJson("/api/version", {}, signal);

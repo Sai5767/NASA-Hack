@@ -18,6 +18,7 @@ $frontend = Join-Path $root "frontend"
 $pidFile = Join-Path $root ".app-pids.json"
 $apiUrl = "http://127.0.0.1:8000"
 $webUrl = "http://127.0.0.1:5173"
+. (Join-Path $root "app-common.ps1")
 
 function Step($n, $text) { Write-Host ""; Write-Host "[$n/5] $text" -ForegroundColor Cyan }
 function Ok($text) { Write-Host "      $text" -ForegroundColor Green }
@@ -84,12 +85,32 @@ try {
     Write-Host "  TREND DETECTIVE  -  Earth system case files" -ForegroundColor Cyan
     Write-Host "  ------------------------------------------" -ForegroundColor DarkGray
 
-    # Already running? Then just open it.
-    if ((Test-Url "$apiUrl/api/places") -and (Test-Url "$webUrl/")) {
-        Ok "Trend Detective is already running at $webUrl"
-        if (-not $NoBrowser) { Start-Process $webUrl }
-        if (-not $NoPause) { Start-Sleep -Seconds 3 }
-        exit 0
+    # Something already running? Reuse it only if it is this folder's current code. An older copy, a copy from another folder,
+    # or a server that started before the code last changed is replaced, so you always get the current version.
+    $listeners = @(Get-AppListeners)
+    if ($listeners.Count -gt 0) {
+        $foreign = @($listeners | Where-Object { -not $_.Ours })
+        if ($foreign.Count -gt 0) {
+            Fail "Port $($foreign[0].Port) is used by another program, not by Trend Detective:`n  $($foreign[0].CommandLine)`n  Close that program and try again."
+        }
+        $info = Get-ServerVersion $apiUrl
+        $why = Get-StaleReason $root $info
+        $web = $listeners | Where-Object { $_.Port -eq 5173 } | Select-Object -First 1
+        if (-not $why -and -not $web) { $why = "the front-end is not running" }
+        if (-not $why -and $web.Folder -ne $root) { $why = "the front-end is running from another folder: $($web.Folder)" }
+        if (-not $why -and -not (Test-Url "$webUrl/")) { $why = "the front-end is not answering" }
+        if (-not $why) {
+            Ok "Trend Detective is already running, and it is the current version: $(Format-Version $info)"
+            if (-not $NoBrowser) { Start-Process $webUrl }
+            if (-not $NoPause) { Start-Sleep -Seconds 3 }
+            exit 0
+        }
+        Write-Host ""
+        Write-Host "  An older or different copy of Trend Detective is running ($why)." -ForegroundColor Yellow
+        Write-Host "  Replacing it so you get the current version..." -ForegroundColor Yellow
+        foreach ($l in $listeners) { Stop-AppProcess $l.ProcessId }
+        if (-not (Wait-PortsFree)) { Fail "The old copy would not stop. Double-click STOP.bat, wait a few seconds, and try again." }
+        Remove-Item $pidFile -Force -ErrorAction SilentlyContinue
     }
     foreach ($port in 8000, 5173) {
         if (Test-Port $port) {
@@ -154,13 +175,18 @@ try {
     Step 5 "Waiting for the app to come up"
     $ready = $false
     for ($i = 0; $i -lt 60; $i++) {
-        if ((Test-Url "$apiUrl/api/places") -and (Test-Url "$webUrl/")) { $ready = $true; break }
+        if ((Test-Url "$apiUrl/api/version") -and (Test-Url "$webUrl/")) { $ready = $true; break }
         Start-Sleep -Seconds 1
     }
     if (-not $ready) {
         Fail "The app did not start within a minute. Look at the two minimized windows for error messages, or run STOP.bat and try again."
     }
+    # Prove that what answered is this folder's current code before telling you it is ready.
+    $info = Get-ServerVersion $apiUrl
+    $why = Get-StaleReason $root $info
+    if ($why) { Fail "A server answered, but it is not this folder's current code ($why). Double-click STOP.bat and try again." }
     Ok "Ready at $webUrl"
+    Ok "Version: $(Format-Version $info)   Folder: $root"
     if (-not $NoBrowser) { Start-Process $webUrl }
 
     Write-Host ""

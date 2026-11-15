@@ -54,6 +54,8 @@
   font-family: var(--font-mono);
   line-height: 1.7;
 }
+.footer .version { margin-top: 6px; font-size: 11px; opacity: 0.8; }
+.footer .version-warn { color: var(--amber); opacity: 1; font-weight: 600; }
 .footer button { background: none; border: 0; color: var(--accent); text-decoration: underline dotted; padding: 0; font: inherit; }
 
 /* ---------- Globe ---------- */

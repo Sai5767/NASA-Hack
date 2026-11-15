@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { fetchArchetypes, fetchDuel, fetchGrid, fetchLedger, fetchPlaces, fetchSweep, fetchTrend, fetchVariables, fetchVitals, fetchWorld } from "./api.js";
+import { fetchArchetypes, fetchDuel, fetchGrid, fetchLedger, fetchPlaces, fetchSweep, fetchTrend, fetchVariables, fetchVersion, fetchVitals, fetchWorld } from "./api.js";
 import Archetypes, { CLUSTER_COLORS } from "./components/Archetypes.jsx";
 import Boot from "./components/Boot.jsx";
 import Briefing from "./components/Briefing.jsx";
@@ -30,6 +30,13 @@ import { intensity, mixHex, prepareLapse } from "./lib/lapse.js";
 import { DEFAULT_PROFILE, addWatch, defaultView, hasWatch, removeWatch, suggest, toggleWatch } from "./lib/profile.js";
 import { decodeState, encodeState } from "./lib/share.js";
 import { DEFAULT_THEME, applyTheme, nextTheme, themeOf } from "./lib/theme.js";
+import { compareVersions, describeVersion } from "./lib/version.js";
+
+// Set at build time by vite.config.js from git; the analysis server reports its own through /api/version.
+const PAGE_VERSION = {
+  version: typeof __APP_VERSION__ === "undefined" ? "unknown" : __APP_VERSION__,
+  dirty: typeof __APP_DIRTY__ === "undefined" ? false : __APP_DIRTY__,
+};
 
 const COLORS = { up: "#ff6a5c", down: "#4da6ff", flat: "#8794b8", failed: "#5f6a8a", a: "#4dffd9", b: "#ff6bd5" };
 const EMPTY = { data: null, key: "", loading: false, error: "" };
@@ -227,6 +234,7 @@ export default function App() {
   const [archK, setArchK] = useState(null);
   const [ledger, setLedger] = useState(EMPTY);
   const [lapse, setLapse] = useState({ on: false, year: null, playing: false, speed: 500 });
+  const [serverVersion, setServerVersion] = useState(null);
   const [theme, setTheme] = useStoredState("td-theme", DEFAULT_THEME);
   // Colours drawn by JavaScript (map dots, pins, the globe) follow the theme; the CSS follows data-theme on <html>.
   const palette = themeOf(theme);
@@ -256,6 +264,7 @@ export default function App() {
   useEffect(() => {
     fetchVariables().then(setVariables).catch((e) => setTrend({ ...EMPTY, error: e.message }));
     fetchPlaces().then(setPlaces).catch(() => setPlaces([]));
+    fetchVersion().then(setServerVersion).catch(() => setServerVersion(null));
     if (initial?.params) setFocus({ lat: initial.params.lat, lon: initial.params.lon, k: 1.8, nonce: 1 });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -943,6 +952,15 @@ export default function App() {
           Data: NASA Langley Research Center (LaRC) POWER Project, funded through the NASA Earth Science/Applied Science Program; NASA GISS GISTEMP;
           NOAA GML, CPC and NCEI; NSIDC Sea Ice Index. Independent project, not endorsed by NASA.{" "}
           <button type="button" onClick={() => setModal("about")}>About & credits</button>
+        </p>
+        <p className="version">
+          Version {describeVersion(serverVersion ?? PAGE_VERSION)}
+          {compareVersions(PAGE_VERSION, serverVersion) === "different" && (
+            <span className="version-warn" role="alert">
+              {" "}· This page ({describeVersion(PAGE_VERSION)}) and the analysis server ({describeVersion(serverVersion)}) are different versions. Close this
+              window, double-click STOP.bat, then START.bat.
+            </span>
+          )}
         </p>
       </footer>
 
