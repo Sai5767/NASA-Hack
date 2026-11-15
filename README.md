@@ -159,7 +159,9 @@ API docs: http://127.0.0.1:8000/docs
 
 ### Optional V2 environment variables
 
-All core Earth-system analysis, evidence traces, and monthly grid/forecast endpoints work locally without any API keys. Optional environment variables configure V2 integrations and operational limits:
+All core Earth-system analysis, evidence traces, and monthly grid/forecast endpoints work locally without any API keys. Optional environment variables configure V2 integrations and operational limits.
+
+**Where to put them locally:** copy `backend/.env.example` to `backend/.env` and fill in your own values (`copy backend\.env.example backend\.env`). The backend reads real environment variables first and then fills in anything still unset from `backend/.env`; blank lines leave a feature off. `backend/.env` is ignored by Git and by Docker and must never be committed or uploaded. On Azure, enter the same names under App Service application settings instead (they always win over the file). Only the setting names below are ever read from the file.
 
 - `OPENAI_API_KEY`, `OPENAI_EXPLANATION_MODEL` (default `gpt-4o-mini`), `OPENAI_BASE_URL`, `OPENAI_TIMEOUT_SECONDS`, `OPENAI_WEB_SEARCH`: server-side OpenAI Responses API synthesis for `POST /api/explanations`. When `OPENAI_API_KEY` is unset, `/api/explanations` falls back cleanly to the curated knowledge base in `backend/app/reasons.py` and server-computed case statistics. Every citation must be a real, retrieved or supplied link on an allow-listed science domain.
 - `NEWS_PROVIDER` (`gdelt`, `json_feed`, or `disabled`), `NEWS_API_URL`, `NEWS_API_KEY`, `NEWS_TIMEOUT_SECONDS`, `NEWS_CACHE_TTL_SECONDS`: live-news context adapter for `GET /api/news`. Defaults to GDELT Doc 2.0 JSON, keeps only stories about weather, climate or the environment, and degrades to an explicit unavailable/empty state if offline.
@@ -192,7 +194,7 @@ backend/app/    nasa_power.py  streams.py  stats.py  analysis.py  context.py  pl
                 ledger.py  reasons.py (the trend ledger and its sourced context)  deploy.py (one-process hosting)
                 resilience.py  monthly.py  explanations.py  news.py  meteomatics.py
                 (V2: resilience, monthly frames/forecasts, AI explain, news, Meteomatics live weather)
-backend/tests/  reference-value, pipeline, parser, ledger, V2 contract and API tests (259, all offline)
+backend/tests/  reference-value, pipeline, parser, ledger, V2 contract and API tests (267, all offline)
 frontend/src/   components/ (Globe, CaseFile, Overview, Home, Watchlist, Intake, Explainer, Events, Ledger, TimeLapse, charts/…)
                 lib/ (profile, explain, events, lapse, theme …)  styles/
 frontend/tests/ logic tests (63)
@@ -219,6 +221,9 @@ HANDOFF.md      working notes for whoever continues the project
 
 - **Data:** NASA Langley Research Center (LaRC) POWER Project, funded through the NASA Earth Science/Applied Science Program; NASA GISS GISTEMP;
   NOAA Global Monitoring Laboratory, Climate Prediction Center and NCEI; NSIDC Sea Ice Index (NOAA@NSIDC).
+- **Optional live weather and news:** hourly operational weather from [Meteomatics](https://www.meteomatics.com/) (only when the owner configures
+  an account; it is a separate source from the NASA climate analysis and is never mixed with it) and headline context from the
+  [GDELT Project](https://www.gdeltproject.org/). Neither is affiliated with this project.
 - **Map:** Natural Earth land and borders (public domain) via the `world-atlas` package. **Fonts:** Space Grotesk and JetBrains Mono
   (SIL Open Font License) via Fontsource. Both ship inside the app.
 - This is an independent project. It is **not affiliated with or endorsed by NASA** and uses no NASA logos.

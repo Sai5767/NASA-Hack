@@ -9,6 +9,7 @@
 | `backend/app/meteomatics.py` | The provider: URL building, HTTPS Basic Auth, validation and normalisation of the JSON reply, a 15-minute cache with stale fallback, a 512 KB response cap, and the non-secret health summary. |
 | `backend/app/main.py` | The route `GET /api/live-weather` (`lat` ±90, `lon` ±180, `hours` 1 to 72, default 24) and the `meteomatics` block in `GET /api/health/details`. |
 | `backend/app/resilience.py` | Reads `METEOMATICS_*` settings; redacts the credentials from any text. |
+| `backend/app/env_file.py`, `backend/.env.example` | Loads the optional local settings file `backend/.env` (real environment variables win; only known setting names are read; values are never logged). The committed template lists names only. |
 | `backend/tests/test_v2_meteomatics.py` | Offline tests (below). |
 | `backend/tests/test_v2_contract_fixtures.py`, `fixtures/v2_fixtures.json` | Fixtures `live_weather_unconfigured` and `live_weather_available`. |
 | `frontend/src/api.js` | `fetchLiveWeather({ lat, lon, hours }, signal)`. |
@@ -24,7 +25,16 @@
 
 ## Try it locally
 
-Set the two values in the PowerShell window that starts the backend (they exist only for that window), then start it:
+**Easiest (works with `START.bat`):** copy the template and fill in your own values. The file is ignored by Git and Docker, never commit it.
+
+```powershell
+copy backend\.env.example backend\.env
+notepad backend\.env      # set METEOMATICS_USERNAME and METEOMATICS_PASSWORD (no quotation marks), save, close
+```
+
+Restart the app (`STOP.bat`, then `START.bat`). `http://127.0.0.1:8000/api/health/details` should now show `features.meteomatics.configured: true` (names are reported, never values).
+
+**Or** set them for one PowerShell window only (real environment variables win over the file):
 
 ```powershell
 $env:METEOMATICS_USERNAME = "<your username>"
@@ -34,15 +44,14 @@ cd backend
 uvicorn app.main:app --port 8000
 ```
 
-Then open `http://127.0.0.1:8000/api/live-weather?lat=52.52&lon=13.46&hours=24`. A successful reply says `"provider": "Meteomatics"` and shows a fetch time; it must not show your username or password. Double-clicking `START.bat` does not see values set in a different window. On Azure, set both as application settings (never in the repository).
-
+Then open `http://127.0.0.1:8000/api/live-weather?lat=52.52&lon=13.46&hours=24`. A successful reply says `"provider": "Meteomatics"` and shows a fetch time; it must not show your username or password. On Azure, set both as application settings (never upload `backend/.env`).
 ## Tests
 
 ```powershell
 cd backend
 .venv\Scripts\activate
-pytest tests/test_v2_meteomatics.py     # entirely offline, with a fake HTTP transport
-pytest                                   # the whole suite
+pytest tests/test_v2_meteomatics.py     # entirely offline, with a fake HTTP transport   (13 passed)
+pytest                                   # the whole suite (267 passed)
 ```
 
 The tests cover: URL construction without embedded credentials; the unconfigured state; Basic Auth passed only through the client's auth mechanism plus JSON normalisation; 401, 403, 429, 400 and 503 replies whose bodies echo the credentials, which must never reach the result; timeout, malformed JSON and an oversized reply; stale-cache fallback during an outage; coordinate and hour validation; and credential redaction.
@@ -53,3 +62,5 @@ The tests cover: URL construction without embedded credentials; the unconfigured
 - **Subscription limits are unknown.** A free or trial account may reject some parameters, horizons or places; that surfaces as `status: "unavailable"` with the reason "Meteomatics rejected the requested parameter or forecast range for this subscription".
 - The cache key rounds the place to 0.01°, so two places within about a kilometre share a cached reply.
 - One place per request. There is no bulk or saved-places endpoint.
+- **Quota is protected by the cache, a concurrency limit and no retry on a rate limit, but there is no per-visitor rate limit.** Once real credentials are set on a public host, anyone can spend request allowance by varying the coordinates (each new 0.01° cell is an upstream call). Add a per-client limit (the sliding-window limiter in `resilience.py` is ready to reuse) before publishing with a paid or limited account.
+- **What has been checked against the real service:** a request with a deliberately fake login reaches Meteomatics and is refused; the app turns that into "Meteomatics authentication failed or account lacks permission for this query" and leaks nothing. The successful-data path has not been seen live.

@@ -81,6 +81,8 @@ Use them for frontend unit tests and while the API is unavailable. The `explanat
 
 All optional. With none set, the app runs fully: trends, monthly frames and forecast, curated explanations, and news (GDELT needs no key).
 
+**Where to set them:** real environment variables first; anything still unset is filled in from the optional local file ackend/.env (copy ackend/.env.example; it lists names only). The file is ignored by Git and Docker, blank lines leave a feature off, only the names in this table are read from it, and values are never logged or returned. On Azure use application settings, which always win; do not upload the file.
+
 | Name | Default | Effect |
 | --- | --- | --- |
 | `OPENAI_API_KEY` | unset | Turns on live AI explanations. Unset: `/api/explanations` answers from the curated text (`status: "no_key"`). |

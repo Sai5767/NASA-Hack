@@ -298,6 +298,33 @@ async def test_stale_cache_fallback_on_provider_outage(monkeypatch: pytest.Monke
     assert "cached meteomatics weather" in second["reason"].lower()
 
 
+@pytest.mark.anyio
+async def test_rate_limit_is_not_retried_but_a_transient_503_is_retried_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("METEOMATICS_USERNAME", "mm_retry_user")
+    monkeypatch.setenv("METEOMATICS_PASSWORD", "mm_retry_pass")
+    calls = {"n": 0}
+
+    async def rate_limited(**kwargs) -> httpx.Response:
+        calls["n"] += 1
+        return httpx.Response(429, content=b"slow down")
+
+    limited = await fetch_live_weather(10.0, 10.0, 6, transport_call=rate_limited)
+    assert limited["status"] == "unavailable" and "rate limit" in limited["reason"].lower()
+    assert calls["n"] == 1  # a used-up quota is not hit again straight away
+
+    calls["n"] = 0
+
+    async def flaky(**kwargs) -> httpx.Response:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return httpx.Response(503, content=b"busy")
+        return httpx.Response(200, content=json.dumps(_sample_meteomatics_payload()).encode("utf-8"))
+
+    recovered = await fetch_live_weather(11.0, 11.0, 6, transport_call=flaky)
+    assert recovered["available"] is True
+    assert calls["n"] == 2  # one bounded retry for a transient server error
+
+
 def test_coordinate_and_hours_validation() -> None:
     assert client.get("/api/live-weather", params={"lat": 95, "lon": 0, "hours": 24}).status_code == 422
     assert client.get("/api/live-weather", params={"lat": 0, "lon": -190, "hours": 24}).status_code == 422

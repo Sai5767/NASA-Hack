@@ -383,6 +383,9 @@ class MeteomaticsProvider:
 
             except asyncio.CancelledError:
                 raise
+            except UpstreamRateLimitError:
+                # A rate limit or used-up quota is not retried: an immediate second request only spends more allowance.
+                raise
             except UpstreamServiceError as exc:
                 last_error = exc
                 if exc.retryable and attempt < len(retry_delays):

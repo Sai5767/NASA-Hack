@@ -46,7 +46,7 @@ Create a Space of type **Docker**, push this repository to it, and set the Space
 - **Cold starts.** Free services sleep when idle, so the first request after a pause is slow.
 - **First load of each place is slow.** The app asks NASA POWER live. Results are cached in memory, but the cache is lost whenever
   the service restarts, so the first trend ledger or world survey after a wake-up can take about a minute.
-- **No secrets.** The app uses only keyless public data sources, so there is nothing to configure or protect.
+- **No secrets are required.** The core app uses only keyless public data sources. If you turn on the optional OpenAI explanations or Meteomatics weather, set `OPENAI_API_KEY`, `OPENAI_EXPLANATION_MODEL`, `METEOMATICS_USERNAME` and `METEOMATICS_PASSWORD` as the host's environment variables (Azure: App Service application settings). Never put values in the repository, and never upload `backend/.env` (it is excluded from Git and from the Docker image; the host's variables always win over it).
 - **Public means public.** Anyone with the URL can use it, and every request calls NASA POWER from the host's IP address. Keep
   an eye on the rate limits if it gets heavy use.
 
