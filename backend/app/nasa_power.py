@@ -15,6 +15,7 @@ Notes verified against the live API:
 from __future__ import annotations
 
 import asyncio
+import time
 from collections import OrderedDict
 
 import httpx
@@ -135,24 +136,63 @@ for _variable in ("T2M", "T2M_MAX", "T2M_MIN", "TS"):
     VARIABLES[_variable]["tracks_global_temp"] = True
 
 _cache: OrderedDict[tuple, dict[str, float | None]] = OrderedDict()
+_cache_timestamps: dict[tuple, float] = {}
 
 
 class PowerError(RuntimeError):
     """Raised when NASA POWER cannot be reached or returns unusable data."""
 
 
-def _cache_get(key: tuple) -> dict[str, float | None] | None:
+def clear_cache() -> None:
+    _cache.clear()
+    _cache_timestamps.clear()
+
+
+def _cache_get(key: tuple, *, allow_stale: bool = False) -> dict[str, float | None] | None:
+    from .resilience import load_config
+
     value = _cache.get(key)
-    if value is not None:
-        _cache.move_to_end(key)
+    if value is None:
+        return None
+    ts = _cache_timestamps.get(key)
+    if ts is not None and not allow_stale:
+        ttl = load_config().nasa_cache_ttl_seconds
+        if time.monotonic() - ts > ttl:
+            return None
+    _cache.move_to_end(key)
     return value
 
 
 def _cache_put(key: tuple, value: dict[str, float | None]) -> None:
     _cache[key] = value
+    _cache_timestamps[key] = time.monotonic()
     _cache.move_to_end(key)
     while len(_cache) > CACHE_LIMIT:
-        _cache.popitem(last=False)
+        old_key, _ = _cache.popitem(last=False)
+        _cache_timestamps.pop(old_key, None)
+
+
+def cache_health() -> dict:
+    """Non-secret cache and availability telemetry for NASA POWER."""
+    from .resilience import HEALTH_REGISTRY, load_config
+
+    cfg = load_config()
+    now = time.monotonic()
+    ages = [max(0.0, now - _cache_timestamps[k]) for k in _cache if k in _cache_timestamps]
+    snap = HEALTH_REGISTRY.snapshot("nasa_power")
+    return {
+        "status": "degraded" if snap["consecutive_failures"] > 0 else "available",
+        "configured": True,
+        "keyless": True,
+        "cache_entries": len(_cache),
+        "cache_limit": CACHE_LIMIT,
+        "ttl_seconds": cfg.nasa_cache_ttl_seconds,
+        "newest_cache_age_seconds": round(min(ages), 1) if ages else None,
+        "oldest_cache_age_seconds": round(max(ages), 1) if ages else None,
+        "timeout_seconds": cfg.nasa_timeout_seconds,
+        "max_concurrency": cfg.nasa_max_concurrency,
+        **snap,
+    }
 
 
 def parse_series(raw: dict) -> dict[str, float | None]:
@@ -169,26 +209,34 @@ def parse_series(raw: dict) -> dict[str, float | None]:
 
 
 async def _request(params: dict) -> dict:
+    from .resilience import HEALTH_REGISTRY, load_config, redact_secrets
+
+    timeout_sec = load_config().nasa_timeout_seconds
     last_error: Exception | None = None
     for attempt in range(len(RETRY_DELAYS) + 1):
         try:
-            async with httpx.AsyncClient(timeout=60) as client:
+            async with httpx.AsyncClient(timeout=timeout_sec) as client:
                 resp = await client.get(POWER_MONTHLY_URL, params=params)
             if resp.status_code in RETRY_STATUS and attempt < len(RETRY_DELAYS):
                 await asyncio.sleep(RETRY_DELAYS[attempt])
                 continue
             resp.raise_for_status()
-            return resp.json()
+            data = resp.json()
+            HEALTH_REGISTRY.record_success("nasa_power")
+            return data
         except httpx.TransportError as exc:
             last_error = exc
             if attempt < len(RETRY_DELAYS):
                 await asyncio.sleep(RETRY_DELAYS[attempt])
                 continue
         except httpx.HTTPError as exc:
-            raise PowerError(f"Could not reach NASA POWER: {exc}") from exc
+            HEALTH_REGISTRY.record_failure("nasa_power", "http_error")
+            raise PowerError(f"Could not reach NASA POWER: {redact_secrets(str(exc))}") from exc
         except ValueError as exc:
+            HEALTH_REGISTRY.record_failure("nasa_power", "invalid_json")
             raise PowerError("NASA POWER returned a response that is not JSON.") from exc
-    raise PowerError(f"Could not reach NASA POWER: {last_error}")
+    HEALTH_REGISTRY.record_failure("nasa_power", "transport_error")
+    raise PowerError(f"Could not reach NASA POWER: {redact_secrets(str(last_error))}")
 
 
 async def fetch_monthly_multi(
@@ -207,21 +255,35 @@ async def fetch_monthly_multi(
 
     for i in range(0, len(missing), MAX_PARAMS_PER_REQUEST):
         chunk = missing[i : i + MAX_PARAMS_PER_REQUEST]
-        payload = await _request(
-            {
-                "parameters": ",".join(chunk),
-                "community": "AG",
-                "longitude": lon,
-                "latitude": lat,
-                "start": start,
-                "end": end,
-                "format": "JSON",
-            }
-        )
         try:
+            payload = await _request(
+                {
+                    "parameters": ",".join(chunk),
+                    "community": "AG",
+                    "longitude": lon,
+                    "latitude": lat,
+                    "start": start,
+                    "end": end,
+                    "format": "JSON",
+                }
+            )
             blocks = payload["properties"]["parameter"]
-        except (KeyError, TypeError) as exc:
+            if not isinstance(blocks, dict):
+                raise TypeError("parameter block is not a dict")
+        except (PowerError, KeyError, TypeError) as exc:
+            # Fall back to stale cached entries if every requested parameter in this chunk was previously cached.
+            stale_hits = {
+                p: _cache_get((p, lat_key, lon_key, start, end), allow_stale=True)
+                for p in chunk
+            }
+            if all(v is not None for v in stale_hits.values()):
+                for p, series in stale_hits.items():
+                    result[p] = series  # type: ignore[assignment]
+                continue
+            if isinstance(exc, PowerError):
+                raise
             raise PowerError("Unexpected NASA POWER response.") from exc
+
         for parameter in chunk:
             series = parse_series(blocks.get(parameter, {}))
             _cache_put((parameter, lat_key, lon_key, start, end), series)
