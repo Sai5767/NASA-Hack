@@ -15,6 +15,7 @@ Deterministic JSON fixtures for every V2 route are stored in `backend/tests/fixt
 3. **Strict Request Validation on `POST /api/explanations`:** The endpoint uses `extra="forbid"`. Only submit `{case_signature, variable, lat, lon, start_year, end_year, question}`. Submitting client-side `p_value`, `slope`, `stats`, or `system_prompt` fields will return `HTTP 422`.
 4. **Observed vs. Forecast Separation:** `GET /api/monthly-frames` returns `"kind": "observed"`. `GET /api/monthly-forecast` returns `"kind": "forecast"` with `"badge": "Forecast — not observed data"` **only** when `"eligible": true`. When `"eligible": false`, `"frames"` is `[]` and `"reason"` explains why forecasts are withheld.
 5. **News is Context, Not Evidence:** Every item from `GET /api/news` includes `"label": "news context, not scientific evidence"` and a deterministic `"severity"` (`"green" | "amber" | "red"`). When `"stale": true`, display `cache_age_seconds` / `fetched_at` visibly.
+6. **Live Weather is a Separate Source:** `GET /api/live-weather` (Meteomatics) is hourly operational weather for the next 1 to 72 hours. It is never NASA POWER data, never part of a trend, and never the app's own monthly forecast. Show its `label` and `source_note` with it, and handle `available: false` as a normal state (no credentials, provider outage), not an error.
 
 ---
 
@@ -267,7 +268,9 @@ Returns observed monthly values and anomalies on a tightly bounded local grid (`
 Evaluates rolling-origin monthly backtests (horizons 1 to 3 months) against a `seasonal_naive` baseline for `T2M`, `PRECTOTCORR`, and `CLOUD_AMT` only.
 
 - When `eligible: true`, `frames` contains 1 to 3 forecast frames with `"kind": "forecast"` and `"badge": "Forecast — not observed data"`.
-- When `eligible: false`, `frames` is `[]` and `reason` / `reason_code` explain why forecast frames are withheld (`"unsupported_variable"`, `"no_skill_over_seasonal_naive"`, `"poor_calibration_coverage"`, `"sparse_monthly_data"`, `"grid_cell_failure"`, or `"insufficient_history"`).
+- When `eligible: false`, `frames` is `[]` and `reason` / `reason_code` explain why forecast frames are withheld (`"unsupported_variable"`, `"no_skill_over_seasonal_naive"`, `"poor_calibration_coverage"`, `"sparse_monthly_data"`, `"grid_cell_failure"`, `"insufficient_history"`, `"insufficient_backtest_origins"`, or `"constant_series"`).
+- The quality gate applies to **every** cell of the local grid. If any one cell is withheld the whole response is `eligible: false`, and the response names the first failing cell in `failed_cell_id` (present only in that case) with a per-cell `eligible` / `reason` list in `cells`.
+- **Gate thresholds** (`backend/app/monthly.py`): at least 120 contiguous valid months (10 years); at most 5% missing months *inside* the variable's own record (months before a variable's record begins, such as cloud cover before 1984, are not counted as missing); at least 12 rolling backtest origins (24 used when available); the selected model must beat `seasonal_naive` overall by at least 1.5% mean absolute error **and** at every requested horizon; held-out interval coverage must reach at least 60% (nominal 80%).
 
 ### Query Parameters
 
@@ -427,6 +430,13 @@ Extra properties are forbidden (`HTTP 422`). Submit `case_signature` from `/api/
 | `"rate_limited"` | `true` | Client exceeded the per-window explanation quota (`retry_after_seconds` provided); serving curated fallback. |
 | `"no_evidence"` | `true` | Either the measured trend is not statistically significant (`fallback_reason: "no_significant_trend"`), or no substantiated explanation exists (`drivers: []`). |
 
+**Citation rules enforced by the server** (a driver without a surviving citation is removed, never shown):
+
+- A citation link must be `https`, on an allow-listed science or institutional domain (NASA, NOAA, NSIDC, IPCC, WMO and a fixed set of journal publishers), with no credentials, backslash or whitespace in it.
+- It must also be a link that really exists in what the model was given or retrieved: a page returned by the web-search tool during that request, or one of the curated sources supplied in the prompt. A plausible-looking address on an official domain that the model made up is dropped.
+- If no driver survives, the response falls back (`status: "fallback"`, `fallback_reason: "validation_failed"`) to the curated text in `reasons.py`.
+- Rate limiting applies per client address (default 15 live AI calls per 5 minutes) and returns HTTP 200 with `status: "rate_limited"`, not HTTP 429.
+
 ### Example Response (`HTTP 200`)
 
 ```json
@@ -514,6 +524,12 @@ Extra properties are forbidden (`HTTP 422`). Submit `case_signature` from `/api/
 
 Returns deduplicated, deterministically triaged environmental/weather news context near user-saved locations plus the fixed global rotation set (`delhi`, `phoenix`, `amazon`, `london`, `sydney`). Cached for at least 15 minutes (`900s`).
 
+**Behaviour the UI must plan for**
+
+- **Only environmental stories are returned.** An article is kept only if its title is about weather, climate or the environment (deterministic keyword rule); anything else the provider returns (a film list, a royal visit) is dropped. Severity is also a keyword rule: `red` = reported emergency or fatalities, `amber` = a weather phrase such as "flood warning", "heat advisory" or "storm watch", otherwise `green`. It is an editorial triage label, not an official rating.
+- **The first request can take up to 20 seconds** (the provider is slow and rate-limits). The whole request has a 20-second budget: locations that have not answered by then are listed in `partial_failures` with `"code": "timeout"` and the rest are returned. Call it lazily and show a loading state. A second request within 15 minutes is served from cache instantly.
+- `partial_failures[].code` is one of `"timeout"`, `"rate_limited"`, `"provider_error"` or another typed upstream code. `items` can be empty with `partial_failures` set: show `empty_reason`, never placeholder headlines.
+
 ### Query Parameters
 
 | Parameter | Type | Constraints | Default | Description |
@@ -563,7 +579,7 @@ Returns deduplicated, deterministically triaged environmental/weather news conte
 
 ## 6. `GET /api/health/details`
 
-Returns non-secret availability and cache age for NASA POWER, planet streams, AI explanations, live news, and monthly forecasting without invoking upstream network calls.
+Returns non-secret availability and cache age for NASA POWER, planet streams, Meteomatics live weather, AI explanations, live news, and monthly forecasting without invoking upstream network calls.
 
 ### Example Response (`HTTP 200`)
 
@@ -604,6 +620,32 @@ Returns non-secret availability and cache age for NASA POWER, planet streams, AI
       "last_error_at": null,
       "last_error_code": null,
       "consecutive_failures": 0
+    },
+    "meteomatics": {
+      "status": "unconfigured",
+      "available": false,
+      "configured": false,
+      "provider": "Meteomatics",
+      "parameters": ["t_2m:C", "precip_1h:mm", "total_cloud_cover:p", "wind_speed_10m:ms"],
+      "cache": {
+        "entries": 0,
+        "fresh_entries": 0,
+        "stale_entries": 0,
+        "max_entries": 128,
+        "ttl_seconds": 900,
+        "newest_age_seconds": null,
+        "oldest_age_seconds": null,
+        "hits": 0,
+        "misses": 0,
+        "stale_hits": 0
+      },
+      "telemetry": {
+        "last_status": "idle",
+        "last_success_at": null,
+        "last_error_at": null,
+        "last_error_code": null,
+        "consecutive_failures": 0
+      }
     },
     "ai_explanations": {
       "status": "fallback_only",
@@ -664,3 +706,86 @@ Returns non-secret availability and cache age for NASA POWER, planet streams, AI
   }
 }
 ```
+
+
+---
+
+## 7. `GET /api/live-weather`
+
+Meteomatics operational weather for **one location**: current conditions and an hourly forecast for the next 1 to 72 hours. It complements NASA POWER and is **never** averaged with it, never part of a trend, and never labelled as NASA data or as the app's own monthly forecast. All network access is server-side; the credentials (`METEOMATICS_USERNAME`, `METEOMATICS_PASSWORD`) are never sent to, or visible in, the browser.
+
+### Query Parameters
+
+| Parameter | Type | Constraints | Default | Description |
+| --- | --- | --- | --- | --- |
+| `lat` | `float` | `-90.0 <= lat <= 90.0` | *(required)* | Latitude (rounded to 4 decimals) |
+| `lon` | `float` | `-180.0 <= lon <= 180.0` | *(required)* | Longitude (rounded to 4 decimals) |
+| `hours` | `int` | `1 <= hours <= 72` | `24` | Forecast horizon in hours. Out-of-range values return `HTTP 422`. |
+
+The series starts at the current UTC hour and is hourly (`PT1H`). Results are cached for 15 minutes per place (coordinates rounded to 0.01°) and horizon.
+
+### `status` values (always `HTTP 200` when the query itself is valid)
+
+| `status` | `available` | `stale` | Meaning for the UI |
+| --- | --- | --- | --- |
+| `"available"` | `true` | `false` | Fresh, validated data in `series` and `current`. |
+| `"stale"` | `true` | `true` | The refresh failed; the last good result is shown. Display `fetched_at` and `reason`. |
+| `"unconfigured"` | `false` | `false` | The server has no Meteomatics credentials. Hide or disable the live-weather panel and show `reason`. This is the normal state on a fresh local install. |
+| `"unavailable"` | `false` | `false` | Provider failure (authentication, rate limit or quota, timeout, bad range, malformed reply) and no cached result. Show `reason`; it never contains a credential or an upstream error body. |
+
+### Example Response — Unconfigured (`HTTP 200`)
+
+```json
+{
+  "available": false,
+  "status": "unconfigured",
+  "provider": "Meteomatics",
+  "label": "Meteomatics weather forecast — not NASA trend data",
+  "location": { "lat": 52.52, "lon": 13.46 },
+  "request": { "hours": 6, "interval": "PT1H", "start": "2026-11-15T14:00:00Z", "end": "2026-11-15T20:00:00Z" },
+  "parameters": {
+    "temperature_c": "t_2m:C",
+    "precipitation_1h_mm": "precip_1h:mm",
+    "cloud_cover_percent": "total_cloud_cover:p",
+    "wind_speed_10m_ms": "wind_speed_10m:ms"
+  },
+  "parameter_details": {
+    "temperature_c": { "parameter": "t_2m:C", "label": "Air temperature (2 m)", "unit": "°C" },
+    "precipitation_1h_mm": { "parameter": "precip_1h:mm", "label": "Hourly precipitation", "unit": "mm" },
+    "cloud_cover_percent": { "parameter": "total_cloud_cover:p", "label": "Total cloud cover", "unit": "%" },
+    "wind_speed_10m_ms": { "parameter": "wind_speed_10m:ms", "label": "10 m wind speed", "unit": "m/s" }
+  },
+  "current": null,
+  "series": [],
+  "fetched_at": "2026-11-15T14:09:53Z",
+  "stale": false,
+  "reason": "Live weather is unavailable because METEOMATICS_USERNAME and METEOMATICS_PASSWORD are not configured on the server.",
+  "source_note": "Meteomatics operational weather data. It is separate from NASA POWER climate-trend analysis.",
+  "provider_metadata": {}
+}
+```
+
+### Example Response — Available (shape; values are placeholders)
+
+When data are available `available` is `true`, `status` is `"available"`, `reason` is `null`, `current` is the first element of `series`, and `series` holds one object per hour. A value Meteomatics did not supply is `null`: it is never invented or interpolated.
+
+```json
+{
+  "available": true,
+  "status": "available",
+  "series": [
+    {
+      "time": "2026-11-15T14:00:00Z",
+      "temperature_c": 0.0,
+      "precipitation_1h_mm": 0.0,
+      "cloud_cover_percent": 0.0,
+      "wind_speed_10m_ms": null
+    }
+  ],
+  "current": { "time": "2026-11-15T14:00:00Z", "temperature_c": 0.0, "precipitation_1h_mm": 0.0, "cloud_cover_percent": 0.0, "wind_speed_10m_ms": null },
+  "stale": false,
+  "reason": null
+}
+```
+
+(The remaining fields — `provider`, `label`, `location`, `request`, `parameters`, `parameter_details`, `fetched_at`, `source_note`, `provider_metadata` — are the same as in the unconfigured example.)

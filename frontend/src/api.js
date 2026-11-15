@@ -60,4 +60,5 @@ export const fetchMonthlyFrames = (params, signal) => getJson("/api/monthly-fram
 export const fetchMonthlyForecast = (params, signal) => getJson("/api/monthly-forecast", params, signal);
 export const fetchExplanation = (payload, signal) => postJson("/api/explanations", payload, signal);
 export const fetchNews = (params = {}, signal) => getJson("/api/news", params, signal);
+export const fetchLiveWeather = (params, signal) => getJson("/api/live-weather", params, signal);
 

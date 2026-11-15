@@ -1,176 +1,153 @@
-# V2 Backend Handoff for Frontend Implementation
+# V2 Backend Handoff for the Frontend
 
-This document provides the complete backend handoff for the V2 frontend agent (`codex/v2-frontend`). It summarizes all new and extended endpoints, deterministic offline fixtures, minimal frontend API helpers, environment variable names, cache/degraded behaviors, and non-negotiable UI contract assumptions.
+For whoever builds the V2 frontend (`codex/v2-frontend`). Full request and response schemas, with example payloads, are in [V2_API_CONTRACT.md](V2_API_CONTRACT.md); this file covers how to call each route, the saved fixtures, the server settings, how every route degrades, and what the UI must not assume.
 
-For full JSON request/response schemas and sample payloads, see [docs/V2_API_CONTRACT.md](V2_API_CONTRACT.md).
+Every statement here was checked against the running code and live responses (2026-11-15). Where this file and `V2_API_CONTRACT.md` ever disagree, the code wins: report the mismatch.
 
 ---
 
-## 1. Summary of V2 Backend Routes
+## 1. Routes
 
-| Route | Method | Implementation | Purpose |
+| Route | Method | Code | Purpose |
 | --- | --- | --- | --- |
-| `/api/trend` | `GET` | `backend/app/analysis.py` | Existing trend case-file payload extended with `case_signature` and `evidence_trace`. All existing keys are preserved unchanged. |
-| `/api/health/details` | `GET` | `backend/app/resilience.py`, `backend/app/main.py` | Non-secret status, availability, and cache age for `nasa_power`, `planet_streams`, `ai_explain`, `news`, and `monthly_forecast`. Does not make outbound upstream calls. |
-| `/api/monthly-frames` | `GET` | `backend/app/monthly.py` | Coarse local grid (`1x1` to `3x3`) of observed monthly values and anomalies (`1981`–present), with explicit grid resolution, provenance, and missing-cell handling. |
-| `/api/monthly-forecast` | `GET` | `backend/app/monthly.py` | Backtested 1–3 month local forecast grid (`1x1` to `3x3`) for `T2M`, `PRECTOTCORR`, and `CLOUD_AMT` only. Withholds forecast frames when `eligible == false`. |
-| `/api/explanations` | `POST` | `backend/app/explanations.py` | "Why might this be happening?" synthesis grounded in server-computed statistics (`case_signature` or `lat`/`lon`/`variable`/`start`/`end`), with science-domain citation filtering and curated fallback. |
-| `/api/news` | `GET` | `backend/app/news.py` | Live news context (`news context, not scientific evidence`) for saved locations plus a fixed global rotation set, with deterministic `green`/`amber`/`red` severity and category rules. |
+| `/api/trend` | `GET` | `analysis.py` | The existing case file, now with `case_signature` and `evidence_trace`. Every earlier field is unchanged. |
+| `/api/health/details` | `GET` | `main.py`, `resilience.py` | Non-secret status and cache age for `nasa_power`, `planet_streams`, `meteomatics`, `ai_explanations`, `news` and `monthly_forecast`. Never calls an upstream service. |
+| `/api/monthly-frames` | `GET` | `monthly.py` | Observed monthly values on a small local grid (1×1 to 3×3 cells) around one place, with provenance and per-cell missingness. |
+| `/api/monthly-forecast` | `GET` | `monthly.py` | Backtested 1 to 3 month forecast for `T2M`, `PRECTOTCORR` and `CLOUD_AMT` only, on the same kind of grid. Returns frames only when `eligible` is `true`. |
+| `/api/explanations` | `POST` | `explanations.py` | "Why might this be happening?": source-cited possible explanations for a server-verified trend, with a curated fallback. |
+| `/api/news` | `GET` | `news.py` | Environmental and weather news context near saved places (GDELT by default), with deterministic `green`/`amber`/`red` severity. |
+| `/api/live-weather` | `GET` | `meteomatics.py` | Meteomatics hourly weather for one place, next 1 to 72 hours. A separate source from NASA data. |
 
 ---
 
-## 2. Minimal Frontend API Helpers (`frontend/src/api.js`)
+## 2. Calling them from the frontend (`frontend/src/api.js`)
 
-The following minimal helper functions have been added to `frontend/src/api.js` (no presentation files were touched):
+The helpers pass the object you give them straight through as the query string (GET) or JSON body (POST). **Use the parameter names below exactly**: an unknown query parameter is silently ignored by a GET route (you get defaults, not an error), and an unknown field in the POST body is rejected with HTTP 422.
 
 ```js
 import {
-  fetchHealthDetails,
-  fetchMonthlyFrames,
-  fetchMonthlyForecast,
-  fetchExplanation,
-  fetchNews,
+  fetchHealthDetails, fetchMonthlyFrames, fetchMonthlyForecast,
+  fetchExplanation, fetchNews, fetchLiveWeather, fetchTrend,
 } from "./api.js";
 
-// 1. Health & feature status
+// Server status for each feature (use it to hide or explain optional panels)
 const health = await fetchHealthDetails(signal);
 
-// 2. Observed monthly grid frames (side: 1..3, step: 0.5..5.0)
-const monthlyFrames = await fetchMonthlyFrames(
-  { lat: 33.45, lon: -112.07, variable: "T2M", start: 2015, end: 2024, side: 3, step: 2.0 },
-  signal
-);
+// Observed monthly frames. variable, lat, lon required. n = 1..3 cells per side, size = grid width in degrees (0..12).
+// start_year/end_year: at most 10 years per request (default: the last 3 full years).
+const frames = await fetchMonthlyFrames(
+  { variable: "T2M", lat: 33.45, lon: -112.07, start_year: 2023, end_year: 2025, n: 3, size: 2.0 }, signal);
 
-// 3. Monthly forecast grid (supported: T2M, PRECTOTCORR, CLOUD_AMT; horizon_months: 1..3)
-const monthlyForecast = await fetchMonthlyForecast(
-  { lat: 33.45, lon: -112.07, variable: "T2M", start: 1981, end: 2024, side: 1, step: 2.0, horizon_months: 3 },
-  signal
-);
+// Forecast. Always check forecast.eligible before using frames. horizons = 1..3 months.
+const forecast = await fetchMonthlyForecast(
+  { variable: "T2M", lat: 33.45, lon: -112.07, start_year: 1981, end_year: 2025, horizons: 3, n: 3, size: 2.0 }, signal);
 
-// 4. "Why might this be happening?" explanation
-// Option A: Pass the signed case_signature returned by GET /api/trend (plus matching coordinates/variable/period)
-// Option B: Pass { lat, lon, variable, start, end, question }
-const explanation = await fetchExplanation(
-  {
-    case_signature: trendData.case_signature,
-    lat: 33.45,
-    lon: -112.07,
-    variable: "T2M",
-    start: 1981,
-    end: 2024,
-    question: "What local factors could amplify warming here?",
-  },
-  signal
-);
+// "Why might this be happening?" Send the signature from /api/trend, plus an optional short question (max 240 characters).
+// Nothing else is accepted: no statistics, no hidden prompt text. (Or send variable, lat, lon, start_year, end_year instead.)
+const trend = await fetchTrend({ variable: "T2M", lat: 33.45, lon: -112.07, start_year: 1981, end_year: 2025 }, signal);
+const why = await fetchExplanation({ case_signature: trend.case_signature, question: "What could amplify warming here?" }, signal);
 
-// 5. Live news context (optional JSON-encoded saved_locations array + variable filter)
-const news = await fetchNews(
-  {
-    variable: "T2M",
-    saved_locations: JSON.stringify([{ name: "Phoenix, USA", lat: 33.45, lon: -112.07 }]),
-    max_items: 12,
-  },
-  signal
-);
+// News: locations = comma-separated place ids or "Name:lat:lon" entries (up to 5), limit = 1..50.
+const news = await fetchNews({ locations: "delhi,phoenix,Home:51.5:-0.12", limit: 12 }, signal);
+
+// Live weather: lat, lon required; hours = 1..72 (default 24).
+const live = await fetchLiveWeather({ lat: 52.52, lon: 13.46, hours: 24 }, signal);
 ```
 
----
-
-## 3. Deterministic Offline Fixtures
-
-Deterministic fixture payloads generated directly from the offline test suite live in:
-
-- **`backend/tests/fixtures/v2_fixtures.json`**
-
-Top-level keys in `v2_fixtures.json`:
-- `health_details`: Sample response from `GET /api/health/details`
-- `trend_with_evidence_trace`: Sample response excerpt (`case_signature`, `evidence_trace`, `stats`, `PlainEnglish`) from `GET /api/trend`
-- `monthly_frames`: Sample `2x2` grid response from `GET /api/monthly-frames`
-- `monthly_forecast_eligible`: Sample eligible 3-month forecast from `GET /api/monthly-forecast` (`T2M`)
-- `monthly_forecast_ineligible`: Sample withheld/ineligible response from `GET /api/monthly-forecast` (`WS10M`)
-- `explanation_ai_grounded`: Sample OpenAI-grounded response from `POST /api/explanations`
-- `explanation_fallback`: Sample keyless/fallback response from `POST /api/explanations`
-- `news_live`: Sample populated response from `GET /api/news`
-- `news_unavailable`: Sample empty/degraded response from `GET /api/news`
-
-You can import or copy portions of `backend/tests/fixtures/v2_fixtures.json` in `frontend/tests/` to write deterministic unit tests for:
-- Evidence-trace adapter and verdict ladder rendering
-- Monthly frame scrubber and forecast eligibility / withheld state
-- News severity badge (`green`, `amber`, `red`), category chips, and empty/unavailable fallback states
-- Explanation modal states (`available`, `fallback`, unverified claims removed, rate-limited)
+`case_signature` is signed by the server. A signature issued before a server restart stops verifying (HTTP 422) unless `TD_CASE_SECRET` is set; on a 422 from `/api/explanations`, request the trend again and retry once.
 
 ---
 
-## 4. Environment Variable Reference (Names Only — Never Values)
+## 3. Saved fixtures (no network, no keys)
 
-The backend reads only environment variable names (with safe defaults when unset):
+`backend/tests/fixtures/v2_fixtures.json` holds one deterministic response for every route and the main degraded states. They are produced by the offline test suite and checked by `backend/tests/test_v2_contract_fixtures.py`.
 
-| Variable Name | Default | Effect |
+| Fixture key | Route and state |
+| --- | --- |
+| `trend_with_evidence_trace` | `/api/trend`: `case_signature` and `evidence_trace` plus the main existing blocks |
+| `monthly_frames` | `/api/monthly-frames`: a 2×2 grid, observed frames |
+| `monthly_forecast_eligible` | `/api/monthly-forecast`: eligible `T2M`, three forecast frames |
+| `monthly_forecast_withheld` | `/api/monthly-forecast`: withheld (`unsupported_variable`), `frames: []` |
+| `explanations_ok` / `explanations_fallback` | `/api/explanations`: live-AI answer shape, and the curated-fallback shape |
+| `news` | `/api/news`: two items |
+| `health_details` | `/api/health/details` |
+| `live_weather_unconfigured` / `live_weather_available` | `/api/live-weather`: no credentials, and a three-hour reply with one `null` value |
+
+Use them for frontend unit tests and while the API is unavailable. The `explanations_ok` fixture reuses the fallback text with `status: "ok"`: it is a shape sample, not a real model answer.
+
+---
+
+## 4. Server settings (names and real defaults; values are never shown or logged)
+
+All optional. With none set, the app runs fully: trends, monthly frames and forecast, curated explanations, and news (GDELT needs no key).
+
+| Name | Default | Effect |
 | --- | --- | --- |
-| `OPENAI_API_KEY` | *(unset)* | Enables live OpenAI synthesis on `POST /api/explanations`. When unset, `POST /api/explanations` returns curated fallback (`status: "fallback"`) using `backend/app/reasons.py` and server-computed statistics. |
-| `OPENAI_EXPLANATION_MODEL` | `gpt-4.1-mini` | Model identifier sent to the OpenAI Responses API. |
-| `OPENAI_BASE_URL` | `https://api.openai.com/v1` | Base URL for OpenAI Responses API calls. |
-| `OPENAI_TIMEOUT_SECONDS` | `12.0` | Strict timeout for OpenAI requests. |
-| `OPENAI_WEB_SEARCH` | `true` | Enables `web_search_preview` tool for retrieving domain-allow-listed scientific citations. |
-| `EXPLANATION_CACHE_TTL_SECONDS` | `86400` | 24-hour TTL for signature-keyed explanation cache. |
-| `EXPLANATION_RATE_LIMIT_MAX` | `10` | Max uncached explanation syntheses per window per client IP. |
-| `EXPLANATION_RATE_LIMIT_WINDOW_SECONDS` | `60` | Sliding window duration in seconds for explanation rate limiting. |
-| `NEWS_PROVIDER` | `gdelt` | News adapter selection: `gdelt`, `json`, or `disabled`/`none`. |
-| `NEWS_API_URL` | *(GDELT Doc 2.0 URL)* | Upstream endpoint URL for `gdelt` or `json` news provider. |
-| `NEWS_API_KEY` | *(unset)* | Optional bearer token for `NEWS_PROVIDER=json` feeds. |
-| `NEWS_TIMEOUT_SECONDS` | `8.0` | Strict timeout for upstream news provider requests. |
-| `NEWS_CACHE_TTL_SECONDS` | `900` | 15-minute TTL for news responses. |
-| `NASA_POWER_TIMEOUT_SECONDS` | `20.0` | Timeout per NASA POWER HTTP request. |
-| `NASA_POWER_MAX_CONCURRENCY` | `6` | Bounded concurrency semaphore for NASA POWER fetches. |
-| `NASA_POWER_CACHE_TTL_SECONDS` | `21600` | 6-hour TTL for in-memory NASA POWER monthly cache. |
-| `STREAMS_TIMEOUT_SECONDS` | `20.0` | Timeout per planet stream HTTP request. |
-| `STREAMS_CACHE_TTL_SECONDS` | `21600` | 6-hour TTL for in-memory planet stream cache. |
-| `TD_CASE_SECRET` | *(ephemeral random)* | Secret key used for HMAC-SHA256 `case_signature` tokens. |
-| `TD_ALLOWED_ORIGINS` | *(local dev ports)* | Comma-separated extra CORS origins; CORS allows `GET`, `POST`, and `OPTIONS`. |
+| `OPENAI_API_KEY` | unset | Turns on live AI explanations. Unset: `/api/explanations` answers from the curated text (`status: "no_key"`). |
+| `OPENAI_EXPLANATION_MODEL` | `gpt-4o-mini` | Model name sent to the Responses API. |
+| `OPENAI_BASE_URL` | `https://api.openai.com/v1/responses` | Full Responses API URL. |
+| `OPENAI_TIMEOUT_SECONDS` | `20` (2 to 45) | Timeout for one OpenAI call. |
+| `OPENAI_WEB_SEARCH` | `true` | Lets the model search the web; its citations must come from what it retrieved. |
+| `EXPLANATION_CACHE_TTL_SECONDS` | `86400` | Cache of verified explanations, per case and question. |
+| `EXPLANATION_RATE_LIMIT_MAX` / `EXPLANATION_RATE_LIMIT_WINDOW_SECONDS` | `15` / `300` | Live AI calls allowed per client address per window. |
+| `NEWS_PROVIDER` | `gdelt` | `gdelt`, `json_feed` (also `azure`, `custom`), or `disabled`. |
+| `NEWS_API_URL`, `NEWS_API_KEY` | GDELT URL, unset | Endpoint and optional key for a `json_feed` provider. |
+| `NEWS_TIMEOUT_SECONDS` | `12` (2 to 30) | Timeout for one news request. The whole `/api/news` call also has a fixed 20-second budget. |
+| `NEWS_CACHE_TTL_SECONDS` | `900` (minimum 900) | News cache. |
+| `METEOMATICS_USERNAME`, `METEOMATICS_PASSWORD` | unset | Turns on `/api/live-weather`. Both are required. |
+| `METEOMATICS_BASE_URL` | `https://api.meteomatics.com` | Provider URL. |
+| `METEOMATICS_TIMEOUT_SECONDS` / `METEOMATICS_CACHE_TTL_SECONDS` | `10` / `900` | Timeout and cache for live weather. |
+| `NASA_POWER_TIMEOUT_SECONDS` | `30` (2 to 60) | Timeout per NASA POWER request. |
+| `NASA_POWER_MAX_CONCURRENCY` | `3` (1 to 8) | Parallel NASA requests. |
+| `NASA_POWER_CACHE_TTL_SECONDS` | `21600` | NASA series cache (a stale entry is used only if a refresh fails). |
+| `STREAMS_TIMEOUT_SECONDS` / `STREAMS_CACHE_TTL_SECONDS` | `30` / `43200` | Planet streams (GISTEMP, CO₂, sea ice, climate rhythms). |
+| `TD_CASE_SECRET` | random per process | Signs `case_signature`. Set it on any host that restarts or runs more than one instance. |
+| `TD_ALLOWED_ORIGINS` | local dev ports | Extra browser origins allowed by CORS (GET, POST, OPTIONS). |
 
 ---
 
-## 5. Cache, Rate-Limit, and Feature-Degraded Behaviors
+## 5. How each route degrades
 
-1. **NASA POWER & Planet Streams (`nasa_power.py`, `streams.py`)**
-   - Bounded TTL in-memory cache (`21600s` default) with stale-entry retention (`86400s`).
-   - If NASA POWER fails on a live request and a stale cached series exists for that grid cell, the backend serves the stale series rather than failing the request.
-   - If no cache exists and upstream fails, the route returns HTTP `502` with a sanitized, non-secret `detail` string.
-2. **Monthly Frames & Forecast (`monthly.py`)**
-   - `GET /api/monthly-frames` fetches cells concurrently (`max_workers=6`). If a cell fails or has incomplete data for a month, `missing: true` and `value: null`, `anomaly: null` are returned for that cell/frame.
-   - `GET /api/monthly-forecast` caches evaluations for 6 hours (`21600s`).
-   - Unsupported variables (anything outside `T2M`, `PRECTOTCORR`, `CLOUD_AMT`), insufficient history (`< 120` complete months), or models that fail backtest skill (`skill_vs_seasonal_naive <= 0`) or split-conformal coverage (`< 0.72` on nominal `0.80`) return HTTP `200` with `eligible: false`, an explicit `reason`, and `frames: []`.
-3. **Explanations (`explanations.py`)**
-   - Cached by `case_signature` + normalized question for 24 hours (`86400s`). Cached hits bypass the rate limiter.
-   - Uncached requests are rate-limited (`10` per `60s` per client IP); exceeding the limit returns HTTP `429`.
-   - Client payloads containing `p_value`, `slope`, `stats`, `system_prompt`, or any undocumented key are rejected with HTTP `422` (`extra="forbid"`).
-   - If `OPENAI_API_KEY` is missing or the upstream call fails/times out, the endpoint returns HTTP `200` with `status: "fallback"`, `fallback_used: true`, and a deterministic explanation grounded in `backend/app/reasons.py` and the verified case statistics.
-   - Citations outside the scientific domain allow-list (`nasa.gov`, `noaa.gov`, `ipcc.ch`, `copernicus.eu`, `metoffice.gov.uk`, `wmo.int`, `nsidc.org`, `usgs.gov`, `nature.com`, `science.org`, `ametsoc.org`, `agu.org`, `iop.org`, `Cryosphere`/`BG`/`ACP`) are stripped automatically, and external-driver claims without surviving citations are removed and counted in `unverified_claims_removed`.
-4. **Live News (`news.py`)**
-   - Cached for 15 minutes (`900s`) with 6-hour stale fallback.
-   - If the upstream news provider fails and a stale cache exists, returns `status: "stale"` with the last known valid items.
-   - If no cache exists and upstream fails (or `NEWS_PROVIDER=disabled`), returns HTTP `200` with `status: "unavailable"` (or `"disabled"`), `items: []`, and a human-readable `message`. Never fabricates synthetic headlines.
+| Situation | What the UI receives |
+| --- | --- |
+| NASA POWER slow or down | `/api/trend` and friends return HTTP 502 with a short, non-secret `detail` string, unless every series needed is still in the cache, in which case the older cached data is used silently. |
+| `/api/monthly-frames`: a cell fails or has gaps | HTTP 200. Failed or missing cells and months are `missing: true` with `value: null`; `coverage` says how many cells succeeded. Nothing is interpolated. |
+| `/api/monthly-forecast` not earned | HTTP 200 with `eligible: false`, a `reason_code`, a plain `reason`, `frames: []`. Reasons: unsupported variable, too little history, constant series, too few backtest origins, too many gaps, a grid cell failed, no skill over seasonal-naive, or poor interval coverage. |
+| No OpenAI key | `/api/explanations` returns HTTP 200, `status: "no_key"`, curated drivers and citations. |
+| AI call failed, or the answer failed validation | HTTP 200, `status: "fallback"`, curated text. `fallback_reason` is a code such as `timeout`, `rate_limited`, `invalid_json`, `http_500`, `validation_failed`. |
+| Too many AI calls | HTTP 200, `status: "rate_limited"`, `retry_after_seconds`, curated text. (Not HTTP 429.) |
+| Trend not significant | HTTP 200, `status: "no_evidence"`, `drivers: []`. The AI is never asked to invent reasons for a trend that is not there. |
+| News provider slow or failing | HTTP 200. `items` may be empty or partial; `partial_failures` lists each location with a code (`timeout`, `rate_limited`, …); `stale: true` with the last good items if the cache holds some; otherwise `empty_reason`. Never placeholder headlines. |
+| No Meteomatics credentials | HTTP 200, `available: false`, `status: "unconfigured"`. |
+| Meteomatics fails | `status: "stale"` with the last good series, or `status: "unavailable"` with a plain `reason`. |
+| Place or period cannot be analysed (too few complete years, land-only variable over ocean) | HTTP 422 with a plain `detail` message. |
+| Bad parameters | HTTP 422 (FastAPI validation of types and ranges), HTTP 400 for an invalid or too-short year range, HTTP 404 for an unknown variable. |
 
 ---
 
-## 6. Known Limits & What the Frontend Must Not Assume
+## 6. Known limits, and what the frontend must not assume
 
-- **Never assume `GET /api/monthly-forecast` returns frames.** Always check `response.eligible` (or `cell.eligible`). When `eligible === false`, `frames` is `[]` and the UI must display `response.reason` (or `cell.reason`) and disable forecast playback controls.
-- **Never interpolate across missing grid cells.** In both `/api/monthly-frames` and `/api/monthly-forecast`, a cell with `missing === true` or `value === null` must be rendered as missing data (`No data`), never averaged from neighbors.
-- **Never label coarse NASA POWER grid cells as city-block or street-level.** Always surface `grid.resolution_degrees` (`~0.5° × 0.625°`) and `provenance.spatial_resolution_note`.
-- **Never send client-side statistics (`p_value`, `slope`, `stats`) to `POST /api/explanations`.** Send only `{ case_signature, lat, lon, variable, start, end, question }`. The backend will reject any extra fields with HTTP `422`.
-- **Always distinguish observed frames from forecast frames.** Observed frames (`frame_type: "observed"`) and forecast frames (`frame_type: "forecast"`, `label: "Forecast — not observed data"`) must never share the same unlabelled timeline state.
-- **Always display `disclaimer` on news items.** Every news panel or drawer must display `"news context, not scientific evidence"` (`response.disclaimer`) and treat `items: []` gracefully when `status` is `"unavailable"`, `"disabled"`, or `"empty"`.
-- **Verdict ladder consistency.** Use `trend.evidence_trace.verdict` and `trend.evidence_trace.verdict_ladder` so the headline banner and the step-by-step Evidence Trace always show the exact same verdict label (`Strong trend`, `Moderate trend`, `Weak / emerging trend`, `No clear trend`, or `Insufficient data`).
+- **Check `eligible`.** A forecast response can exist with no frames. Show `reason`, keep the observed timeline, and disable forecast playback.
+- **Forecast is withheld if any one grid cell fails the gate**, even when others pass (rainfall around Delhi is a real example). That is by design: no mixed grid.
+- **Never interpolate** a missing cell. Draw it as missing.
+- **Never call a grid cell a city or street.** NASA POWER cells are about 0.5° × 0.625°. Show `grid` and `provenance`.
+- **Label forecast frames** with their `badge` ("Forecast — not observed data") and never put them on the same unlabelled scale as observed frames.
+- **The first `/api/news` request can take up to 20 seconds.** Call it lazily and show a loading state. Results are cached for 15 minutes.
+- **News severity is editorial triage**, not an official rating: red = reported emergency, amber = a weather phrase such as "flood warning", green = otherwise. Always show `label` ("news context, not scientific evidence"), date, publisher and link.
+- **Live weather is not NASA data and not the monthly forecast.** Show its `label` and `source_note`. `available: false` is a normal state.
+- **Do not send statistics to `/api/explanations`.** Only `case_signature` (or variable, place and years) and an optional `question`.
+- **Use the server's verdict.** `evidence_trace.verdict.label` is one of "Strong evidence of a trend", "Some evidence — investigate carefully", "No clear evidence yet", "Not enough data to tell"; `evidence_trace.verdict.ladder` lists all four. When the server cannot analyse a place (too few complete years of data, a land-only variable over ocean, a variable that does not vary) `/api/trend` returns HTTP 422 with a plain `detail` message, not a verdict: show it as "Not enough data to tell" with that message. A year range shorter than 20 years is HTTP 400.
+- **Rate limiting is per client address as the server sees it.** Behind a proxy that does not forward the visitor's address, all visitors share one allowance.
+- **Not run against the real services:** the live OpenAI call and the Meteomatics call have only been tested against offline fakes (no keys were available). Before a demo, run each once with a real key and check the result. Developers report that combining OpenAI's web-search tool with structured or JSON output can cut the JSON short or leave the citation list empty; the server validates everything and falls back to the curated text in those cases, so the feature degrades instead of breaking, but you may see `fallback_reason: "validation_failed"` more than expected.
+- **Forecast model choice has a mild optimism bias:** the best of four candidate models is picked and then tested against the baseline on the same backtest. The safeguards (must win at every horizon, 1.5% margin, held-out coverage) reduce it; they do not remove it.
 
 ---
 
-## 7. Backend Verification Commands
+## 7. Verification
 
-```bash
-# Run all 236 offline backend tests (199+ original + 33 V2 tests)
-backend/.venv/bin/pytest backend/tests
-
-# Run only the V2 test suites
-backend/.venv/bin/pytest backend/tests/test_v2_*.py
+```powershell
+cd backend
+.venv\Scripts\activate
+pytest                      # the whole offline suite (no keys, no network)
+pytest tests/test_v2_*.py   # only the V2 tests
 ```

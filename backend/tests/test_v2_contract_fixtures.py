@@ -6,16 +6,38 @@ for every new/extended V2 route and that their schemas match the live FastAPI re
 
 from __future__ import annotations
 
+import asyncio
 import json
+import os
+from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
 from app import news as news_module
 from app.main import app
+from app.meteomatics import clear_meteomatics_cache, fetch_live_weather
 
 FIXTURE_PATH = Path(__file__).resolve().parent / "fixtures" / "v2_fixtures.json"
 client = TestClient(app)
+
+
+class _FixtureWeather:
+    """A fixed three-hour Meteomatics reply, so the 'available' fixture needs no network and no credentials."""
+
+    async def fetch_hourly(self, lat, lon, hours, *, now_utc=None):
+        series = [
+            {
+                "time": f"2026-11-15T{14 + i}:00:00Z",
+                "temperature_c": 8.0 + 0.5 * i,
+                "precipitation_1h_mm": 0.0,
+                "cloud_cover_percent": 40.0 + 5.0 * i,
+                "wind_speed_10m_ms": None if i == 2 else 3.2,  # a value the provider did not supply stays null
+            }
+            for i in range(3)
+        ]
+        return series, {"note": "fixture"}, "2026-11-15T14:00:00Z", "2026-11-15T17:00:00Z"
 
 
 def build_deterministic_fixtures() -> dict:
@@ -117,6 +139,19 @@ def build_deterministic_fixtures() -> dict:
         "context_note": "News markers provide regional environmental context only; they are not scientific trend evidence.",
     }
 
+    fixed_now = datetime(2026, 11, 15, 14, 5, tzinfo=timezone.utc)
+    clear_meteomatics_cache()
+    with patch.dict(os.environ):
+        for name in ("METEOMATICS_USERNAME", "METEOMATICS_PASSWORD"):
+            os.environ.pop(name, None)
+        live_weather_unconfigured = asyncio.run(fetch_live_weather(52.52, 13.46, 3, now_utc=fixed_now))
+    live_weather_unconfigured["fetched_at"] = "2026-11-15T14:05:00Z"
+
+    clear_meteomatics_cache()
+    live_weather_available = asyncio.run(fetch_live_weather(52.52, 13.46, 3, provider=_FixtureWeather(), now_utc=fixed_now))
+    live_weather_available["fetched_at"] = "2026-11-15T14:05:00Z"
+    clear_meteomatics_cache()
+
     return {
         "trend_with_evidence_trace": {
             "variable": trend_resp["variable"],
@@ -138,6 +173,8 @@ def build_deterministic_fixtures() -> dict:
         "explanations_fallback": explanation_fallback,
         "news": news_resp,
         "health_details": health_resp,
+        "live_weather_unconfigured": live_weather_unconfigured,
+        "live_weather_available": live_weather_available,
     }
 
 
@@ -161,3 +198,17 @@ def test_saved_v2_fixtures_exist_and_match_contract_keys(fake_power):
     assert saved["monthly_forecast_withheld"]["frames"] == []
     assert saved["explanations_ok"]["disclaimer"] == "These are possible explanations, not proof that one cause created this local trend."
     assert saved["news"]["items"][0]["label"] == "news context, not scientific evidence"
+
+    # Live weather: both states exist, are labelled as a separate source, and never carry a credential
+    unconfigured, available = saved["live_weather_unconfigured"], saved["live_weather_available"]
+    assert (unconfigured["available"], unconfigured["status"], unconfigured["series"]) == (False, "unconfigured", [])
+    assert (available["available"], available["status"], available["stale"]) == (True, "available", False)
+    assert available["current"] == available["series"][0]
+    assert available["series"][2]["wind_speed_10m_ms"] is None  # null preserved, never interpolated
+    for payload in (unconfigured, available):
+        assert payload["label"] == "Meteomatics weather forecast — not NASA trend data"
+        assert "separate from NASA POWER" in payload["source_note"]
+        assert "password" not in json.dumps(payload).lower().replace("meteomatics_password", "")
+
+    # The health report lists Meteomatics too
+    assert "meteomatics" in saved["health_details"]["features"]

@@ -2256,7 +2256,170 @@
         "max_horizon_months": 3,
         "max_grid_side": 3,
         "baseline_model": "seasonal_naive"
+      },
+      "meteomatics": {
+        "status": "unconfigured",
+        "available": false,
+        "configured": false,
+        "provider": "Meteomatics",
+        "parameters": [
+          "t_2m:C",
+          "precip_1h:mm",
+          "total_cloud_cover:p",
+          "wind_speed_10m:ms"
+        ],
+        "cache": {
+          "entries": 0,
+          "fresh_entries": 0,
+          "stale_entries": 0,
+          "max_entries": 128,
+          "ttl_seconds": 900,
+          "newest_age_seconds": null,
+          "oldest_age_seconds": null,
+          "hits": 0,
+          "misses": 0,
+          "stale_hits": 0
+        },
+        "telemetry": {
+          "last_status": "idle",
+          "last_success_at": null,
+          "last_error_at": null,
+          "last_error_code": null,
+          "consecutive_failures": 0
+        }
       }
+    }
+  },
+  "live_weather_unconfigured": {
+    "available": false,
+    "status": "unconfigured",
+    "provider": "Meteomatics",
+    "label": "Meteomatics weather forecast \u2014 not NASA trend data",
+    "location": {
+      "lat": 52.52,
+      "lon": 13.46
+    },
+    "request": {
+      "hours": 3,
+      "interval": "PT1H",
+      "start": "2026-11-15T14:00:00Z",
+      "end": "2026-11-15T17:00:00Z"
+    },
+    "parameters": {
+      "temperature_c": "t_2m:C",
+      "precipitation_1h_mm": "precip_1h:mm",
+      "cloud_cover_percent": "total_cloud_cover:p",
+      "wind_speed_10m_ms": "wind_speed_10m:ms"
+    },
+    "parameter_details": {
+      "temperature_c": {
+        "parameter": "t_2m:C",
+        "label": "Air temperature (2 m)",
+        "unit": "\u00b0C"
+      },
+      "precipitation_1h_mm": {
+        "parameter": "precip_1h:mm",
+        "label": "Hourly precipitation",
+        "unit": "mm"
+      },
+      "cloud_cover_percent": {
+        "parameter": "total_cloud_cover:p",
+        "label": "Total cloud cover",
+        "unit": "%"
+      },
+      "wind_speed_10m_ms": {
+        "parameter": "wind_speed_10m:ms",
+        "label": "10 m wind speed",
+        "unit": "m/s"
+      }
+    },
+    "current": null,
+    "series": [],
+    "fetched_at": "2026-11-15T14:05:00Z",
+    "stale": false,
+    "reason": "Live weather is unavailable because METEOMATICS_USERNAME and METEOMATICS_PASSWORD are not configured on the server.",
+    "source_note": "Meteomatics operational weather data. It is separate from NASA POWER climate-trend analysis.",
+    "provider_metadata": {}
+  },
+  "live_weather_available": {
+    "available": true,
+    "status": "available",
+    "provider": "Meteomatics",
+    "label": "Meteomatics weather forecast \u2014 not NASA trend data",
+    "location": {
+      "lat": 52.52,
+      "lon": 13.46
+    },
+    "request": {
+      "hours": 3,
+      "interval": "PT1H",
+      "start": "2026-11-15T14:00:00Z",
+      "end": "2026-11-15T17:00:00Z"
+    },
+    "parameters": {
+      "temperature_c": "t_2m:C",
+      "precipitation_1h_mm": "precip_1h:mm",
+      "cloud_cover_percent": "total_cloud_cover:p",
+      "wind_speed_10m_ms": "wind_speed_10m:ms"
+    },
+    "parameter_details": {
+      "temperature_c": {
+        "parameter": "t_2m:C",
+        "label": "Air temperature (2 m)",
+        "unit": "\u00b0C"
+      },
+      "precipitation_1h_mm": {
+        "parameter": "precip_1h:mm",
+        "label": "Hourly precipitation",
+        "unit": "mm"
+      },
+      "cloud_cover_percent": {
+        "parameter": "total_cloud_cover:p",
+        "label": "Total cloud cover",
+        "unit": "%"
+      },
+      "wind_speed_10m_ms": {
+        "parameter": "wind_speed_10m:ms",
+        "label": "10 m wind speed",
+        "unit": "m/s"
+      }
+    },
+    "current": {
+      "time": "2026-11-15T14:00:00Z",
+      "temperature_c": 8.0,
+      "precipitation_1h_mm": 0.0,
+      "cloud_cover_percent": 40.0,
+      "wind_speed_10m_ms": 3.2
+    },
+    "series": [
+      {
+        "time": "2026-11-15T14:00:00Z",
+        "temperature_c": 8.0,
+        "precipitation_1h_mm": 0.0,
+        "cloud_cover_percent": 40.0,
+        "wind_speed_10m_ms": 3.2
+      },
+      {
+        "time": "2026-11-15T15:00:00Z",
+        "temperature_c": 8.5,
+        "precipitation_1h_mm": 0.0,
+        "cloud_cover_percent": 45.0,
+        "wind_speed_10m_ms": 3.2
+      },
+      {
+        "time": "2026-11-15T16:00:00Z",
+        "temperature_c": 9.0,
+        "precipitation_1h_mm": 0.0,
+        "cloud_cover_percent": 50.0,
+        "wind_speed_10m_ms": null
+      }
+    ],
+    "fetched_at": "2026-11-15T14:05:00Z",
+    "stale": false,
+    "reason": null,
+    "source_note": "Meteomatics operational weather data. It is separate from NASA POWER climate-trend analysis.",
+    "provider_metadata": {
+      "note": "fixture"
     }
   }
 }
