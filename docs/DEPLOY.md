@@ -1,8 +1,8 @@
 # Publishing Trend Detective on free hosting
 
-**Status: prepared, not published.** Putting the app online needs an account with a hosting service, which only the project
-owner can create, so nothing has been deployed. Everything below is ready to use. The Docker route has not been built on
-the machine this was written on (no Docker there); the one-process mode it relies on *has* been run and checked locally.
+**Status: deployed on Vercel (Option D), private by default.** The Docker routes (A to C) are prepared but not published, and
+have not been built on the machine this was written on (no Docker there); the one-process mode they rely on *has* been run and
+checked locally.
 
 ## How it works
 
@@ -40,6 +40,29 @@ Create a Space of type **Docker**, push this repository to it, and set the Space
 ## Option C: Fly.io
 
 `fly launch` detects the `Dockerfile`; keep internal port `8000`.
+
+## Option D: Vercel (what is deployed now)
+
+Vercel serves the built front-end from its CDN and runs the API as one serverless Python function. Files involved:
+
+- `vercel.json`: builds `frontend/` into `frontend/dist`, and rewrites every `/api/...` request to the function.
+- `api/index.py`: the function's entry point; it loads `backend/app/main.py` (`TD_LOAD_ENV_FILE=0`, so no `.env` file is read).
+- `pyproject.toml`: the libraries the function installs (keep the pins in step with `backend/requirements.txt`).
+- `.vercelignore`: what the CLI must not upload. It replaces `.gitignore` for deploys, so the secret files are listed again there.
+
+Deploy from the repository root (first run: `npx vercel login`, then `npx vercel link --project trend-detective`):
+
+```bash
+npx vercel deploy --prod --yes
+```
+
+Set `OPENAI_API_KEY`, `METEOMATICS_USERNAME` etc. as Vercel project environment variables if you want those optional features.
+
+Things that differ from the one-process hosts above:
+
+- **Each request can run in a fresh process.** The in-memory caches and rate limits are per instance, so they help less and a cold request fetches NASA POWER again.
+- **A request is cut off after 60 seconds** (`maxDuration` in `vercel.json`). The first trend ledger or world survey can take close to that.
+- **New projects are private by default** (Vercel Authentication). Turn that off under Project Settings, Deployment Protection, for the public to see the site.
 
 ## What to expect on a free tier
 

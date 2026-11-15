@@ -1,0 +1,12 @@
+# Used only by the Vercel deployment (see docs/DEPLOY.md): it tells Vercel which Python libraries the hosted API function
+# needs. Local development and Docker keep using requirements.txt / backend/requirements.txt.
+# Keep these pins in step with backend/requirements.txt (the hosted function does not need uvicorn or pytest).
+[project]
+name = "trend-detective-api"
+version = "0.0.0"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi==0.115.6",
+  "httpx==0.28.1",
+  "python-dotenv==1.2.4",
+]

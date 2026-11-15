@@ -37,3 +37,7 @@ GEMINI.md
 .idea/
 .DS_Store
 Thumbs.db
+.vercel
+
+# Built site bundles made for upload to other hosts (rebuild them, never commit them)
+/release/

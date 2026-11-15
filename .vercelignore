@@ -1,0 +1,43 @@
+# What the Vercel CLI must NOT upload. This file replaces .gitignore for `vercel deploy`, so the secret and
+# machine-local entries from .gitignore are repeated here on purpose. Vercel installs and builds on its own servers.
+
+# Secrets and agent wiring (personal tokens live here)
+.env
+.env.*
+backend/.env
+backend/.env.*
+.mcp.json
+.claude/
+.cursor/
+.gemini/
+CLAUDE.md
+AGENTS.md
+GEMINI.md
+.cursorrules
+.windsurfrules
+
+# Machine-local and generated
+.git
+.app-pids.json
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+backend/.venv/
+**/__pycache__/
+.pytest_cache/
+frontend/node_modules/
+frontend/dist/
+
+# The root requirements.txt just points at backend/requirements.txt with `-r`, which Vercel's installer cannot follow;
+# the hosted function's libraries come from pyproject.toml instead.
+/requirements.txt
+
+# Not needed to run the site
+backend/tests/
+backend-review/
+frontend/tests/
+tools/
+docs/
+Planning and prompts/
+*.pdf
