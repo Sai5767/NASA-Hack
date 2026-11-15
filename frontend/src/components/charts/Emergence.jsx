@@ -1,20 +1,43 @@
-import { useRef } from "react";
+import { useMemo, useRef } from "react";
 import { useWidth } from "../../hooks.js";
-import { extent, linePath, linearScale, niceTicks } from "../../lib/chart.js";
+import { chartSpec, extent, linePath, linearScale, niceTicks } from "../../lib/chart.js";
+import { ExpandableChart } from "./ChartViewer.jsx";
+import { DEFAULT_SOURCE } from "./TrendChart.jsx";
 
-const M = { t: 14, r: 14, b: 28, l: 40 };
+const M = { t: 16, r: 14, b: 30, l: 44 };
 const Z_CRIT = 1.96;
+
+/** ChartViewer spec: Mann-Kendall z by end year (a test statistic, so never unit-converted). */
+export function emergenceSpec(series, year, { title, source, variable } = {}) {
+  return chartSpec({
+    title: title ?? `How the evidence builds${variable?.label ? `: ${variable.label}` : ""}`,
+    source: source ?? variable?.source ?? DEFAULT_SOURCE,
+    unit: "z-score",
+    convertible: false,
+    variable,
+    xKind: "year",
+    xLabel: "End year",
+    zeroLine: true,
+    thresholds: [
+      { y: Z_CRIT, label: "Significant rise (z above 1.96)" },
+      { y: -Z_CRIT, label: "Significant fall (z below −1.96)" },
+    ],
+    markers: year != null ? [{ x: year, label: `Became significant in ${year}` }] : [],
+    series: [{ id: "z", label: "Trend strength (z) using years up to this one", type: "line", style: "observed", data: series.map((s) => ({ x: s.end_year, y: s.z })) }],
+  });
+}
 
 /**
  * How the evidence builds as years are added. The line is the Mann-Kendall z-score of the record
- * from the first year up to each end year; beyond +/-1.96 the trend is significant.
+ * from the first year up to each end year; beyond +/-1.96 the trend is significant. Click to expand.
  */
-export default function Emergence({ series, year, significant }) {
+export default function Emergence({ series, year, significant, title, source, variable, expandable = true }) {
   const wrapRef = useRef(null);
   const width = useWidth(wrapRef, 360);
   const height = 230;
   const iw = Math.max(120, width - M.l - M.r);
   const ih = height - M.t - M.b;
+  const spec = useMemo(() => (series && series.length >= 2 ? emergenceSpec(series, year, { title, source, variable }) : null), [series, year, title, source, variable]);
 
   if (!series || series.length < 2) {
     return <p className="dim">Not enough years to show how the evidence builds.</p>;
@@ -29,35 +52,39 @@ export default function Emergence({ series, year, significant }) {
   const emergence = year != null ? series.find((s) => s.end_year === year) : null;
 
   return (
-    <div className="emergence" ref={wrapRef}>
-      <svg width={width} height={height} role="img" aria-label={year ? `The trend became significant in ${year}` : "The trend has not become significant"}>
-        <g transform={`translate(${M.l},${M.t})`}>
-          <rect x={0} y={0} width={iw} height={ys(Z_CRIT)} className="zone up" />
-          <rect x={0} y={ys(-Z_CRIT)} width={iw} height={ih - ys(-Z_CRIT)} className="zone down" />
-          {niceTicks(lo, hi, 4).map((v) => (
-            <g key={v}>
-              <line className="grid" x1={0} x2={iw} y1={ys(v)} y2={ys(v)} />
-              <text className="ax-tick" x={-8} y={ys(v)} textAnchor="end" dominantBaseline="middle">{v}</text>
+    <div className="emergence">
+      <ExpandableChart spec={spec} disabled={!expandable}>
+        <div ref={wrapRef} className="chart-wrap">
+          <svg width={width} height={height} role="img" aria-label={year ? `The trend became significant in ${year}` : "The trend has not become significant"}>
+            <g transform={`translate(${M.l},${M.t})`}>
+              <rect x={0} y={0} width={iw} height={Math.max(0, ys(Z_CRIT))} className="ch-zone" />
+              <rect x={0} y={ys(-Z_CRIT)} width={iw} height={Math.max(0, ih - ys(-Z_CRIT))} className="ch-zone" />
+              {niceTicks(lo, hi, 4).map((v) => (
+                <g key={v}>
+                  <line className="ch-grid" x1={0} x2={iw} y1={ys(v)} y2={ys(v)} />
+                  <text className="ch-tick" x={-8} y={ys(v)} textAnchor="end" dominantBaseline="middle">{v}</text>
+                </g>
+              ))}
+              <line className="ch-threshold" x1={0} x2={iw} y1={ys(Z_CRIT)} y2={ys(Z_CRIT)} />
+              <line className="ch-threshold" x1={0} x2={iw} y1={ys(-Z_CRIT)} y2={ys(-Z_CRIT)} />
+              <text className="ch-note" x={6} y={ys(Z_CRIT) - 6}>Significant rise ▲</text>
+              <text className="ch-note" x={6} y={ys(-Z_CRIT) + 16}>Significant fall ▼</text>
+              {niceTicks(series[0].end_year, series[series.length - 1].end_year, Math.max(3, Math.floor(iw / 80))).map((v) => (
+                <text key={v} className="ch-tick" x={xs(v)} y={ih + 19} textAnchor="middle">{v}</text>
+              ))}
+              <path className="ch-line observed draw" pathLength="1" d={linePath(points)} style={{ "--d": "300ms", "--dur": "1.2s" }} />
+              {emergence && (
+                <g className="reveal-fade">
+                  <line className="ch-marker" x1={xs(year)} x2={xs(year)} y1={0} y2={ih} />
+                  <circle cx={xs(year)} cy={ys(emergence.z)} r={5} className="ch-point actual" />
+                  <text className="ch-value-label" x={Math.min(xs(year) + 8, iw - 44)} y={14}>{year}</text>
+                </g>
+              )}
             </g>
-          ))}
-          <line className="thresh" x1={0} x2={iw} y1={ys(Z_CRIT)} y2={ys(Z_CRIT)} />
-          <line className="thresh" x1={0} x2={iw} y1={ys(-Z_CRIT)} y2={ys(-Z_CRIT)} />
-          <text className="zone-label" x={6} y={ys(Z_CRIT) - 5}>significant ↑</text>
-          <text className="zone-label" x={6} y={ys(-Z_CRIT) + 13}>significant ↓</text>
-          {niceTicks(series[0].end_year, series[series.length - 1].end_year, Math.max(3, Math.floor(iw / 80))).map((v) => (
-            <text key={v} className="ax-tick" x={xs(v)} y={ih + 17} textAnchor="middle">{v}</text>
-          ))}
-          <path className="draw" pathLength="1" d={linePath(points)} fill="none" stroke="var(--amber)" strokeWidth="2.4" strokeLinejoin="round" style={{ "--d": "700ms", "--dur": "1.6s" }} />
-          {emergence && (
-            <g className="reveal-pop" style={{ "--d": "2000ms" }}>
-              <line className="emerge-line" x1={xs(year)} x2={xs(year)} y1={0} y2={ih} />
-              <circle cx={xs(year)} cy={ys(emergence.z)} r={5.5} fill="var(--accent)" stroke="#04060d" strokeWidth="2" />
-              <text className="emerge-label" x={Math.min(xs(year) + 8, iw - 70)} y={14}>{year}</text>
-            </g>
-          )}
-        </g>
-      </svg>
-      <p className="fp-note">
+          </svg>
+        </div>
+      </ExpandableChart>
+      <p className="ch-note-text">
         {year
           ? `Seen on its own, the record first became — and stayed — significant in ${year}. (Descriptive only: each point reuses the earlier years; the z-scores are adjusted for year-to-year correlation.)`
           : significant === false

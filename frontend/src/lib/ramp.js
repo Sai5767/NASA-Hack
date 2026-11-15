@@ -4,10 +4,10 @@
  */
 
 const RAMPS = {
-  thermal: { pos: "warm", neg: "cool", above: "Warmer than its normal", below: "Cooler than its normal" },
-  water: { pos: "wet", neg: "dry", above: "Wetter than its normal", below: "Drier than its normal" },
-  cloud: { pos: "cloud", neg: "cool", above: "More cloud than its normal", below: "Less cloud than its normal" },
-  other: { pos: "warm", neg: "cool", above: "Above its normal", below: "Below its normal" },
+  thermal: { pos: "warm", neg: "cool", above: "Warmer than usual", below: "Cooler than usual", sentence: "Warmer or cooler than this place usually is in this month" },
+  water: { pos: "wet", neg: "dry", above: "Wetter than usual", below: "Drier than usual", sentence: "Wetter or drier than this place usually is in this month" },
+  cloud: { pos: "cloud", neg: "cool", above: "More cloud than usual", below: "Less cloud than usual", sentence: "Cloudier or clearer than this place usually is in this month" },
+  other: { pos: "warm", neg: "cool", above: "Higher than usual", below: "Lower than usual", sentence: "Higher or lower than this place usually is in this month" },
 };
 
 /** Which ramp a /api/variables entry uses: by group, with CLOUD_AMT as the one per-variable exception. */

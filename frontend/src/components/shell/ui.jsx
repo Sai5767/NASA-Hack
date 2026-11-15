@@ -8,15 +8,11 @@
  *   <Drawer title onClose>…</Drawer>   (in Drawer.jsx: right drawer on desktop/tablet, full-height sheet on mobile)
  */
 import { useEffect, useState } from "react";
+import { LogoMark } from "./Logo.jsx";
 
+/** Kept for older imports: the V3 logo mark (see Logo.jsx). */
 export function BrandMark({ className = "brand-mark" }) {
-  return (
-    <svg className={className} viewBox="0 0 48 48" aria-hidden="true" focusable="false">
-      <circle cx="22" cy="22" r="15" fill="none" stroke="var(--accent)" strokeWidth="2.4" />
-      <path d="M11 28 L17 22 L22 25 L32 14" fill="none" stroke="var(--accent)" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
-      <line x1="33" y1="33" x2="44" y2="44" stroke="var(--accent)" strokeWidth="3.4" strokeLinecap="round" />
-    </svg>
-  );
+  return <LogoMark className={className} />;
 }
 
 const BADGE_GLYPH = { observed: "▣", forecast: "", live: "", stale: "◔", unverified: "◇", source: "" };
@@ -56,7 +52,7 @@ export function StateCard({ kind = "empty", title, children, action, slowAfter =
   }, [kind, slowAfter]);
   return (
     <div className={`td-state td-state--${kind}`} role={STATE_ROLE[kind]} aria-live={STATE_ROLE[kind] && STATE_ROLE[kind] !== "alert" ? "polite" : undefined}>
-      <span className="td-state-glyph" aria-hidden="true">{kind === "loading" ? <i className="td-scanbars"><b /><b /><b /></i> : STATE_GLYPH[kind]}</span>
+      <span className="td-state-glyph" aria-hidden="true">{kind === "loading" ? <i className="td-loading-dot" /> : STATE_GLYPH[kind]}</span>
       <div className="td-state-text">
         {title && <p className="td-state-title">{title}</p>}
         {children && <div className="td-state-body">{children}</div>}

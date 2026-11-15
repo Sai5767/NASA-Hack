@@ -1,165 +1,165 @@
 /*
- * Theme tokens: the single V2 "mission" theme (docs/V2_FABLE_VISUAL_SPEC.md section 2.2, pasted as written).
- * Legacy token names (--bg-0, --panel, --line, --text, --accent, --up, --down, --flat, --amber, --ok, --font-*, --radius, --ease)
- * are kept and re-pointed, so the existing CSS keeps working. Colours drawn by JavaScript mirror these in src/lib/theme.js.
+ * V3 "Quiet Earth" design tokens: the ONE source of truth for every colour, line, radius, type size and motion value
+ * (docs/V3_QUIET_EARTH_VISUAL_SPEC.md). Components must not hard-code nearby blacks, greys, borders or whites.
+ *
+ * Groups, in order:
+ *   1. Interface (black / white / neutral grey only)      --bg, --surface, --grey-*, --text*, --border*, --focus-*
+ *   2. Earth exceptions (inside the globe only)            --earth-*
+ *   3. Data scales (on the data layer and its legend only) --data-*, --missing-*, --forecast-*
+ *   4. News attention (marker outline / glyph / leader)    --news-*
+ *   5. Saved-pin palette (user marker identity)            --pin-1 .. --pin-6
+ *   6. Type, space, radius, elevation, z-index, motion
+ *   7. Legacy aliases (V2 names re-pointed to the V3 values so older CSS stays monochrome until it is migrated)
+ *
+ * Canvas code reads these through src/lib/tokens.js (FALLBACK mirrors this file). Some legacy names hold literal
+ * values because tests/theme.test.mjs and lib/theme.js compare them literally; their V3 names alias them.
  */
 :root {
   color-scheme: dark;
 
-  /* ---- Background and surfaces ---- */
-  --bg-0: #05070d;            /* page, near-black */
-  --bg-1: #0a0f1c;            /* raised page areas, rail background */
-  --bg-2: #111a2e;            /* wells, inputs on hover */
-  --surface-0: #0a0f1c;
-  --surface-1: #0e1524;       /* cards */
-  --surface-2: #152038;       /* raised cards, popovers, drawers */
-  --surface-3: #1c2a47;       /* selected rows, pressed states */
-  --scrim: rgba(3, 5, 10, 0.56);
-  --panel: rgba(14, 21, 36, 0.82);          /* legacy name: translucent card */
-  --panel-solid: #0e1524;                   /* legacy name */
-  --panel-raised: rgba(21, 32, 56, 0.86);   /* legacy name */
-  --ink-rgb: 5, 7, 13;                      /* legacy name */
+  /* ================= 1. Interface: black, white, neutral grey ================= */
+  --bg: #050505;              /* page black: the only page background */
+  --surface: #0e0e0e;         /* lifted black: the only reading surface (focus panel, sheets, sign-in, popovers) */
+  --surface-scrim: rgba(5, 5, 5, 0.72);   /* behind a modal sheet; same hue as --bg */
 
-  /* ---- Text ---- */
-  --text: #e8eefc;            /* 15.7:1 on surface-1 */
-  --text-dim: #aab6d3;        /*  9.0:1 on surface-1 */
-  --text-faint: #8c99ba;      /*  6.4:1 on surface-1, 5.0:1 on surface-3: smallest text allowed is 12px */
-  --text-on-accent: #120a2e;  /*  8.5:1 on --accent */
-  --text-on-data: #05070d;    /* dark ink for labels printed on a data colour, >= 4.9:1 on every ramp step */
+  --grey-900: #161616;        /* hover fill on --surface */
+  --grey-800: #1f1f1f;        /* selected / pressed fill */
+  --grey-700: #2a2a2a;        /* hairline border */
+  --grey-600: #3d3d3d;        /* disabled control outline, track */
+  --grey-500: #6b6b6b;        /* control boundary: 3.6:1 on --surface (WCAG 1.4.11) */
+  --grey-400: #8c8c8c;        /* faint text: 5.7:1 on --surface, 6.0:1 on --bg */
+  --grey-300: #b3b3b3;        /* secondary text: 9.2:1 on --surface */
+  --grey-100: #f2f2f2;        /* primary text: 17.3:1 on --surface */
+  --white: #ffffff;           /* focus ring, primary action fill, the logo */
 
-  /* ---- Lines and borders ---- */
-  --line-rgb: 125, 160, 230;
-  --line: rgba(var(--line-rgb), 0.16);          /* decorative separators only (1.3:1) */
-  --line-strong: rgba(var(--line-rgb), 0.36);   /* card outlines (2.0:1): never the only cue for a control */
-  --line-control: #6c80ad;                      /* input/button/toggle boundaries: >= 3.6:1 on surfaces 0-3 */
+  --text: #f2f2f2;
+  --text-dim: #b3b3b3;
+  --text-faint: #8c8c8c;
+  --text-on-light: #050505;   /* ink on a white button or a data-colour swatch */
 
-  /* ---- Accent (interface only, never data) ---- */
-  --accent-rgb: 179, 161, 255;
-  --accent: #b3a1ff;          /* 8.2:1 on surface-1 */
-  --accent-dim: rgba(var(--accent-rgb), 0.16);
-  --accent-ink: #120a2e;      /* legacy name, same as --text-on-accent */
-  --glow-rgb: 120, 150, 255;
+  --border: #2a2a2a;          /* THE hairline: 1px, used for every separator and every outline that needs one */
+  --border-control: #6b6b6b;  /* inputs, toggles, sliders: must stay >= 3:1 */
+  --border-width: 1px;
 
-  /* ---- Focus ---- */
-  --focus-ring: #ffffff;                        /* 14.3:1 or better on every surface */
+  --hover: #161616;
+  --selected: #1f1f1f;
+
+  --focus-ring: #ffffff;
   --focus-ring-width: 2px;
   --focus-ring-offset: 2px;
-  --focus-halo: 0 0 0 5px rgba(var(--accent-rgb), 0.45);   /* outer halo so the ring also shows on light data cells */
+  --focus-halo: 0 0 0 4px rgba(5, 5, 5, 0.85);   /* dark halo outside the white ring so it reads on light data cells */
 
-  /* ---- Globe base (decorative, procedural) ---- */
-  --globe-ocean-lit: #12356b;
-  --globe-ocean-dark: #061226;
-  --globe-flat-ocean: #0a1a36;
-  --globe-land: #1b3555;
-  --globe-coast: rgba(159, 196, 255, 0.60);
-  --globe-border: rgba(159, 196, 255, 0.16);
-  --globe-graticule: rgba(125, 160, 230, 0.10);
-  --globe-halo-rgb: 110, 160, 255;              /* atmosphere halo, max alpha 0.28 */
-  --globe-limb: rgba(150, 200, 255, 0.40);
+  /* Trend / evidence in the interface: monochrome. Direction is carried by the glyph (▲ ▼ –), strength by filled marks. */
+  --trend-up: #f2f2f2;
+  --trend-down: #f2f2f2;
+  --trend-flat: #8c8c8c;
+  --evidence-on: #f2f2f2;     /* filled meter mark */
+  --evidence-off: #3d3d3d;    /* empty meter mark */
 
-  /* ---- Data: thermal diverging ramp (above / below the cell's own monthly normal) ---- */
-  --data-warm-1: #f7dc8f;     /* slightly above */
-  --data-warm-2: #f9b54a;
-  --data-warm-3: #f77f35;
-  --data-warm-4: #ff5340;     /* far above */
-  --data-cool-1: #a6e3f2;     /* slightly below */
-  --data-cool-2: #5cc0f5;
-  --data-cool-3: #5a9dff;
-  --data-cool-4: #5683ff;     /* far below */
-  --data-neutral: #9aa4b8;    /* near normal */
+  /* ================= 2. Earth exceptions (inside the globe disc only) ================= */
+  --globe-ocean-lit: #1d4a72;     /* sunlit ocean */
+  --globe-ocean-dark: #061525;    /* night-side ocean */
+  --globe-flat-ocean: #0a2236;    /* flat-map ocean */
+  --globe-land: #3f5236;          /* temperate land, muted green */
+  --globe-halo-rgb: 120, 170, 230;  /* atmosphere rim, max alpha 0.22, never outside ~4% of the radius */
+  --earth-ocean-lit: var(--globe-ocean-lit);
+  --earth-ocean-dark: var(--globe-ocean-dark);
+  --earth-flat-ocean: var(--globe-flat-ocean);
+  --earth-land: var(--globe-land);
+  --earth-land-dry: #6e6146;      /* arid land, muted brown */
+  --earth-ice: #e6ebee;           /* ice caps and cloud */
+  --earth-coast: rgba(225, 232, 225, 0.26);
+  --earth-border: rgba(255, 255, 255, 0.07);
+  --earth-graticule: rgba(255, 255, 255, 0.035);
+  --earth-atmosphere-rgb: var(--globe-halo-rgb);
+  --earth-limb: rgba(150, 190, 235, 0.30);
+  --star: #d9d9d9;                /* sparse static stars, alpha 0.15-0.6 */
 
-  /* ---- Data: water diverging ramp (wetter / drier than normal) ---- */
-  --data-wet-1: #a5ecd9;
-  --data-wet-2: #4fd1b5;
-  --data-wet-3: #25b3a3;
-  --data-wet-4: #1a9c93;
-  --data-dry-1: #ead9b0;
-  --data-dry-2: #d1ac6b;
-  --data-dry-3: #bd8a47;
-  --data-dry-4: #a8733a;
+  /* ================= 3. Data scales (data layer + its legend ONLY) ================= */
+  /* Thermal diverging: warmer / cooler than this place's usual month. Restrained terracotta vs steel blue. */
+  --data-warm-1: #efd8b8;
+  --data-warm-2: #e2b182;
+  --data-warm-3: #d08455;
+  --data-warm-4: #c0654a;
+  --data-cool-1: #cadcea;
+  --data-cool-2: #9cbfdd;
+  --data-cool-3: #6f9fc9;
+  --data-cool-4: #4a7fb5;
+  --data-neutral: #7a7a7a;        /* near usual */
+  /* Water diverging: wetter (blue-green) / drier (sand) */
+  --data-wet-1: #c3e0dd;
+  --data-wet-2: #8cc3bf;
+  --data-wet-3: #5aa3a0;
+  --data-wet-4: #3f8a8c;
+  --data-dry-1: #e8dcc0;
+  --data-dry-2: #cdb88a;
+  --data-dry-3: #ad935e;
+  --data-dry-4: #93804e;
+  /* Cloud: more cloud than usual = lighter. "Less cloud" uses --data-cool-* */
+  --data-cloud-1: #8a8a8a;
+  --data-cloud-2: #adadad;
+  --data-cloud-3: #d0d0d0;
+  --data-cloud-4: #f0f0f0;
+  --text-on-data: #050505;        /* >= 4.5:1 on every ramp step above */
+  /* Single-hue data marks (world sample dots, rise/fall on a DATA layer legend; never UI arrows/chips) */
+  --data-up: var(--up);
+  --data-down: var(--down);
+  --data-flat: var(--flat);
+  --data-water: #8cc3bf;
+  --data-cloud: #d0d0d0;
+  /* Missing data: neutral hatch, never zero, never a data colour */
+  --missing-fg: #8c8c8c;
+  --missing-bg: rgba(140, 140, 140, 0.10);
+  --missing-pattern: repeating-linear-gradient(45deg, rgba(140, 140, 140, 0.55) 0 1px, transparent 1px 6px),
+                     repeating-linear-gradient(-45deg, rgba(140, 140, 140, 0.55) 0 1px, transparent 1px 6px);
+  /* Forecast: label + dashed divider + hatch, on top of the data colour */
+  --forecast-line: #e6e6e6;
+  --forecast-dash: 6 4;
+  --forecast-fill-alpha: 0.55;
+  --forecast-hatch: repeating-linear-gradient(45deg, rgba(230, 230, 230, 0.65) 0 1.5px, transparent 1.5px 8px);
+  --forecast-zone-bg: rgba(230, 230, 230, 0.05);
+  /* Scan cell evidence styles (section 12 item 6): border style carries it, not colour */
+  --cell-holds: solid;            /* still holds after correction */
+  --cell-before-only: dashed;     /* only before correction */
+  --cell-stroke: #f2f2f2;
 
-  /* ---- Data: cloud ramp (more cloud than normal; "less cloud" uses --data-cool-*) ---- */
-  --data-cloud-1: #aab4c8;
-  --data-cloud-2: #c5cddc;
-  --data-cloud-3: #dfe5ef;
-  --data-cloud-4: #ffffff;
-
-  /* ---- Data: single-colour identities (chips, sparklines, icons) ---- */
-  --data-water: #38bdf8;
-  --data-cloud: #d5dceb;
-  --up: #ff7a5c;              /* legacy: rising trend, always with a ▲ */
-  --up-dim: rgba(255, 122, 92, 0.16);
-  --down: #5ab4ff;            /* legacy: falling trend, always with a ▼ */
-  --down-dim: rgba(90, 180, 255, 0.16);
-  --flat: #9aa4b8;            /* legacy: no clear trend */
-
-  /* ---- Data-type tints (onboarding tiles, picker chips: icon and 2px underline only) ---- */
-  --type-heat: #f77f35;
-  --type-water: #4fd1b5;
-  --type-cloud: #c5cddc;
-  --type-land: #d1ac6b;
-  --type-wind: #9aa4b8;
-  --type-ice: #a6e3f2;
-
-  /* ---- Missing data: neutral pattern, never a data colour ---- */
-  --missing-fg: #8c97b0;                        /* cross-hatch strokes and dotted outline */
-  --missing-bg: rgba(140, 151, 176, 0.10);
-  --missing-pattern: repeating-linear-gradient(45deg, rgba(140, 151, 176, 0.55) 0 1px, transparent 1px 6px),
-                     repeating-linear-gradient(-45deg, rgba(140, 151, 176, 0.55) 0 1px, transparent 1px 6px);
-
-  /* ---- Forecast: hatch + dashed outline + label, on top of the data colour ---- */
-  --forecast-line: #e9e4ff;                     /* dashed outline and divider */
-  --forecast-dash: 6 4;                         /* canvas setLineDash([6, 4]); SVG stroke-dasharray */
-  --forecast-fill-alpha: 0.55;                  /* data colour is drawn at this alpha under the hatch */
-  --forecast-hatch: repeating-linear-gradient(45deg, rgba(233, 228, 255, 0.70) 0 1.5px, transparent 1.5px 8px);
-  --forecast-zone-bg: rgba(233, 228, 255, 0.06);
-
-  /* ---- Live weather (Meteomatics): its own identity, never on the trend ramps ---- */
-  --live: #ff8fd6;            /* 8.8:1 on surface-1 */
-  --live-dim: rgba(255, 143, 214, 0.16);
-
-  /* ---- News attention labels: border and glyph only, never a fill ---- */
-  --news-green: #3ddc97;      /* glyph: circle */
-  --news-amber: #ffb938;      /* glyph: triangle */
-  --news-red: #ff5a52;        /* glyph: diamond */
-  --news-unverified: #8c99ba; /* dashed neutral border */
+  /* ================= 4. News attention (verified markers: outline, glyph, leader ONLY; never a fill) ================= */
+  --news-green: #4cc38a;          /* low attention, glyph: circle */
+  --news-amber: #f5b83d;          /* medium attention, glyph: triangle */
+  --news-red: #f2555a;            /* high attention, glyph: diamond */
+  --news-unverified: #8c8c8c;     /* "Unverified news context": dashed, no severity */
+  --news-unverified-dash: 3 3;
   --news-border-width: 2px;
+  --news-leader-width: 1px;
 
-  /* ---- Interface states ---- */
-  --state-ok: #3ddc97;
-  --state-warn: #ffb938;
-  --state-error: #ff6b63;
-  --state-info: #aab6d3;
-  --state-stale: #ffb938;     /* always with a clock glyph and the age in text */
-  --ok: var(--state-ok);      /* legacy */
-  --amber: var(--state-warn); /* legacy */
+  /* ================= 5. Saved-pin palette (never news red/amber/green; always with label + pin glyph) ================= */
+  --pin-1: #f5f5f5;   /* snow */
+  --pin-2: #a3a3a3;   /* silver */
+  --pin-3: #9fd3f0;   /* ice */
+  --pin-4: #c4b5fd;   /* lavender */
+  --pin-5: #d6c7a1;   /* sand */
+  --pin-6: #5c5c5c;   /* graphite: always drawn with a 1px --white outline */
+  --pin-outline: #050505;
 
-  /* ---- Evidence verdict (one hue; the tier is carried by the meter count, border style and label) ---- */
-  --verdict-strong: #b3a1ff;
-  --verdict-some: #b3a1ff;
-  --verdict-none: #9aa4b8;
-  --verdict-insufficient: #8c99ba;
-
-  /* ---- Typography ---- */
-  --font-display: "Space Grotesk Variable", "Space Grotesk", system-ui, sans-serif;
-  --font-mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, Consolas, monospace;
-  --fs-11: 0.6875rem;   /* uppercase mono eyebrows only, letter-spacing .12em */
-  --fs-12: 0.75rem;     /* captions, badges: the minimum for sentence text */
-  --fs-13: 0.8125rem;   /* secondary text, chips, buttons-sm */
-  --fs-15: 0.9375rem;   /* body (root stays 15px equivalent) */
-  --fs-17: 1.0625rem;   /* card titles */
-  --fs-20: 1.25rem;     /* section titles, verdict label on mobile */
-  --fs-24: 1.5rem;      /* verdict label, sign-in title */
-  --fs-32: 2rem;        /* timeline month readout, live temperature */
-  --fs-44: 2.75rem;     /* onboarding question on desktop */
+  /* ================= 6. Type ================= */
+  --font-ui: "Space Grotesk Variable", "Space Grotesk", system-ui, sans-serif;     /* all readable UI text */
+  --font-value: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, Consolas, monospace;  /* values, months, coords */
+  --fs-label: 0.8125rem;    /* 13px: short labels, units, legend keys, values only (never sentences) */
+  --fs-small: 0.875rem;     /* 14px: secondary one-liners */
+  --fs-body: 0.9375rem;     /* 15px: minimum body text */
+  --fs-lead: 1.0625rem;     /* 17px: group labels, panel lead */
+  --fs-title: 1.25rem;      /* 20px: panel titles */
+  --fs-verdict: 1.5rem;     /* 24px: verdict, sign-in heading */
+  --fs-display: 2rem;       /* 32px: month readout, big value */
+  --fs-hero: 2.75rem;       /* 44px: onboarding question, desktop */
   --lh-tight: 1.15;
   --lh-snug: 1.35;
   --lh-body: 1.55;
   --fw-regular: 400;
   --fw-medium: 500;
-  --fw-bold: 700;
-  --tracking-eyebrow: 0.12em;
-  --tracking-brand: 0.14em;
+  --fw-bold: 600;
+  --tracking-tight: -0.01em;
+  --tracking-label: 0.02em;
 
   /* ---- Spacing (4px base) ---- */
   --space-1: 4px;
@@ -175,41 +175,33 @@
 
   /* ---- Layout ---- */
   --topbar-h: 56px;
-  --dash-w: 340px;
-  --rail-h: 132px;
-  --drawer-w: 480px;
+  --rail-w: 288px;          /* left control rail, 272-300 */
+  --focus-w: 420px;         /* right focus panel */
+  --timeline-h: 44px;       /* thin floating scrubber */
   --hit-min: 32px;
 
-  /* ---- Radii ---- */
-  --radius-xs: 4px;     /* heat-map legend swatches, badges */
-  --radius-sm: 8px;     /* buttons-sm, inputs */
-  --radius-md: 10px;    /* buttons, chips' inner controls */
-  --radius: 14px;       /* cards (legacy name) */
-  --radius-lg: 20px;    /* globe stage, sign-in card, sheets */
-  --radius-pill: 999px;
+  /* ---- Radius scale (one per component; never mix) ---- */
+  --radius-xs: 2px;         /* legend swatches */
+  --radius-sm: 6px;         /* buttons, inputs, chips that are not pills */
+  --radius-md: 10px;        /* focus panel, popovers, callouts, sheets, sign-in surface */
+  --radius-pill: 999px;     /* round account control, segmented switch, pill chips */
 
-  /* ---- Shadows and glows ---- */
-  --shadow-1: 0 2px 8px rgba(0, 0, 0, 0.40);
-  --shadow-2: 0 12px 32px rgba(0, 0, 0, 0.50);
-  --shadow-3: 0 24px 64px rgba(0, 0, 0, 0.60);
-  --glow-accent: 0 0 26px rgba(var(--accent-rgb), 0.30);
-  --glow-globe: 0 0 60px rgba(var(--globe-halo-rgb), 0.08);
-  --glow-live: 0 0 18px rgba(255, 143, 214, 0.35);
+  /* ---- Elevation: only floating layers over the Earth get a shadow; no glows, no blur ---- */
+  --shadow-float: 0 12px 32px rgba(0, 0, 0, 0.55);
 
   /* ---- Z-index layers ---- */
   --z-starfield: 0;
   --z-content: 1;
-  --z-globe-hud: 3;       /* legend, zoom controls, readout */
-  --z-globe-tip: 5;       /* tooltips, closed news card */
+  --z-globe-hud: 3;
+  --z-globe-tip: 5;
   --z-rail: 10;
   --z-topbar: 20;
-  --z-popover: 30;        /* term tooltips, account popover */
-  --z-drawer: 40;         /* dashboard drawer, evidence drawer, sheets (with scrim) */
+  --z-popover: 30;
+  --z-drawer: 40;
   --z-modal: 50;
   --z-toast: 60;
 
-  /* ---- Motion (see section 4) ---- */
-  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);           /* legacy: standard decelerate */
+  /* ---- Motion: allowed = rotation, orientation, frame cross-fade, callout emergence, page transition ---- */
   --ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
   --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
   --ease-exit: cubic-bezier(0.4, 0, 1, 1);
@@ -218,29 +210,119 @@
   --dur-fast: 160ms;
   --dur-base: 240ms;
   --dur-slow: 360ms;
-  --dur-page: 320ms;
+  --dur-page: 280ms;
+  --dur-callout: 200ms;            /* 150-250ms marker -> leader -> callout */
+  --dur-frame-fade: 220ms;         /* 150-300ms adjacent returned frames */
   --dur-fly: 1400ms;
-  --dur-cell-reveal: 450ms;
-  --dur-cell-stagger: 650ms;
-  --dur-scan-sweep: 2200ms;
-  --dur-frame-fade-max: 360ms;
-  --frame-dwell-05x: 1200ms;
-  --frame-dwell-1x: 600ms;
-  --frame-dwell-2x: 300ms;
-  --frame-dwell-4x: 150ms;
-  --globe-idle-deg-per-s: 2;        /* one revolution in 180 s */
-  --globe-idle-resume-delay: 8000ms;
-  --globe-idle-ramp: 1200ms;
+  --globe-idle-deg-per-s: 2;
+  --globe-idle-resume-delay: 1000ms;   /* 0.75-1.25s after release */
+  --globe-idle-ramp: 900ms;
+
+  /* ================= 7. Legacy aliases (V2 names; migrate to the V3 names above) ================= */
+  --accent: #f2f2f2;              /* was violet; now primary text white */
+  --accent-rgb: 242,242,242;
+  --accent-dim: rgba(255, 255, 255, 0.08);
+  --accent-ink: #050505;
+  --text-on-accent: #050505;
+  --live: #a3a3a3;                /* was pink; Meteomatics identity is now the glyph + "Live" label, silver */
+  --live-dim: rgba(163, 163, 163, 0.14);
+  --up: #d08455;                  /* DATA rise (world dots/legends). UI arrows use --trend-up */
+  --down: #6f9fc9;                /* DATA fall. UI arrows use --trend-down */
+  --flat: #7a7a7a;
+  --up-dim: rgba(208, 132, 85, 0.14);
+  --down-dim: rgba(111, 159, 201, 0.14);
+  --glow-rgb: 0, 0, 0;            /* glows retired: any leftover rgba(var(--glow-rgb), a) is now invisible on black */
+  --glow-accent: none;
+  --glow-globe: none;
+  --glow-live: none;
+
+  --bg-0: var(--bg);
+  --bg-1: var(--surface);
+  --bg-2: var(--grey-900);
+  --surface-0: var(--bg);
+  --surface-1: var(--surface);
+  --surface-2: var(--surface);
+  --surface-3: var(--selected);
+  --scrim: var(--surface-scrim);
+  --panel: var(--surface);        /* was translucent blurred card */
+  --panel-solid: var(--surface);
+  --panel-raised: var(--surface);
+  --ink-rgb: 5, 5, 5;
+
+  --line-rgb: 255, 255, 255;
+  --line: var(--border);
+  --line-strong: var(--border);
+  --line-control: var(--border-control);
+
+  --globe-flat: var(--globe-flat-ocean);
+  --globe-coast: var(--earth-coast);
+  --globe-border: var(--earth-border);
+  --globe-graticule: var(--earth-graticule);
+  --globe-limb: var(--earth-limb);
+
+  --type-heat: var(--text);
+  --type-water: var(--text);
+  --type-cloud: var(--text);
+  --type-land: var(--text);
+  --type-wind: var(--text);
+  --type-ice: var(--text);
+
+  --state-ok: var(--text);
+  --state-warn: var(--text);
+  --state-error: var(--text);
+  --state-info: var(--text-dim);
+  --state-stale: var(--text-dim);
+  --ok: var(--state-ok);
+  --amber: var(--state-warn);
+
+  --verdict-strong: var(--evidence-on);
+  --verdict-some: var(--evidence-on);
+  --verdict-none: var(--text-faint);
+  --verdict-insufficient: var(--text-faint);
+
+  --font-display: var(--font-ui);
+  --font-mono: var(--font-value);
+  --fs-11: var(--fs-label);
+  --fs-12: var(--fs-label);
+  --fs-13: var(--fs-label);
+  --fs-15: var(--fs-body);
+  --fs-17: var(--fs-lead);
+  --fs-20: var(--fs-title);
+  --fs-24: var(--fs-verdict);
+  --fs-32: var(--fs-display);
+  --fs-44: var(--fs-hero);
+  --tracking-eyebrow: var(--tracking-label);
+  --tracking-brand: var(--tracking-label);
+
+  --dash-w: var(--rail-w);
+  --drawer-w: var(--focus-w);
+  --rail-h: 116px;
+
+  --radius: var(--radius-md);
+  --radius-lg: var(--radius-md);
+
+  --shadow-1: none;
+  --shadow-2: var(--shadow-float);
+  --shadow-3: var(--shadow-float);
+
+  --ease: var(--ease-standard);
+  --dur-cell-reveal: var(--dur-base);
+  --dur-cell-stagger: 0ms;
+  --dur-scan-sweep: 0ms;          /* radar sweep retired */
+  --dur-frame-fade-max: 300ms;
+  --frame-dwell-05x: 1600ms;
+  --frame-dwell-1x: 900ms;
+  --frame-dwell-2x: 450ms;
+  --frame-dwell-4x: 225ms;
+
+  --pin-a: var(--accent);
+  --pin-b: var(--live);
 }
 
-@media (min-width: 1440px) { :root { --dash-w: 380px; } }
-@media (max-width: 1199.98px) { :root { --drawer-w: 420px; } }
-@media (max-width: 767.98px) { :root { --topbar-h: 52px; --rail-h: 116px; } }
+@media (max-width: 1199.98px) { :root { --focus-w: 380px; --rail-w: 272px; } }
+@media (max-width: 767.98px) { :root { --topbar-h: 52px; } }
 @media (pointer: coarse) { :root { --hit-min: 44px; } }
-
-/* Legacy aliases used by older CSS that the spec block does not define. */
-:root { --pin-a: var(--accent); --pin-b: var(--live); }
-/* ---- end of theme tokens ---- */
+/* ---- end of tokens ---- */
 
 *,
 *::before,
@@ -249,7 +331,7 @@
 }
 
 html {
-  background: var(--bg-0);
+  background: var(--bg);
   scroll-behavior: smooth;
 }
 
@@ -257,28 +339,12 @@ body {
   margin: 0;
   min-height: 100vh;
   color: var(--text);
-  font-family: var(--font-display);
-  font-size: 15px;
-  line-height: 1.55;
-  background:
-    radial-gradient(1200px 700px at 78% -10%, rgba(var(--glow-rgb), 0.07), transparent 60%),
-    radial-gradient(900px 640px at 4% 108%, rgba(var(--glow-rgb), 0.06), transparent 60%),
-    var(--bg-0);
-  background-attachment: fixed;
+  font-family: var(--font-ui);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  background: var(--bg);
   overflow-x: hidden;
-}
-
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  background-image:
-    linear-gradient(rgba(var(--line-rgb), 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(var(--line-rgb), 0.05) 1px, transparent 1px);
-  background-size: 52px 52px;
-  mask-image: radial-gradient(ellipse at 50% 28%, #000 15%, transparent 72%);
+  -webkit-font-smoothing: antialiased;
 }
 
 #root {
@@ -287,12 +353,12 @@ body::before {
 }
 
 h1, h2, h3, h4, p { margin: 0; }
-h2, h3 { letter-spacing: -0.01em; }
+h1, h2, h3 { letter-spacing: var(--tracking-tight); font-weight: var(--fw-medium); }
 ul { margin: 0; padding: 0; list-style: none; }
-button, input, select { font: inherit; color: inherit; }
+button, input, select, textarea { font: inherit; color: inherit; }
 button { cursor: pointer; }
 
-.mono { font-family: var(--font-mono); font-feature-settings: "zero" 1; }
+.mono { font-family: var(--font-value); font-feature-settings: "zero" 1; }
 .dim { color: var(--text-dim); }
 .faint { color: var(--text-faint); }
 .sr-only {
@@ -300,51 +366,40 @@ button { cursor: pointer; }
   overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
 }
 
-/* Focus: white ring plus violet halo, visible on every surface and on light data cells (spec 2.2, 8). */
+/* Focus: one white ring with a dark halo, on every surface and on light data cells. */
 :focus-visible {
   outline: var(--focus-ring-width) solid var(--focus-ring);
   outline-offset: var(--focus-ring-offset);
   box-shadow: var(--focus-halo);
-  border-radius: 6px;
 }
 
-::selection { background: rgba(var(--accent-rgb), 0.3); }
+::selection { background: rgba(255, 255, 255, 0.22); color: var(--white); }
 
 ::-webkit-scrollbar { width: 10px; height: 10px; }
-::-webkit-scrollbar-thumb { background: rgba(var(--line-rgb), 0.25); border-radius: 8px; }
+::-webkit-scrollbar-thumb { background: var(--grey-700); border-radius: var(--radius-pill); border: 3px solid transparent; background-clip: padding-box; }
 ::-webkit-scrollbar-track { background: transparent; }
+* { scrollbar-color: var(--grey-700) transparent; }
 
 /* ---------- Surfaces ---------- */
 
+/* One reading surface: lifted black, one hairline, one radius. No blur, no glass, no brackets. */
 .card {
   position: relative;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: var(--surface);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius-md);
 }
-
-/* HUD corner brackets */
 .card.hud-card::before,
-.card.hud-card::after {
-  content: "";
-  position: absolute;
-  width: 16px;
-  height: 16px;
-  border: 2px solid var(--accent);
-  opacity: 0.75;
-  pointer-events: none;
-}
-.card.hud-card::before { top: -1px; left: -1px; border-right: 0; border-bottom: 0; border-top-left-radius: var(--radius); }
-.card.hud-card::after { bottom: -1px; right: -1px; border-left: 0; border-top: 0; border-bottom-right-radius: var(--radius); }
+.card.hud-card::after { content: none; display: none; }   /* corner brackets retired */
 
+/* Short label above a group. Sentence case, Space Grotesk, never an all-caps mono eyebrow. */
 .eyebrow {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--accent);
+  font-family: var(--font-ui);
+  font-size: var(--fs-label);
+  font-weight: var(--fw-medium);
+  letter-spacing: var(--tracking-label);
+  text-transform: none;
+  color: var(--text-faint);
 }
 
 /* ---------- Controls ---------- */
@@ -353,96 +408,92 @@ button { cursor: pointer; }
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 9px 15px;
-  border-radius: 10px;
-  border: 1px solid var(--line-control);
+  gap: var(--space-2);
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  border: var(--border-width) solid var(--border-control);
   min-height: var(--hit-min);
-  background: rgba(255, 255, 255, 0.035);
+  background: transparent;
   color: var(--text);
-  transition: border-color 0.18s, box-shadow 0.18s, transform 0.12s, background 0.18s;
+  font-size: var(--fs-small);
+  transition: border-color var(--dur-fast), background-color var(--dur-fast), color var(--dur-fast);
 }
-.btn:hover { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
-.btn:active { transform: translateY(1px); }
-.btn:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
+.btn:hover { border-color: var(--text); background: var(--hover); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn:disabled:hover { border-color: var(--border-control); background: transparent; }
 
 .btn-primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--accent-ink);
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  box-shadow: 0 0 26px rgba(var(--accent-rgb), 0.32);
+  background: var(--white);
+  border-color: var(--white);
+  color: var(--text-on-light);
+  font-weight: var(--fw-bold);
 }
-.btn-primary:hover { box-shadow: 0 0 34px rgba(var(--accent-rgb), 0.55); }
-.btn-sm { padding: 6px 11px; font-size: 13px; border-radius: 8px; }
-.btn-ghost { background: transparent; }
-.btn-danger { background: transparent; border-color: var(--state-error); color: var(--state-error); }
-.btn-danger:hover { border-color: var(--state-error); box-shadow: 0 0 0 3px rgba(255, 107, 99, 0.18); }
-.btn-sm { min-height: max(32px, var(--hit-min)); }
-.linklike { background: none; border: 0; padding: 0; color: var(--accent); text-decoration: underline dotted; font: inherit; cursor: pointer; }
+.btn-primary:hover { background: var(--text-dim); border-color: var(--text-dim); }
+.btn-sm { padding: 5px 10px; font-size: var(--fs-label); min-height: max(32px, var(--hit-min)); }
+.btn-ghost { background: transparent; border-color: transparent; }
+.btn-ghost:hover { border-color: var(--border); }
+.btn-danger { background: transparent; border-color: var(--border-control); color: var(--text); }
+.btn-danger:hover { border-color: var(--text); }
+.linklike { background: none; border: 0; padding: 0; color: var(--text); text-decoration: underline; text-decoration-color: var(--grey-500); text-underline-offset: 3px; font: inherit; cursor: pointer; }
+.linklike:hover { text-decoration-color: var(--text); }
 
 .chip {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 11px;
-  font-size: 13px;
-  border-radius: 999px;
-  border: 1px solid var(--line-control);
-  background: rgba(255, 255, 255, 0.03);
+  padding: 4px 11px;
+  font-size: var(--fs-label);
+  border-radius: var(--radius-pill);
+  border: var(--border-width) solid var(--border);
+  background: transparent;
   color: var(--text-dim);
-  transition: all 0.16s;
+  transition: color var(--dur-fast), border-color var(--dur-fast), background-color var(--dur-fast);
 }
-.chip:hover { color: var(--text); border-color: var(--accent); }
-.chip.on { background: var(--accent-dim); border-color: var(--accent); color: var(--text); }
+.chip:hover { color: var(--text); border-color: var(--border-control); }
+.chip.on, .chip[aria-pressed="true"] { background: var(--selected); border-color: var(--text); color: var(--text); }
 
-.field { display: grid; gap: 5px; font-size: 12px; color: var(--text-dim); font-family: var(--font-mono); letter-spacing: 0.04em; text-transform: uppercase; }
-.field input, .field select {
+.field { display: grid; gap: 6px; font-size: var(--fs-label); color: var(--text-dim); font-family: var(--font-ui); }
+.field input, .field select, .field textarea {
   width: 100%;
   min-width: 0;
   padding: 9px 11px;
-  border: 1px solid var(--line-control);
+  border: var(--border-width) solid var(--border-control);
   min-height: 44px;
-  border-radius: 9px;
-  background: rgba(var(--ink-rgb), 0.7);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
   color: var(--text);
-  font-family: var(--font-mono);
-  font-size: 14px;
-  text-transform: none;
-  letter-spacing: 0;
+  font-family: var(--font-ui);
+  font-size: var(--fs-body);
 }
-.field select { font-family: var(--font-display); }
-.field input:focus-visible, .field select:focus-visible { border-color: var(--accent); }
+.field input[type="number"] { font-family: var(--font-value); }
+.field input:focus-visible, .field select:focus-visible, .field textarea:focus-visible { border-color: var(--text); }
 
 .seg {
   display: inline-flex;
-  border: 1px solid var(--line-strong);
-  border-radius: 9px;
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius-pill);
   overflow: hidden;
-  background: rgba(var(--ink-rgb), 0.72);
-  backdrop-filter: blur(8px);
+  background: transparent;
 }
 .seg button {
-  padding: 6px 10px;
+  padding: 5px 12px;
   border: 0;
   background: transparent;
   color: var(--text-dim);
-  font-size: 13px;
-  font-family: var(--font-mono);
+  font-size: var(--fs-label);
   min-width: 34px;
 }
-.seg button + button { border-left: 1px solid var(--line); }
-.seg button:hover:not(:disabled) { color: var(--text); background: rgba(255, 255, 255, 0.05); }
-.seg button.on { background: var(--accent); color: var(--accent-ink); font-weight: 700; }
+.seg button + button { border-left: var(--border-width) solid var(--border); }
+.seg button:hover:not(:disabled) { color: var(--text); background: var(--hover); }
+.seg button.on, .seg button[aria-pressed="true"] { background: var(--white); color: var(--text-on-light); font-weight: var(--fw-medium); }
 .seg button:disabled { opacity: 0.4; cursor: default; }
 
-/* ---------- Glossary term tooltips ---------- */
+/* ---------- Glossary term tooltips (component owned by Insight/G; base look owned here) ---------- */
 
 .term {
   position: relative;
-  border-bottom: 1px dotted var(--accent);
-  cursor: pointer;
+  border-bottom: 1px dotted var(--text-faint);
+  cursor: help;
   white-space: nowrap;
 }
 .term .term-pop {
@@ -453,28 +504,35 @@ button { cursor: pointer; }
   width: max-content;
   max-width: min(280px, 70vw);
   padding: 10px 12px;
-  border-radius: 10px;
-  border: 1px solid var(--line-strong);
-  background: var(--panel-solid);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  border-radius: var(--radius-md);
+  border: var(--border-width) solid var(--border);
+  background: var(--surface);
+  box-shadow: var(--shadow-float);
   color: var(--text);
-  font-size: 12.5px;
+  font-size: var(--fs-small);
   line-height: 1.45;
   white-space: normal;
   text-transform: none;
   letter-spacing: 0;
-  font-family: var(--font-display);
+  font-family: var(--font-ui);
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.16s, transform 0.16s;
-  z-index: 30;
+  transition: opacity var(--dur-fast), transform var(--dur-fast);
+  z-index: var(--z-popover);
 }
 .term:hover .term-pop,
 .term:focus .term-pop,
 .term:focus-within .term-pop { opacity: 1; transform: translate(-50%, 0); }
-.term-pop b { color: var(--accent); display: block; margin-bottom: 2px; font-weight: 600; }
+.term-pop b { color: var(--text); display: block; margin-bottom: 2px; font-weight: var(--fw-bold); }
 
-/* ---------- Starfield ---------- */
+/* ---------- Starfield: sparse, static, dim ---------- */
 
-.starfield { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
-.starfield i { position: absolute; top: 0; left: 0; border-radius: 50%; }
+.starfield { position: fixed; inset: 0; z-index: var(--z-starfield); pointer-events: none; overflow: hidden; }
+.starfield { opacity: 0.55; }   /* Starfield.jsx draws stars as box-shadows; this keeps them dim (colour: see spec to-do) */
+.starfield i { position: absolute; top: 0; left: 0; border-radius: 50%; animation: none !important; }
+
+/* ---------- Logo (components/shell/Logo.jsx) ---------- */
+
+.td-logo { display: inline-flex; align-items: center; gap: 8px; color: var(--white); text-decoration: none; line-height: 1; }
+.td-logo svg { display: block; flex: none; }
+.td-logo-word { font-family: var(--font-ui); font-size: var(--fs-small); font-weight: var(--fw-medium); letter-spacing: var(--tracking-label); color: var(--text); white-space: nowrap; }

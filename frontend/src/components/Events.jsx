@@ -2,11 +2,22 @@ import { useEffect, useState } from "react";
 import { fetchTrend } from "../api.js";
 import { FIRST_YEAR, LAST_FULL_YEAR } from "../lib/cases.js";
 import { EVENTS, KINDS, describeEvent, eventStats } from "../lib/events.js";
+import { chartSpec } from "../lib/chart.js";
 import { formatPlace } from "../lib/format.js";
+import ExpandableChart from "./charts/ChartViewer.jsx";
 import Loading from "./Loading.jsx";
+import Term from "./Term.jsx";
 
-/** Yearly departures from the other years' average, with the event years picked out. */
-function EventBars({ annual, event, stats, units }) {
+const KindTag = ({ k }) => (
+  <span className="ev-kind"><span aria-hidden="true">{KINDS[k].glyph} </span>{KINDS[k].label}</span>
+);
+
+/**
+ * Yearly departures from the other years' average, with the event years picked out (solid white) against the other
+ * years (grey). Exported and self-contained (one <svg>, values from props) so the shared ChartViewer from
+ * components/charts/ can wrap it: <ExpandableChart title=… rows={annual}><EventBars … /></ExpandableChart>.
+ */
+export function EventBars({ annual, event, stats, units }) {
   const W = 600;
   const H = 160;
   const pad = { l: 8, r: 8, t: 16, b: 22 };
@@ -30,8 +41,7 @@ function EventBars({ annual, event, stats, units }) {
             y={Math.min(top, base)}
             width={Math.max(1, bw - 2)}
             height={Math.max(1.5, Math.abs(top - base))}
-            fill={inEvent ? "var(--amber)" : "var(--flat)"}
-            opacity={inEvent ? 1 : 0.55}
+            fill={inEvent ? "var(--text)" : "var(--grey-600)"}
           >
             <title>{a.year}: {Number(a.value.toPrecision(3))} {units}</title>
           </rect>
@@ -68,18 +78,34 @@ function EventEvidence({ event }) {
   const stats = eventStats(annual, event);
   return (
     <div className="event-evidence">
-      <p className="mono dim small">
-        {variable.label} ({variable.units}) at {formatPlace(event.lat, event.lon)}, one NASA grid cell
+      <p className="mono dim">
+        {variable.label} ({variable.units}) at {formatPlace(event.lat, event.lon)}, one NASA <Term id="gridcell">grid square</Term>
       </p>
-      {stats && <EventBars annual={annual} event={event} stats={stats} units={variable.units} />}
       {stats && (
-        <p className="legend-line small">
-          <i style={{ background: "var(--amber)" }} /> event years <i style={{ background: "var(--flat)" }} /> other years <span className="faint">bars show departure from the other years' average</span>
+        <ExpandableChart
+          spec={chartSpec({
+            title: `${variable.label} at ${formatPlace(event.lat, event.lon)}, yearly`,
+            source: "NASA POWER",
+            unit: variable.units,
+            variable: variable.id,
+            series: [
+              { id: "other", label: "Other years", type: "bars", style: "muted", data: annual.filter((a) => a.year < event.from || a.year > event.to).map((a) => ({ x: a.year, y: a.value })) },
+              { id: "event", label: "Event years", type: "bars", data: annual.filter((a) => a.year >= event.from && a.year <= event.to).map((a) => ({ x: a.year, y: a.value })) },
+            ],
+            markers: [{ x: event.year, label: event.name }],
+          })}
+        >
+          <EventBars annual={annual} event={event} stats={stats} units={variable.units} />
+        </ExpandableChart>
+      )}
+      {stats && (
+        <p className="legend-line">
+          <i style={{ background: "var(--text)" }} /> event years <i style={{ background: "var(--grey-600)" }} /> other years <span className="faint">bars: above or below the other years' <Term id="baseline">average</Term></span>
         </p>
       )}
       <p className={stats?.standsOut ? "evidence-yes" : "evidence-no"}>{describeEvent(stats, event, variable.units)}</p>
-      <p className="faint small">
-        Annual averages of a 0.5° grid cell can dilute a short extreme or miss an event that struck a few hundred kilometres away. This shows
+      <p className="faint">
+        Annual averages of a 0.5° grid square can dilute a short extreme or miss an event that struck a few hundred kilometres away. This shows
         what is in the data, not whether the event happened.
       </p>
     </div>
@@ -87,25 +113,24 @@ function EventEvidence({ event }) {
 }
 
 function EventDetail({ event, onBack, onOpenCase, onOpenVitals }) {
-  const kind = KINDS[event.kind];
   const span = event.from === event.to ? event.from : `${event.from}–${event.to}`;
   return (
     <article className="event-detail">
       <button type="button" className="btn btn-sm btn-ghost" onClick={onBack}>← All events</button>
-      <section className="card hud-card event-head reveal">
-        <p className="eyebrow">{span} · <span style={{ color: kind.color }}>{kind.label}</span></p>
-        <h2>{event.name}</h2>
+      <section className="event-head">
+        <p className="event-meta"><span className="mono">{span}</span> · <KindTag k={event.kind} /></p>
+        <h2 className="tool-title">{event.name}</h2>
         <p>{event.blurb}</p>
-        <p className="look-for"><span className="eyebrow">What to look for</span>{event.lookFor}</p>
-        <p className="faint small">Context from: {event.sources.join("; ")}. Written as background, not as a result of this app's data.</p>
+        <p className="look-for"><b>What to look for</b> {event.lookFor}</p>
+        <p className="faint">Context from: {event.sources.join("; ")}. Written as background, not as a result of this app's data.</p>
       </section>
-      <section className="card event-card reveal" style={{ "--d": "150ms" }}>
+      <section className="event-card">
         <h3>What the data show here</h3>
         <EventEvidence event={event} />
       </section>
       <div className="hero-actions">
-        <button type="button" className="btn btn-primary" onClick={() => onOpenCase(event)}>Open the full case file here ▸</button>
-        {event.scope === "global" && <button type="button" className="btn" onClick={onOpenVitals}>See it in Planet vitals ▸</button>}
+        <button type="button" className="btn btn-primary" onClick={() => onOpenCase(event)}>Open the case file here ›</button>
+        {event.scope === "global" && <button type="button" className="btn" onClick={onOpenVitals}>See it in Vitals ›</button>}
       </div>
     </article>
   );
@@ -119,27 +144,23 @@ export default function Events({ selectedId, onSelect, onOpenCase, onOpenVitals 
   const list = EVENTS.filter((e) => kind === "all" || e.kind === kind).sort((a, b) => a.year - b.year);
   const kinds = [...new Set(EVENTS.map((e) => e.kind))];
   return (
-    <section className="card events-list reveal">
-      <p className="eyebrow">Major events</p>
-      <h2>What was happening when the record moved?</h2>
-      <p className="dim">
-        Well-documented heat waves, droughts, floods and climate swings. Pick one to see what the NASA data actually show at that place and
-        year, and to jump into its case file. Events also appear as markers on a case file's chart when they happened nearby.
-      </p>
-      <div className="chip-row">
-        <button type="button" className={`chip${kind === "all" ? " on" : ""}`} onClick={() => setKind("all")}>All</button>
+    <section className="events-list">
+      <h2 className="tool-title">What was happening when the record moved?</h2>
+      <p className="tool-lead">Famous heat waves, droughts, floods and climate swings. Pick one to see what the data show there.</p>
+      <div className="chip-row" role="group" aria-label="Filter by kind">
+        <button type="button" className={`chip${kind === "all" ? " on" : ""}`} aria-pressed={kind === "all"} onClick={() => setKind("all")}>All</button>
         {kinds.map((k) => (
-          <button key={k} type="button" className={`chip${kind === k ? " on" : ""}`} onClick={() => setKind(k)}>{KINDS[k].label}</button>
+          <button key={k} type="button" className={`chip${kind === k ? " on" : ""}`} aria-pressed={kind === k} onClick={() => setKind(k)}><span aria-hidden="true">{KINDS[k].glyph} </span>{KINDS[k].label}</button>
         ))}
       </div>
       <ul className="case-grid">
-        {list.map((e, i) => (
-          <li key={e.id} className="reveal" style={{ "--d": `${i * 50}ms` }}>
+        {list.map((e) => (
+          <li key={e.id}>
             <button type="button" className="case-card" onClick={() => onSelect(e.id)}>
-              <span className="eyebrow">{e.year} · <span style={{ color: KINDS[e.kind].color }}>{KINDS[e.kind].label}</span></span>
+              <span className="event-meta"><span className="mono">{e.year}</span> · <KindTag k={e.kind} /></span>
               <b>{e.name}</b>
               <span className="dim">{e.blurb.split(". ")[0]}.</span>
-              <span className="open">See what the data show ▸</span>
+              <span className="open">See what the data show ›</span>
             </button>
           </li>
         ))}

@@ -1,7 +1,14 @@
 import { useState } from "react";
 import Term from "./Term.jsx";
 
-export const CLUSTER_COLORS = ["#4dffd9", "#ff6bd5", "#ffc24d", "#a78bfa", "#b6ff5c", "#ff9f43"];
+/**
+ * Archetype markers: a neutral grey scale (the --data-cloud ramp plus white / graphite, mirrored here for the globe
+ * canvas) paired with a distinct glyph and the group number, so colour is never the only cue. No neon, no news hues.
+ */
+export const CLUSTER_COLORS = ["#f0f0f0", "#adadad", "#d0d0d0", "#8a8a8a", "#f5f5f5", "#6b6b6b"];
+export const CLUSTER_GLYPHS = ["●", "▲", "■", "◆", "▼", "✚"];
+export const clusterGlyph = (id) => CLUSTER_GLYPHS[id % CLUSTER_GLYPHS.length];
+export const clusterName = (id) => `Group ${id + 1}`;
 
 const sign = (v) => (v > 0 ? "▲" : "▼");
 
@@ -10,7 +17,7 @@ function Signature({ cluster }) {
     ...cluster.top_up.map((v) => ({ ...v, dir: "up" })),
     ...cluster.top_down.map((v) => ({ ...v, dir: "down" })),
   ];
-  if (parts.length === 0) return <p className="dim small">No variable stands clearly above its normal swings in this group.</p>;
+  if (parts.length === 0) return <p className="dim">No variable stands clearly above its normal swings in this group.</p>;
   return (
     <ul className="signature">
       {parts.map((v) => (
@@ -33,10 +40,10 @@ export default function Archetypes({ data, onChooseK, onOpen }) {
 
   return (
     <section className="archetypes">
-      <header className="card hud-card arch-head reveal">
-        <p className="eyebrow">Trend archetypes <span className="badge ml">machine learning</span></p>
-        <h2>Which places are changing in the same way?</h2>
-        <p className="dim">
+      <header className="arch-head">
+        <h2 className="tool-title">Which places are changing in the same way?</h2>
+        <p className="faint">Groups found automatically by the computer (<Term id="archetype">archetypes</Term>).</p>
+        <p className="tool-lead">
           Each of {quality.n_places} sample places gets a fingerprint: how far each of {data.variables.length} variables has moved compared with its normal
           swings. <Term id="kmeans">k-means clustering</Term> then groups similar fingerprints into archetypes. Temperatures are down-weighted so
           five heat variables cannot drown out everything else.
@@ -44,19 +51,19 @@ export default function Archetypes({ data, onChooseK, onOpen }) {
 
         <div className="arch-quality">
           <div>
-            <span className="eyebrow"><Term id="silhouette">Separation</Term></span>
+            <span className="arch-q-label"><Term id="silhouette">Separation</Term></span>
             <b className="mono">{quality.silhouette.toFixed(2)}</b>
             <small className={`q ${quality.structure}`}>{quality.structure}</small>
           </div>
           <div>
-            <span className="eyebrow"><Term id="stability">Stability</Term></span>
+            <span className="arch-q-label"><Term id="stability">Stability</Term></span>
             <b className="mono">{quality.stability.toFixed(2)}</b>
             <small className={`q ${quality.steadiness === "stable" ? "strong" : quality.steadiness === "unstable" ? "weak" : "reasonable"}`}>{quality.steadiness}</small>
           </div>
         </div>
 
         <div className="kpicker" role="group" aria-label="Number of archetypes">
-          <span className="dim small">How many archetypes?</span>
+          <span className="dim">How many groups?</span>
           {quality.by_k.map((s) => (
             <button key={s.k} type="button" className={`chip${data.k === s.k ? " on" : ""}`} onClick={() => onChooseK(s.k)} title={`Separation ${s.silhouette.toFixed(2)}`}>
               {s.k}{s.k === data.best_k ? " ★" : ""} <small className="mono">{s.silhouette.toFixed(2)}</small>
@@ -64,18 +71,18 @@ export default function Archetypes({ data, onChooseK, onOpen }) {
           ))}
         </div>
         {data.requested_k != null && data.requested_k !== data.k && (
-          <p className="small dim" role="status">You asked for {data.requested_k} archetypes; the clustering returned {data.k} non-empty groups.</p>
+          <p className="dim" role="status">You asked for {data.requested_k} groups; the clustering returned {data.k} non-empty groups.</p>
         )}
-        <p className="faint small">★ = best separated. {quality.structure === "weak" ? "Structure is weak: treat these groups as a convenience, not as real climate regimes. " : ""}{data.caveat}</p>
+        <p className="faint">★ = best separated. {quality.structure === "weak" ? "Structure is weak: treat these groups as a convenience, not as real climate regimes. " : ""}{data.caveat}</p>
       </header>
 
       <div className="arch-grid">
-        {clusters.map((c, i) => (
-          <article key={c.id} className="card arch-card reveal" style={{ "--d": `${i * 90}ms`, "--c": CLUSTER_COLORS[c.id % CLUSTER_COLORS.length] }}>
+        {clusters.map((c) => (
+          <article key={c.id} className="arch-card" style={{ "--c": CLUSTER_COLORS[c.id % CLUSTER_COLORS.length] }}>
             <header>
-              <span className="swatch" />
-              <b>Archetype {c.id + 1}</b>
-              <span className="dim small">{c.size} places</span>
+              <span className="arch-glyph" aria-hidden="true">{clusterGlyph(c.id)}</span>
+              <b>{clusterName(c.id)}</b>
+              <span className="dim">{c.size} places</span>
             </header>
             <Signature cluster={c} />
             <p className="chips">
@@ -87,9 +94,9 @@ export default function Archetypes({ data, onChooseK, onOpen }) {
         ))}
       </div>
 
-      <div className="card twins reveal" style={{ "--d": "300ms" }}>
+      <div className="twins">
         <h3>Climate twins</h3>
-        <p className="dim small">The places whose whole pattern of change looks most like this one (cosine similarity of fingerprints).</p>
+        <p className="dim">The places whose whole pattern of change looks most like this one (cosine similarity of fingerprints).</p>
         <label className="field">
           Place
           <select value={twinPlace.id} onChange={(e) => setTwinId(e.target.value)}>
@@ -102,12 +109,12 @@ export default function Archetypes({ data, onChooseK, onOpen }) {
               <button type="button" className="world-row compact" onClick={() => onOpen(byId[t.id])}>
                 <span className="world-name"><b>{t.name}</b><small className="mono">{byId[t.id].kind}</small></span>
                 <span className="mono">{t.similarity.toFixed(2)}</span>
-                <span className="dim small">archetype {byId[t.id].cluster + 1}</span>
+                <span className="dim">group {byId[t.id].cluster + 1}</span>
               </button>
             </li>
           ))}
         </ul>
-        {data.excluded.length > 0 && <p className="faint small">Left out for lack of data: {data.excluded.map((p) => p.name).join(", ")}.</p>}
+        {data.excluded.length > 0 && <p className="faint">Left out for lack of data: {data.excluded.map((p) => p.name).join(", ")}.</p>}
       </div>
     </section>
   );

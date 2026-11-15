@@ -2,9 +2,10 @@ import { useMemo, useState } from "react";
 import { formatPlace, signed } from "../lib/format.js";
 import { downloadText, sweepCsv } from "../lib/csv.js";
 import Sparkline from "./charts/Sparkline.jsx";
+import { GradeMeter } from "./insight/Evidence.jsx";
 import Term from "./Term.jsx";
 
-const GRADE_SHORT = { strong: "Strong", moderate: "Moderate", weak: "Weak", none: "None" };
+const GRADE_SHORT = { strong: "Strong", moderate: "Some", weak: "Weak", none: "No clear change" };
 
 function SnrBar({ value }) {
   if (value == null) return <span className="snr dim">—</span>;
@@ -12,7 +13,7 @@ function SnrBar({ value }) {
   return (
     <span className="snr" title={`${Math.abs(value).toFixed(1)}× the typical year-to-year swing`}>
       <span className="snr-track">
-        <i className={value >= 0 ? "up" : "down"} style={{ width: `${width}%` }} />
+        <i style={{ width: `${width}%` }} />
         <b style={{ left: "25%" }} />
       </span>
       <span className="mono">{Math.abs(value).toFixed(1)}×</span>
@@ -30,45 +31,46 @@ export default function Sweep({ data, selected, onOpen }) {
 
   return (
     <section className="sweep">
-      <header className="card sweep-head reveal">
-        <p className="eyebrow">Sweep</p>
-        <h2>What's moving at {formatPlace(data.location.lat, data.location.lon)}?</h2>
-        <p className="dim">
-          {counts.strong_or_moderate} of {counts.analyzed} variables show strong or moderate evidence of a trend ·{" "}
-          {counts.significant} are significant, {counts.significant_fdr} of them after <Term id="fdr">false-discovery control</Term>{" "}
-          (★). Ranked by evidence, then by <Term id="snr">signal vs noise</Term>. Click a row to open its case file.
+      <header className="sweep-head">
+        <h2 className="tool-title">What's changing at {formatPlace(data.location.lat, data.location.lon)}?</h2>
+        <p className="tool-lead">
+          {counts.strong_or_moderate} of {counts.analyzed} variables show strong or some evidence of change; {counts.significant_fdr}{" "}
+          <Term id="holds">hold after correction</Term> (★). Ranked by evidence, then by <Term id="snr">change vs normal swings</Term>. Select a row
+          to open its case file.
         </p>
-        <div className="chips" role="group" aria-label="Filter by group">
+        <div className="chips" role="group" aria-label="Filter by kind of variable">
           {groups.map((g) => (
-            <button key={g} type="button" className={`chip${group === g ? " on" : ""}`} onClick={() => setGroup(g)}>{g}</button>
+            <button key={g} type="button" className={`chip${group === g ? " on" : ""}`} aria-pressed={group === g} onClick={() => setGroup(g)}>{g}</button>
           ))}
-          <button type="button" className="chip" onClick={() => downloadText(`trend-detective_sweep_${data.location.lat}_${data.location.lon}.csv`, sweepCsv(data))}>⤓ CSV</button>
+          <button type="button" className="btn btn-sm btn-ghost" onClick={() => downloadText(`trend-detective_sweep_${data.location.lat}_${data.location.lon}.csv`, sweepCsv(data))}>Download CSV</button>
         </div>
       </header>
 
-      <div className="card sweep-table">
+      <div className="sweep-table">
         <div className="sweep-cols mono" aria-hidden="true">
-          <span>variable</span><span>shape</span><span>per decade</span><span>vs normal swing</span><span>evidence</span>
+          <span>Variable</span><span>Shape</span><span>Per decade</span><span>Vs normal swings</span><span>How sure?</span>
         </div>
         <ul>
-          {analyzed.map((row, i) => {
-            const color = row.significant ? (row.sign === "up" ? "var(--up)" : "var(--down)") : "var(--flat)";
+          {analyzed.map((row) => {
+            const glyph = row.significant ? (row.sign === "up" ? "▲" : "▼") : "–";
+            const color = row.significant ? "var(--text)" : "var(--text-faint)";
             return (
               <li key={row.id}>
-                <button type="button" className={`sweep-row reveal-slide${selected === row.id ? " current" : ""}`} style={{ "--d": `${i * 45}ms` }} onClick={() => onOpen(row.id)}>
+                <button type="button" className={`sweep-row${selected === row.id ? " current" : ""}`} onClick={() => onOpen(row.id)}>
                   <span className="sw-main">
                     <span className="sw-group">{row.group}</span>
                     <b>{row.label}</b>
                   </span>
-                  <Sparkline values={row.annual} color={color} delay={i * 45 + 200} />
-                  <span className="sw-rate mono" style={{ color }}>
-                    {signed(row.slope_per_decade)}
+                  <Sparkline values={row.annual} color={color} delay={0} />
+                  <span className="sw-rate mono">
+                    <span aria-hidden="true">{glyph} </span>{signed(row.slope_per_decade)}
                     <small>{row.units}</small>
                   </span>
                   <SnrBar value={row.signal_to_noise} />
-                  <span className={`sw-grade grade-${row.grade.code}`}>
-                    {GRADE_SHORT[row.grade.code]}
-                    {row.significant_fdr && <span className="star" title="Survives false-discovery control"> ★</span>}
+                  <span className="sw-grade">
+                    <GradeMeter code={row.grade.code} />
+                    <span className="sw-grade-word">{GRADE_SHORT[row.grade.code]}</span>
+                    {row.significant_fdr && <span className="star" title="Holds after correction"> ★</span>}
                   </span>
                 </button>
               </li>

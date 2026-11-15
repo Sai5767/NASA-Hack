@@ -13,7 +13,7 @@ function Scoreboard({ models, baselineId }) {
   return (
     <ul className="scoreboard" aria-label="Model scoreboard">
       {sorted.map((m, i) => (
-        <li key={m.id} className={`${m.is_best ? "best" : ""} reveal-slide`} style={{ "--d": `${i * 70}ms` }}>
+        <li key={m.id} className={`${m.is_best ? "best" : ""}`}>
           <span className="sb-name">
             {m.label}
             <small className={`kind ${m.kind}`}>{KIND_LABEL[m.kind]}</small>
@@ -72,7 +72,7 @@ export default function ForecastLab({ data }) {
   const replay = lab?.ok && showReplay && replayIndex != null ? lab.replays[replayIndex] : null;
 
   return (
-    <section className="card forecastlab">
+    <section className="forecastlab">
       <div className="lab-head">
         <h3>Forecast lab <span className="badge ml">machine learning</span></h3>
         <p className="dim small">
@@ -101,7 +101,7 @@ export default function ForecastLab({ data }) {
             )}
           </p>
 
-          <ForecastChart lab={lab} replay={replay} units={variable.units} />
+          <ForecastChart lab={lab} replay={replay} units={variable.units} title={`${variable.label}: statistical forecast`} source="NASA POWER · Trend Detective model" />
 
           <div className="replay">
             <label>

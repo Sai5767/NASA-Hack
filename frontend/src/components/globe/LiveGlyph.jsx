@@ -1,6 +1,6 @@
 /**
  * Meteomatics point glyph (spec 3.7): a screen-space glyph at one point, never an area. Three arcs (cloud, rain, wind)
- * on display-only scales; a null value draws a dashed empty track. The chip says LIVE · Meteomatics (or STALE).
+ * on display-only scales; a null value draws a dashed empty track. The chip says Live · Meteomatics (or Saved copy).
  * The parent positions the anchor at the exact point; the glyph sits 44 px above-right with a leader line.
  */
 import { utcTime } from "../../lib/liveWeather.js";
@@ -45,10 +45,10 @@ export default function LiveGlyph({ model, reduced = false }) {
           );
         })}
         <text x={cx} y={cy - 2} className="gl-live-temp">{model.temp == null ? "—" : `${Math.round(model.temp)}°C`}</text>
-        <text x={cx} y={cy + 13} className="gl-live-word">{stale ? "STALE" : "LIVE"}</text>
+        <text x={cx} y={cy + 13} className="gl-live-word">{stale ? "Saved" : "Live"}</text>
       </svg>
       <span className="gl-live-chip mono">
-        {stale ? `◔ STALE · Meteomatics · ${utcTime(model.fetchedAt)}` : "LIVE · Meteomatics"}
+        {stale ? `◔ Saved copy · Meteomatics · ${utcTime(model.fetchedAt)}` : "Live · Meteomatics"}
       </span>
     </div>
   );

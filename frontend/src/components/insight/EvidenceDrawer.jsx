@@ -1,6 +1,9 @@
 import { useId, useState } from "react";
 import "../../styles/insight.css";
+import Term from "../Term.jsx";
 import { StateCard } from "../shell/ui.jsx";
+import { HowSure } from "./Evidence.jsx";
+import { verdictSentence } from "./VerdictCard.jsx";
 import { SERVER_NOTE, technicalBlocks, traceChecks, traceSteps, verdictView } from "./logic.js";
 
 function ValueTable({ rows, caption }) {
@@ -21,7 +24,7 @@ function ValueTable({ rows, caption }) {
 }
 
 /**
- * "How did we test this?" (spec 5.6): each backend `evidence_trace` step in plain words, then — for technical users —
+ * "See how we know" (spec 5.6, plan 7 level 2–3): five plain answers first, then: each backend `evidence_trace` step in plain words, then — for technical users —
  * its method name and the exact values the server reported. The body of the shell's drawer, or an inline section.
  *
  * Props:
@@ -54,6 +57,33 @@ export default function EvidenceDrawer({ data, loading, error, defaultView = "pl
         <p className="ev-drawer-sub">
           {[data.variable?.label, place, data.period ? `${data.period.start_year}–${data.period.end_year}` : ""].filter(Boolean).join(" · ")}
         </p>
+      )}
+      {v && (
+        <dl className="ev-five">
+          <div>
+            <dt>What am I seeing?</dt>
+            <dd>
+              One yearly value of {data.variable?.label?.toLowerCase() ?? "this variable"}
+              {data.variable?.units ? <> (in {data.variable.units})</> : null} for one <Term id="gridcell">grid square</Term>, {v.period}.
+            </dd>
+          </div>
+          <div>
+            <dt>What changed?</dt>
+            <dd>{verdictSentence(v)}</dd>
+          </div>
+          <div>
+            <dt>How sure are we?</dt>
+            <dd><HowSure tier={v.tier} code={v.code} /> <span className="ev-five-label">{v.label}</span></dd>
+          </div>
+          <div>
+            <dt>Where did this come from?</dt>
+            <dd>NASA POWER, a <Term id="reanalysis">reanalysis</Term> of satellite and weather records.</dd>
+          </div>
+          <div>
+            <dt>What does this not tell us?</dt>
+            <dd>Why it changed, or what happens next. A trend in the past is not a forecast.</dd>
+          </div>
+        </dl>
       )}
       <p className="ev-server-note"><span aria-hidden="true">ⓘ </span>{SERVER_NOTE}</p>
 

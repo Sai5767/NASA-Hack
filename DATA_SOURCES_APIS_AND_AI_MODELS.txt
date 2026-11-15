@@ -167,3 +167,20 @@ Server settings: TD_ALLOWED_ORIGINS, TD_TRUSTED_PROXY_HOPS, TD_LOAD_ENV_FILE, TD
 
 Real values belong only in backend/.env for local development (Git-ignored) or Azure App Service application settings.
 They are never committed, sent to browser code, returned by the API or written in this file.
+
+==========================================================================================
+Coarse preview asset (static, bundled; added 15 Nov 2026 by the Globe agent)
+==========================================================================================
+What: frontend/public/coarse/T2M.json (38,056 bytes), PRECTOTCORR.json (34,965 bytes), CLOUD_AMT.json (38,743 bytes),
+      manifest.json (1,115 bytes). Served from the page's own origin; no request to NASA when a variable is chosen.
+Source: NASA POWER monthly point API, https://power.larc.nasa.gov/api/temporal/monthly/point
+        (community RE, parameters T2M, PRECTOTCORR, CLOUD_AMT in one request per point).
+Grid: 15 degrees, latitudes -75..75, longitudes -180..165 (264 points); months 2023-01 .. 2025-12 (36 months).
+Retrieved: 2026-11-15 (0 failed points). Built by tools/coarse_preview/build.py (httpx, at most 4 concurrent
+        requests, retries with backoff). Values quantised to integers (scale 0.1 / 0.01 / 0.1).
+Licence/terms: NASA POWER data are freely available; acknowledge "Data obtained from the NASA Langley Research
+        Center (LaRC) POWER Project funded through the NASA Earth Science/Applied Science Program."
+Use: the globe's "Coarse global preview · approximate pattern" layer only (soft, low-resolution orientation).
+        Never used for trends, p-values, forecasts, exact values or local conclusions. Detailed local data
+        (/api/monthly-frames) always draws on top. Rebuild: python tools/coarse_preview/build.py
+Base Earth: procedural (Natural Earth 110m land/borders via world-atlas, public domain); no imagery is bundled.

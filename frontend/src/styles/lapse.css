@@ -1,14 +1,15 @@
-/* ---------- Time-lapse ---------- */
+/* ---------- Time-lapse (World survey) ---------- */
 
-.lapse-card { padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
-.lapse-card.on { display: grid; gap: 10px; }
-.lapse-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
-.lapse-big { font-size: 40px; line-height: 1; color: var(--accent); letter-spacing: -0.02em; }
-.lapse-buttons { display: flex; gap: 6px; }
-.lapse-card input[type="range"] { width: 100%; accent-color: var(--accent); }
-.lapse-foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.lapse-card { display: flex; justify-content: space-between; align-items: center; gap: var(--space-3); flex-wrap: wrap; padding: var(--space-3) 0; border-top: var(--border-width) solid var(--border); }
+.lapse-card p { margin: 0; }
+.lapse-card.on { display: grid; gap: var(--space-3); }
+.lapse-title { font-size: var(--fs-small); color: var(--text-dim); }
+.lapse-top { display: flex; justify-content: space-between; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
+.lapse-big { font-size: var(--fs-display); line-height: 1; color: var(--text); letter-spacing: var(--tracking-tight); }
+.lapse-buttons { display: flex; gap: var(--space-2); }
+.lapse-card input[type="range"] { width: 100%; accent-color: var(--white); }
+.lapse-foot { display: flex; justify-content: space-between; align-items: center; gap: var(--space-3); flex-wrap: wrap; font-size: var(--fs-small); }
 .lapse-year {
-  font-family: var(--font-mono); font-size: 44px; font-weight: 700; line-height: 1; letter-spacing: -0.02em;
-  color: var(--text); text-shadow: 0 0 24px rgba(0, 0, 0, 0.8); padding: 4px 10px; border-radius: 10px;
-  background: rgba(var(--ink-rgb), 0.55); backdrop-filter: blur(6px); width: max-content;
+  font-family: var(--font-value); font-size: var(--fs-hero); font-weight: var(--fw-medium); line-height: 1; letter-spacing: var(--tracking-tight);
+  color: var(--text); padding: var(--space-1) var(--space-3); border-radius: var(--radius-md); background: var(--surface); width: max-content;
 }

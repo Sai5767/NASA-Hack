@@ -98,3 +98,19 @@ test("a bare tab link (for the planet-wide views) is valid", () => {
   assert.equal(back.tab, "vitals");
   assert.equal(back.params, null);
 });
+
+test("parseQuestion: the question decides place, variable and years (Ask tool)", async () => {
+  const { parseQuestion, parseYears, parseCoords } = await import("../src/lib/ask.js");
+  const q = parseQuestion("Is Phoenix getting hotter since 2000?", PLACES, "PRECTOTCORR");
+  assert.equal(q.place, PLACES[0]);
+  assert.equal(q.variable, "T2M");
+  assert.equal(q.variableFrom, "asked");
+  assert.deepEqual(q.years, { start: 2000 });
+  assert.equal(q.ready, true);
+  assert.equal(parseQuestion("Phoenix", PLACES, "WS2M").variableFrom, "kept");
+  assert.deepEqual(parseYears("rain 2010 to 1990"), { start: 1990, end: 2010 });
+  assert.equal(parseYears("in 1900"), null);
+  assert.deepEqual(parseCoords("33.4N 112.1W"), { lat: 33.4, lon: -112.1 });
+  assert.deepEqual(parseCoords("trend at 12.5, -70.2"), { lat: 12.5, lon: -70.2 });
+  assert.equal(parseQuestion("zzzz", PLACES, "T2M").ready, false);
+});

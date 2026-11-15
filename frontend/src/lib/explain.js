@@ -304,7 +304,7 @@ const EXTRA = [
 ];
 
 export const ENTRIES = [
-  ...GLOSSARY.map((g) => ({ ...g, ...DEEP[g.id], long: DEEP[g.id]?.long ?? [], keys: DEEP[g.id]?.keys ?? [], follow: DEEP[g.id]?.follow ?? [] })),
+  ...GLOSSARY.map((g) => ({ ...g, ...DEEP[g.id], long: DEEP[g.id]?.long ?? g.long ?? [], keys: DEEP[g.id]?.keys ?? g.keys ?? [], follow: DEEP[g.id]?.follow ?? g.follow ?? [] })),
   ...EXTRA,
 ];
 export const ENTRY_BY_ID = Object.fromEntries(ENTRIES.map((e) => [e.id, e]));

@@ -1,7 +1,9 @@
 import { useId, useRef, useState } from "react";
 import { validateSignIn } from "../../lib/profile.js";
+import Logo from "./Logo.jsx";
+import Vishwa from "./Vishwa.jsx";
 
-export const DEMO_NOTE = "Demo account — your password is not saved or sent.";
+export const DEMO_NOTE = "Demo only — your password is discarded and is never sent.";
 
 /**
  * The demo sign-in card (spec 1.3). Not authentication: the email is checked for shape and the password for being
@@ -34,7 +36,11 @@ export default function SignIn({ onSignIn }) {
 
   return (
     <form className="signin" onSubmit={submit} noValidate aria-labelledby={`${id}-title`}>
-      <h2 id={`${id}-title`} className="welcome-title">Sign in</h2>
+      <div className="signin-brand">
+        <Logo size={28} className="signin-logo" />
+        <Vishwa prefix="by" className="signin-by" />
+      </div>
+      <h2 id={`${id}-title`} className="welcome-title">See how your corner of the Earth is changing.</h2>
 
       <div className="welcome-field">
         <label className="welcome-label" htmlFor={`${id}-email`}>Email</label>
@@ -76,7 +82,7 @@ export default function SignIn({ onSignIn }) {
 
       <button type="submit" className="btn btn-primary btn-block" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button>
 
-      <p className="demo-note"><span aria-hidden="true">ⓘ </span>{DEMO_NOTE}</p>
+      <p className="demo-note">{DEMO_NOTE}</p>
     </form>
   );
 }

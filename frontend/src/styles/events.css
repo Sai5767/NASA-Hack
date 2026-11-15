@@ -1,28 +1,32 @@
-/* ---------- Events ---------- */
+/* ---------- Events (monochrome: kind = glyph + label; event years = solid white bars) ---------- */
 
-.events-list { padding: 18px; display: grid; gap: 12px; }
-.events-list h2 { font-size: 22px; letter-spacing: -0.01em; }
-.events-list .case-grid { grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); }
-.event-detail { display: grid; gap: 14px; min-width: 0; }
+.events-list { display: grid; gap: var(--space-4); }
+.events-list .case-grid { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+.event-detail { display: grid; gap: var(--space-6); min-width: 0; }
 .event-detail > .btn { justify-self: start; }
-.event-head { padding: 18px; display: grid; gap: 10px; }
-.event-head h2 { font-size: 26px; letter-spacing: -0.02em; }
-.look-for { display: grid; gap: 3px; padding: 9px 12px; border-left: 3px solid var(--amber); background: rgba(255, 194, 77, 0.06); border-radius: 0 8px 8px 0; font-size: 14px; }
-.event-card { padding: 16px 18px; display: grid; gap: 10px; }
-.event-card h3 { font-size: 16px; }
-.event-evidence { display: grid; gap: 8px; }
+.event-head { display: grid; gap: var(--space-3); }
+.event-head p { margin: 0; }
+.event-meta { font-size: var(--fs-small); color: var(--text-dim); }
+.ev-kind { color: var(--text); }
+.look-for { padding-left: var(--space-3); border-left: var(--border-width) solid var(--border-control); font-size: var(--fs-body); color: var(--text-dim); }
+.look-for b { color: var(--text); font-weight: var(--fw-medium); }
+.event-card { display: grid; gap: var(--space-3); }
+.event-card h3 { font-size: var(--fs-lead); font-weight: var(--fw-medium); }
+.event-evidence { display: grid; gap: var(--space-2); }
+.event-evidence p { margin: 0; }
 .event-bars { width: 100%; height: auto; }
 .event-bars .mean { stroke: var(--text-dim); stroke-dasharray: 4 4; stroke-width: 1; }
-.event-bars .event-year { fill: var(--amber); }
-.legend-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; color: var(--text-dim); }
-.legend-line i { display: inline-block; width: 11px; height: 11px; border-radius: 3px; margin-right: 4px; vertical-align: -1px; }
-.evidence-yes { border-left: 3px solid var(--amber); padding-left: 10px; }
-.evidence-no { border-left: 3px solid var(--flat); padding-left: 10px; }
+.event-bars .event-year { fill: var(--text); }
+.legend-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; color: var(--text-dim); font-size: var(--fs-small); }
+.legend-line i { display: inline-block; width: 11px; height: 11px; border-radius: var(--radius-xs); margin-right: 4px; vertical-align: -1px; }
+.evidence-yes { padding-left: var(--space-3); border-left: 2px solid var(--text); }
+.evidence-no { padding-left: var(--space-3); border-left: 2px dashed var(--grey-600); color: var(--text-dim); }
 
 /* markers on the trend chart */
 .event-marker { cursor: pointer; }
-.event-marker line { stroke: var(--amber); stroke-dasharray: 3 4; opacity: 0.8; }
-.event-marker path { fill: var(--amber); }
-.event-marker:hover line, .event-marker:focus line { opacity: 1; stroke-width: 1.6; }
+.event-marker line { stroke: var(--text-dim); stroke-dasharray: 3 4; }
+.event-marker path { fill: var(--text-dim); }
+.event-marker:hover line, .event-marker:focus line { stroke: var(--text); stroke-width: 1.5; }
+.event-marker:hover path, .event-marker:focus path { fill: var(--text); }
 .event-marker:focus { outline: none; }
-.events-strip { padding: 12px 16px; display: grid; gap: 8px; }
+.events-strip { display: grid; gap: var(--space-2); }

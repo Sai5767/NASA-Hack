@@ -1,85 +1,98 @@
 /**
- * SEAM — owned by Agent 3 (globe, timeline, weather, news). The shell (App.jsx + shell/Dashboard.jsx) imports exactly
- * these five exports and never styles their insides. The export names and the props below are the contract.
+ * SEAM — owned by the Globe agent (globe, timeline, weather, news). The shell (App.jsx + shell/Dashboard.jsx) imports
+ * these exports and never styles their insides. The export names and the props below are the contract.
  *
  * Props the shell passes (all read-only):
  *   place        { id, name, lat, lon, saved } | null   the active place (null = overview, nothing selected)
- *   variable     { id, label, units, group, ... } | null  the selected /api/variables entry
- *   places       saved places [{ id, name, lat, lon }] (max 5) — nothing is loaded for them in the background
+ *   variable     { id, label, units, group, ... } | null  the selected /api/variables entry. A primary variable shows the
+ *                coarse whole-Earth preview at once (T2M, PRECTOTCORR, CLOUD_AMT), before any place is chosen.
+ *   places       saved places [{ id, name, lat, lon }] (max 5) — news is looked up for these only
  *   interests    chosen data-type ids ("heat", "water", "cloud", "land", "wind", "ice")
+ *   newsWanted   default true: news markers load automatically (saved places only). Pass false to switch them off.
  *   reducedMotion  OS setting OR the in-app Account preference (also on <html data-motion="reduced">)
  *   page         "main" (these are only mounted on Main)
  *   openDrawer / closeDrawer  the single right-hand drawer slot (also available via useShell() from shell/Drawer.jsx)
  *
- * MainLayersProvider wraps the whole Main page (dashboard + stage) and holds the shared layer state
- * (components/globe/useGlobeLayers.jsx): monthly frames, forecast, live weather, news, timeline position.
+ * MainLayersProvider wraps the whole Main page (rail + stage) and holds the shared layer state
+ * (components/globe/useGlobeLayers.jsx): coarse preview, monthly frames, forecast, live weather, news, timeline position.
  */
 import Globe from "../Globe.jsx";
 import ForecastStatus from "../globe/ForecastStatus.jsx";
 import GlobeLegend from "../globe/GlobeLegend.jsx";
 import LiveWeatherCard from "../globe/LiveWeatherCard.jsx";
-import { NewsCard, NewsList, useOpenNews } from "../globe/News.jsx";
+import { NewsCallout, useOpenNews } from "../globe/News.jsx";
 import TimelineRail from "../globe/TimelineRail.jsx";
 import { GlobeLayersProvider, useGlobeLayers, useNewsMarkers } from "../globe/useGlobeLayers.jsx";
 import { useShell } from "../shell/Drawer.jsx";
-import { Badge } from "../shell/ui.jsx";
 import { isForecastIndex } from "../../lib/globeFrames.js";
 
-export function MainLayersProvider({ place, variable, places, interests, reducedMotion, children }) {
+export function MainLayersProvider({ place, variable, places, interests, reducedMotion, newsWanted = true, children }) {
   return (
-    <GlobeLayersProvider place={place} variable={variable} places={places} interests={interests} reducedMotion={reducedMotion}>
+    <GlobeLayersProvider place={place} variable={variable} places={places} interests={interests} reducedMotion={reducedMotion} newsWanted={newsWanted}>
       {children}
     </GlobeLayersProvider>
   );
 }
 
 /**
- * The globe stage and the timeline rail: two siblings with the classes layout.css places
- * (`.globe-stage#globe-stage` and `.rail-slot#timeline`). `globeProps` are the shell's Globe props; the layer props
- * (field, markers, liveGlyph, rotationPaused …) are added here.
+ * The globe stage and the floating timeline: two siblings with the classes layout.css places
+ * (`.globe-stage#globe-stage` and `.rail-slot#timeline`). `globeProps` are the shell's Globe props (pins, dots,
+ * savedPins, onSavedPinPick / onOpenSavedPin, focus, onPick …); the layer props (coarse, field, markers, liveGlyph)
+ * are added here.
+ *   onOpenNews(marker)  optional: open the full news detail yourself (default: the news panel in the shell drawer)
+ *   rotationPaused      optional explicit pause (rotation otherwise only pauses for drag / marker reading / reduced motion)
  */
-export function MainStage({ globeProps, overlay, reducedMotion }) {
+export function MainStage({ globeProps = {}, overlay, reducedMotion, onOpenNews, rotationPaused = false }) {
   const L = useGlobeLayers();
   const shell = useShell();
   const newsOpen = shell.drawerId === "news";
   const markers = useNewsMarkers(newsOpen ? L?.openNewsPlace : null);
-  const openNews = useOpenNews();
+  const openNewsPanel = useOpenNews();
   const forecastShown = !!L?.timeline && isForecastIndex(L.timeline, L.index);
   const frame = L?.frame;
-  const layerLabel = L?.field && !L.field.loading && frame
-    ? `${L.variable?.label ?? ""}, ${frame.label}, ${frame.kind === "forecast" ? "forecast, not observed" : "observed"}, local grid near ${L.place?.name ?? "the selected place"}`
-    : "";
+  const showField = !!L?.field && !L.field.loading;
+  const coarse = L?.coarse?.doc ? L.coarse : null;
+  const layerLabel = [
+    coarse ? `coarse global preview of ${L.variable?.label ?? "the chosen variable"}, approximate pattern, ${coarse.label}` : "",
+    showField && frame
+      ? `detailed local data near ${L.place?.name ?? "the selected place"}, ${frame.label}, ${frame.kind === "forecast" ? "forecast, not observed" : "observed"}`
+      : "",
+  ].filter(Boolean).join("; ");
+  const pickNews = (m) => {
+    if (onOpenNews) return onOpenNews(m);
+    const p = L?.places.find((x) => x.id === m.placeId);
+    if (p) openNewsPanel(p);
+    return undefined;
+  };
   return (
     <>
       <div className="globe-stage" id="globe-stage">
         <Globe
+          idleSpin
           {...globeProps}
+          coarse={coarse}
           field={L?.field ?? null}
           markers={markers}
-          renderMarkerCard={(m) => <NewsCard card={m.lead} compact />}
-          onMarkerPick={(m) => {
-            const p = L?.places.find((x) => x.id === m.placeId);
-            if (p) openNews(p);
-          }}
+          renderMarkerCard={(m) => <NewsCallout marker={m} />}
+          onMarkerPick={pickNews}
           liveGlyph={L?.liveGlyph ?? null}
-          rotationPaused={!!shell.drawerId || !!L?.playing}
+          // Only an explicit pause or reading the open news detail stops rotation; data layers and playback do not.
+          rotationPaused={!!rotationPaused || !!globeProps.rotationPaused}
           layerLabel={layerLabel}
           reducedMotion={reducedMotion ?? L?.reduced}
         >
           {overlay}
           <GlobeLegend
             timeline={L?.timeline}
-            showField={!!L?.field && !L.field.loading}
+            variable={L?.variable}
+            coarse={L?.coarse}
+            showField={showField}
             showForecast={forecastShown}
             showNews={markers.length > 0}
             showLive={!!L?.liveGlyph}
+            savedPins={globeProps.savedPins ?? []}
           />
         </Globe>
-        {forecastShown && (
-          <div className="gl-forecast-pill" role="status">
-            <Badge kind="forecast">{frame?.badge || "Forecast — not observed data"}</Badge>
-          </div>
-        )}
       </div>
       <div className="rail-slot" id="timeline" tabIndex={-1} aria-label="Timeline">
         <TimelineRail />
@@ -88,17 +101,20 @@ export function MainStage({ globeProps, overlay, reducedMotion }) {
   );
 }
 
-/** Dashboard slot 4 (spec 5.8): collapsed by default, no request until expanded or "Show on globe" is on. */
+/** Live-weather row (plan 4.2): collapsed by default, no request until expanded or "Show on globe" is on. */
 export function WeatherSlot() {
   return <LiveWeatherCard />;
 }
 
-/** Dashboard slot 5 (spec 5.10): /api/monthly-forecast only when the user presses "Check forecast". */
+/** Forecast row: /api/monthly-forecast only when the user presses "Check forecast". */
 export function ForecastSlot() {
   return <ForecastStatus />;
 }
 
-/** Dashboard slot 6 (spec 5.9): /api/news lazily, saved places only. */
+/**
+ * V3: Main has no news list (plan 6D). News is discovered through the globe markers, which load automatically.
+ * Kept as an export so an older shell import does not break; it renders nothing.
+ */
 export function NewsSlot() {
-  return <NewsList />;
+  return null;
 }

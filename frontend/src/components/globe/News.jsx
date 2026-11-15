@@ -31,6 +31,34 @@ export function NewsCard({ card, as = "div", onOpen, compact = false }) {
   );
 }
 
+/**
+ * Compact globe callout (plan 6D): severity glyph, a one/two-line headline, publisher and date. Nothing else.
+ * Verified: the glyph carries the attention colour (the callout body stays a neutral surface with a hairline).
+ * Unverified: no severity at all, a dashed neutral outline and the words "Unverified news context".
+ */
+export function NewsCallout({ marker }) {
+  const c = marker?.lead;
+  if (!c) return null;
+  const more = (marker.count ?? 1) - 1;
+  return (
+    <span className={`gl-callout-body${c.verified ? "" : " is-unverified"}`}>
+      <span className="gl-callout-top">
+        {c.verified ? (
+          <span className={`gl-callout-glyph news-tone--${c.tone}`} aria-hidden="true">{c.glyph}</span>
+        ) : (
+          <span className="gl-callout-unverified">{UNVERIFIED_LABEL}</span>
+        )}
+        <span className="gl-callout-headline">{c.headline}</span>
+      </span>
+      <span className="gl-callout-meta">
+        {c.publisher}
+        {c.date ? ` · ${c.date}` : ""}
+        {more > 0 ? ` · +${more} more` : ""}
+      </span>
+    </span>
+  );
+}
+
 /** The panel body (rendered in the shell drawer). Reads live news state, so a retry or refresh updates it. */
 export function NewsPanel({ placeId, placeName }) {
   const snap = useNewsSnapshot();
@@ -41,7 +69,7 @@ export function NewsPanel({ placeId, placeName }) {
   const first = verified[0] ?? unverified[0];
   return (
     <div className="news-panel">
-      <p className="news-panel-label mono">{first?.label ?? NEWS_LABEL}</p>
+      <p className="news-panel-label">News context, not scientific evidence or an official warning.</p>
       <p className="small dim"><span aria-hidden="true">ⓘ </span>{SEVERITY_NOTE}</p>
       <p className="small faint mono">
         {snap.req?.data?.fetched_at ? `Updated ${new Date(snap.req.data.fetched_at).toUTCString().replace(" GMT", " UTC")}` : ""}
@@ -113,7 +141,10 @@ export function useOpenNews() {
   };
 }
 
-/** Dashboard slot 6: loads lazily (first scroll into view, or the button), saved places only. */
+/**
+ * Legacy V2 dashboard list (not shown on Main in V3; markers are the discovery path). Kept for Explore or a test that
+ * still imports it. Loads lazily (first scroll into view, or the button), saved places only.
+ */
 export function NewsList() {
   const L = useGlobeLayers();
   const ref = useRef(null);

@@ -14,7 +14,8 @@ import WhyPanel from "./WhyPanel.jsx";
  *   detailLevel       (new) the profile's "plain" | "balanced" | "technical"; technical opens the trace "With the numbers"
  *   onTrendRefreshed  (new) called with a refetched trend after a stale-signature retry in the Why panel
  *
- * "How did we test this?" and "Why might this be happening?" open in the single right-hand drawer slot.
+ * Main shows only the plain verdict, one sentence and "See how we know" (plan 7); "See how we know" and the opt-in
+ * "Why might this be happening?" open in the single right-hand focus panel.
  */
 export function VerdictSlot({ place, variable, trend, onRetry, onOpenDetail, openDrawer, closeDrawer, detailLevel, onTrendRefreshed }) {
   // The shell calls a drawer's render() on every render, so the drawers read the live trend state from this ref
@@ -23,17 +24,14 @@ export function VerdictSlot({ place, variable, trend, onRetry, onOpenDetail, ope
   live.current = { data: trend?.data ?? (trend?.loading ? live.current.data : null), loading: !!trend?.loading, error: trend?.error ?? "" };
   const props = useRef({});
   props.current = { onOpenDetail, onTrendRefreshed, detailLevel, closeDrawer };
-  const heading = `Evidence check${variable ? ` · ${variable.label}` : ""}${place ? ` · ${place.name}` : ""}`;
-  const head = (
-    <header className="slot-head">
-      <h2 className="slot-title">{heading}</h2>
-    </header>
-  );
+  // Main stays minimal (plan 7): the rail group already names the place and subject, so the heading is for screen readers.
+  const heading = `Trend${variable ? ` · ${variable.label}` : ""}${place ? ` · ${place.name}` : ""}`;
+  const head = <h2 className="sr-only">{heading}</h2>;
   if (!place) {
     return (
       <>
         {head}
-        <StateCard kind="empty" title="Nothing to show yet">Choose one of your places, or click the globe, to check its trend.</StateCard>
+        <StateCard kind="empty" title="Choose a place">Tap the globe or pick one of your places.</StateCard>
       </>
     );
   }
@@ -41,10 +39,8 @@ export function VerdictSlot({ place, variable, trend, onRetry, onOpenDetail, ope
     return (
       <>
         {head}
-        <div className="ev-skeleton" aria-hidden="true"><span className="ev-meter"><i /><i /><i /></span><b /><b /></div>
-        <StateCard kind="loading" title="Checking the evidence…" slowText="Still working — NASA POWER can be slow.">
-          Requesting {variable?.label ?? "the record"} from NASA POWER.
-        </StateCard>
+        <div className="ev-skeleton" aria-hidden="true"><span className="ev-meter ev-meter--sm"><i /><i /><i /></span><b /></div>
+        <StateCard kind="loading" title="Checking for change…" slowText="Still working — NASA POWER can be slow." />
       </>
     );
   }
@@ -52,7 +48,7 @@ export function VerdictSlot({ place, variable, trend, onRetry, onOpenDetail, ope
     return (
       <>
         {head}
-        <StateCard kind="error" title="We couldn't load the evidence" action={onRetry && <button type="button" className="btn btn-sm" onClick={onRetry}>Try again</button>}>
+        <StateCard kind="error" title="We couldn't check this place" action={onRetry && <button type="button" className="btn btn-sm" onClick={onRetry}>Try again</button>}>
           {trend.error}
         </StateCard>
       </>
@@ -94,12 +90,7 @@ export function VerdictSlot({ place, variable, trend, onRetry, onOpenDetail, ope
   return (
     <>
       {head}
-      <VerdictCard data={d} onHowTested={openDrawer ? openHow : onOpenDetail} onWhy={openDrawer ? openWhy : undefined} headingLevel={3} />
-      {onOpenDetail && (
-        <p className="ev-detail-link">
-          <button type="button" className="linklike" onClick={onOpenDetail}>Full statistical detail in Explore ▸</button>
-        </p>
-      )}
+      <VerdictCard compact data={d} onHowTested={openDrawer ? openHow : onOpenDetail} onWhy={openDrawer ? openWhy : undefined} headingLevel={3} />
     </>
   );
 }

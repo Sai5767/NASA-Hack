@@ -1,25 +1,19 @@
-import { useCountUp, useTypewriter } from "../hooks.js";
-import { STAMP_WORDS } from "../lib/words.js";
+import { GradeMeter, TrendArrow } from "./insight/Evidence.jsx";
 import Term from "./Term.jsx";
 
-export function Count({ value, format, delay = 0 }) {
-  const v = useCountUp(value, { duration: 1200, delay });
-  return <>{format(v)}</>;
+/** A number shown at once (V3: no count-up animation; delayed reveals are prohibited motion). */
+export function Count({ value, format }) {
+  return <>{format(value)}</>;
 }
 
-export function Typed({ text, delay = 0, speed = 8 }) {
-  const [shown, done, skip] = useTypewriter(text, { speed, delay });
-  return (
-    <p className="typed" onClick={skip} title={done ? undefined : "Click to skip"}>
-      {shown}
-      {!done && <span className="caret">▍</span>}
-    </p>
-  );
+/** Plain text (V3: the typewriter reveal was removed). Kept as a component so older call sites still work. */
+export function Typed({ text }) {
+  return <p className="typed">{text}</p>;
 }
 
-export function Metric({ term, label, delay, tone = "", sub, children }) {
+export function Metric({ term, label, tone = "", sub, children }) {
   return (
-    <div className={`metric ${tone} reveal`} style={{ "--d": `${delay}ms` }}>
+    <div className={`metric ${tone}`}>
       <span className="metric-label">{term ? <Term id={term}>{label}</Term> : label}</span>
       <span className="metric-value mono">{children}</span>
       <span className="metric-sub">{sub}</span>
@@ -27,27 +21,27 @@ export function Metric({ term, label, delay, tone = "", sub, children }) {
   );
 }
 
+/** The V1 grade as the shared monochrome language: direction glyph, filled marks, label, checks passed. */
 export function Stamp({ grade, stats }) {
-  const sub = stats.significant ? (stats.sign === "up" ? "▲ RISING" : "▼ FALLING") : "— NO CLEAR DIRECTION";
+  const dir = stats.significant ? stats.sign : "flat";
   return (
-    <div className={`stamp stamp-${grade.code}`} style={{ "--d": "2500ms" }} aria-label={`${grade.label}. ${sub}`}>
-      <span className="stamp-word">{STAMP_WORDS[grade.code]}</span>
-      <span className="stamp-sub">{sub}</span>
-      <span className="stamp-score">{grade.passed}/{grade.total} CHECKS</span>
+    <div className={`stamp stamp-${grade.code}`} aria-label={`${grade.label}. ${grade.passed} of ${grade.total} checks passed.`}>
+      <TrendArrow dir={dir} />
+      <span className="stamp-word"><GradeMeter code={grade.code} /> {grade.label}</span>
+      <span className="stamp-score mono">{grade.passed} of {grade.total} <Term id="grade">checks</Term></span>
     </div>
   );
 }
 
-/** The verdict stamp and the one-paragraph summary, shared by the Overview and the Detail view. */
+/** The grade and the one-paragraph summary, shared by the Overview and the Detail view. */
 export function Verdict({ data }) {
   const { grade, stats, summary, variable } = data;
   const tone = stats.significant ? stats.sign : "flat";
   return (
-    <section className={`card hud-card verdict ${tone} reveal`} style={{ "--d": "80ms" }}>
+    <section className={`verdict ${tone}`}>
       <Stamp grade={grade} stats={stats} />
       <div className="verdict-text">
-        <p className="eyebrow">Verdict</p>
-        <Typed text={summary} delay={300} />
+        <Typed text={summary} />
         <p className="verdict-hint dim">{variable.description}</p>
       </div>
     </section>

@@ -1,6 +1,6 @@
 /** Shareable links: the whole question lives in the URL hash, so a link reopens the same case. */
 
-export const TAB_IDS = ["investigate", "sweep", "scan", "duel", "world", "vitals", "events", "ledger", "learn"];
+export const TAB_IDS = ["investigate", "sweep", "scan", "duel", "world", "vitals", "events", "ledger", "learn", "saved"];
 /** The two top-level pages. A link without `p` opens Main for the case file and Explore for every other tool. */
 export const PAGE_IDS = ["main", "explore"];
 

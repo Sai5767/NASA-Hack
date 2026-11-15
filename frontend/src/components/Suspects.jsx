@@ -28,7 +28,7 @@ function CorrelationBar({ r }) {
 function Suspect({ s, label, index }) {
   if (!s.ok) {
     return (
-      <li className="suspect off reveal" style={{ "--d": `${index * 110}ms` }}>
+      <li className="suspect off">
         <b>{s.label}</b>
         <p className="dim small">Not enough overlapping years to test.</p>
       </li>
@@ -36,7 +36,7 @@ function Suspect({ s, label, index }) {
   }
   const higher = s.r > 0;
   return (
-    <li className={`suspect ${s.verdict} reveal`} style={{ "--d": `${index * 110}ms` }}>
+    <li className={`suspect ${s.verdict}`}>
       <div className="suspect-top">
         <b>{s.label}</b>
         <span className={`stamp-mini ${s.verdict}`}>{VERDICT_WORD[s.verdict]}</span>
@@ -130,7 +130,7 @@ export default function Suspects({ data }) {
   const units = variable.units;
 
   return (
-    <section className="card lineup">
+    <section className="lineup">
       <div className="lineup-head">
         <h3>The suspect lineup</h3>
         <p className="dim small">

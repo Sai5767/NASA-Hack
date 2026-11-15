@@ -9,13 +9,17 @@
  */
 import { distanceKm } from "./geo.js";
 
+/**
+ * Event kinds. Monochrome by design (V3 spec 4): a neutral grey for the globe marker (canvas needs a hex) plus a
+ * distinct glyph and the label, so the kind is never told by colour alone and never borrows news red/amber/green.
+ */
 export const KINDS = {
-  heat: { label: "Heat wave", color: "#ff6a5c" },
-  drought: { label: "Drought", color: "#ffc24d" },
-  flood: { label: "Flood", color: "#4da6ff" },
-  ocean: { label: "Ocean cycle", color: "#4dffd9" },
-  ice: { label: "Sea ice", color: "#a8c8ff" },
-  volcano: { label: "Volcano", color: "#c79bff" },
+  heat: { label: "Heat wave", glyph: "▲", color: "#f2f2f2" },
+  drought: { label: "Drought", glyph: "◇", color: "#d0d0d0" },
+  flood: { label: "Flood", glyph: "▼", color: "#b3b3b3" },
+  ocean: { label: "Ocean cycle", glyph: "◎", color: "#adadad" },
+  ice: { label: "Sea ice", glyph: "✳", color: "#f5f5f5" },
+  volcano: { label: "Volcano", glyph: "◆", color: "#8c8c8c" },
 };
 
 export const EVENTS = [

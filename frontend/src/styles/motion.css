@@ -11,7 +11,7 @@
 @keyframes slideIn { from { opacity: 0; transform: translateX(-14px); } to { opacity: 1; transform: none; } }
 @keyframes blink { 50% { opacity: 0; } }
 @keyframes scanBar { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
-@keyframes pulseGlow { 0%, 100% { box-shadow: 0 0 0 0 rgba(var(--accent-rgb), 0.5); } 50% { box-shadow: 0 0 0 8px rgba(var(--accent-rgb), 0); } }
+@keyframes pulseGlow { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }   /* V3: glow retired; kept as a quiet fade for old callers */
 @keyframes slam {
   0% { opacity: 0; transform: scale(2.6) rotate(-16deg); }
   58% { opacity: 1; transform: scale(0.94) rotate(-5deg); }
@@ -19,22 +19,22 @@
   100% { opacity: 1; transform: scale(1) rotate(-6deg); }
 }
 @keyframes thud {
-  0% { box-shadow: 0 0 0 0 var(--stamp, rgba(var(--accent-rgb), 0.7)); }
-  100% { box-shadow: 0 0 0 46px rgba(0, 0, 0, 0); }
+  0% { opacity: 0.6; }
+  100% { opacity: 1; }
 }
 
 /* ---------- Ambient ---------- */
 
-.stars-a { animation: twinkle 7s ease-in-out infinite, drift 90s linear infinite alternate; }
-.stars-b { animation: twinkle 4.6s ease-in-out infinite 1.2s, drift 60s linear infinite alternate; }
-.stars-c { animation: twinkle 3.1s ease-in-out infinite 0.4s; }
+/* V3: stars are sparse, static and dim (no twinkle, no drift). */
+.stars-a, .stars-b, .stars-c { animation: none; }
 
 /* ---------- Choreographed reveals: delay is set inline with --d ---------- */
 
-.reveal { animation: rise 0.55s var(--ease) both; animation-delay: var(--d, 0ms); }
-.reveal-fade { animation: fade 0.6s ease both; animation-delay: var(--d, 0ms); }
-.reveal-pop { animation: pop 0.45s var(--ease) both; animation-delay: var(--d, 0ms); }
-.reveal-slide { animation: slideIn 0.45s var(--ease) both; animation-delay: var(--d, 0ms); }
+/* V3: no delayed text reveals; --d is ignored so content never staggers in. */
+.reveal { animation: fade var(--dur-base) var(--ease-standard) both; }
+.reveal-fade { animation: fade var(--dur-base) var(--ease-standard) both; }
+.reveal-pop { animation: fade var(--dur-base) var(--ease-standard) both; }
+.reveal-slide { animation: fade var(--dur-base) var(--ease-standard) both; }
 
 /* Lines that draw themselves (SVG paths use pathLength="1") */
 .draw {
@@ -71,7 +71,7 @@
 .page-flip-back { animation: flipInBack var(--dur-base) var(--ease-standard) both; }
 .page-fade { animation: fade var(--dur-page) var(--ease-standard) both; }
 .card-swap { animation: cardSwap var(--dur-base) var(--ease-standard) both; }
-.dash-rise { animation: cardSwap var(--dur-base) var(--ease-standard) both; animation-delay: var(--d, 0ms); }
+.dash-rise { animation: fade var(--dur-base) var(--ease-standard) both; }
 
 /* The in-app "Reduce motion" preference (Account ▸ Preferences) sets data-motion="reduced" on <html>; it does exactly what
    the operating-system setting does. Canvas code reads the same flag (lib/theme.js motionReduced()). */

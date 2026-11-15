@@ -1,3 +1,5 @@
+import Term from "./Term.jsx";
+
 const SPEEDS = [
   { ms: 1000, label: "Slow" },
   { ms: 500, label: "Normal" },
@@ -12,16 +14,15 @@ export default function TimeLapse({ lapse, years, units, onChange }) {
 
   if (!lapse.on) {
     return (
-      <section className="card lapse-card reveal" style={{ "--d": "100ms" }}>
+      <section className="lapse-card">
         <div>
-          <p className="eyebrow">Time-lapse</p>
-          <p className="dim small">
-            Watch every site's year-by-year anomaly, from {first} to {last}, change on the map: red where a year ran above that site's own
-            average, blue where it ran below.
+          <p className="lapse-title">Time-lapse</p>
+          <p className="dim">
+            Watch each site's year compared with what that place <Term id="baseline">usually is</Term>, {first} to {last}.
           </p>
         </div>
-        <button type="button" className="btn btn-primary btn-sm" onClick={() => onChange({ ...lapse, on: true, year: first, playing: true })}>
-          ▶ Play the time-lapse
+        <button type="button" className="btn btn-sm" onClick={() => onChange({ ...lapse, on: true, year: first, playing: true })}>
+          ▶ Play
         </button>
       </section>
     );
@@ -29,16 +30,16 @@ export default function TimeLapse({ lapse, years, units, onChange }) {
 
   const atEnd = lapse.year >= last;
   return (
-    <section className="card lapse-card on">
+    <section className="lapse-card on">
       <div className="lapse-top">
         <div>
-          <p className="eyebrow">Time-lapse</p>
+          <p className="lapse-title">Time-lapse</p>
           <b className="lapse-big mono">{lapse.year}</b>
         </div>
         <div className="lapse-buttons">
           <button
             type="button"
-            className="btn btn-sm btn-primary"
+            className="btn btn-sm"
             onClick={() => onChange(atEnd ? { ...lapse, year: first, playing: true } : { ...lapse, playing: !lapse.playing })}
           >
             {atEnd ? "↺ Replay" : lapse.playing ? "❚❚ Pause" : "▶ Play"}
@@ -57,10 +58,12 @@ export default function TimeLapse({ lapse, years, units, onChange }) {
         aria-valuetext={`${lapse.year}`}
       />
       <div className="lapse-foot">
-        <span className="faint small">Each dot is one sample site's {units} that year compared with its own {first}–{last} average. Sample sites, not a complete global map.</span>
+        <span className="faint">
+          Each dot: one site's {units} that year compared with its own {first}–{last} <Term id="baseline">baseline</Term>.
+        </span>
         <span className="seg" role="group" aria-label="Speed">
           {SPEEDS.map((s) => (
-            <button key={s.ms} type="button" className={lapse.speed === s.ms ? "on" : ""} onClick={() => onChange({ ...lapse, speed: s.ms })}>{s.label}</button>
+            <button key={s.ms} type="button" className={lapse.speed === s.ms ? "on" : ""} aria-pressed={lapse.speed === s.ms} onClick={() => onChange({ ...lapse, speed: s.ms })}>{s.label}</button>
           ))}
         </span>
       </div>

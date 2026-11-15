@@ -16,7 +16,7 @@ export default function Loading({ steps = DEFAULT_STEPS, title = "Investigating"
     return () => clearInterval(timer);
   }, [steps.length]);
   return (
-    <div className="card hud-card loading" role="status" aria-live="polite">
+    <div className="loading" role="status" aria-live="polite">
       <p className="eyebrow">{title}</p>
       <p className="loading-line mono">{steps[i]}</p>
       <div className="loading-bar" aria-hidden="true"><i /></div>

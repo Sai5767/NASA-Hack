@@ -31,6 +31,17 @@ export const dwellFor = (speed) => (SPEEDS.find((s) => s.id === speed) ?? SPEEDS
 /** Cross-fade length for a speed: min(0.6 x dwell, 360 ms); 0 (hard cut) with reduced motion. */
 export const fadeMsFor = (speed, reduced = false) => (reduced ? 0 : Math.min(0.6 * dwellFor(speed), 360));
 
+/**
+ * V3 cross-fade between actual adjacent returned frames (plan 6B: 150-300 ms), for a step, a drag or playback.
+ * Playback never fades longer than its own dwell allows; reduced motion is a hard cut.
+ */
+export const FRAME_FADE_MS = 220;
+export const frameFadeMs = ({ playing = false, speed = 1, reduced = false } = {}) => {
+  if (reduced) return 0;
+  if (!playing) return FRAME_FADE_MS;
+  return Math.max(90, Math.min(300, fadeMsFor(speed)));
+};
+
 const monthIndex = (f) => f.year * 12 + (f.month_num - 1);
 
 /** True when b is the calendar month right after a and both are the same kind (observed/observed or forecast/forecast). */
@@ -149,10 +160,10 @@ export const stepIndex = (tl, i, delta) => (tl ? Math.max(0, Math.min(tl.frames.
  *   "cut"     anything else (non-adjacent, observed <-> forecast, first frame): instant
  *   "none"    missing -> missing
  */
-export function transitionPlan(a, b) {
+export function transitionPlan(a, b, { eitherWay = false } = {}) {
   const plan = new Map();
   if (!b) return plan;
-  const adjacent = isAdjacent(a, b);
+  const adjacent = isAdjacent(a, b) || (eitherWay && isAdjacent(b, a));
   const before = new Map((a?.cells ?? []).map((c) => [c.cell_id, c]));
   for (const c of b.cells ?? []) {
     const p = before.get(c.cell_id);

@@ -3,9 +3,8 @@ function escape(value) {
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
-/** Download text as a file from the browser. */
-export function downloadText(filename, text, type = "text/csv") {
-  const blob = new Blob([text], { type: `${type};charset=utf-8` });
+/** Download a Blob as a file from the browser. */
+export function downloadBlob(filename, blob) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -14,6 +13,11 @@ export function downloadText(filename, text, type = "text/csv") {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/** Download text as a file from the browser (API unchanged since V2). */
+export function downloadText(filename, text, type = "text/csv") {
+  downloadBlob(filename, new Blob([text], { type: `${type};charset=utf-8` }));
 }
 
 /** CSV of a case file: a commented header with the key statistics, then the annual series. */
@@ -78,4 +82,51 @@ export function scanCsv(grid) {
         : [c.lat, c.lon, "", "", "", "", "", c.message].map(escape).join(","),
     ),
   ].join("\n");
+}
+
+const csvNumber = (v) => (v == null || !Number.isFinite(v) ? "" : String(Number(v.toPrecision(10))));
+
+/**
+ * CSV of the values a ChartViewer plots (see chartSpec in lib/chart.js), in the unit currently displayed.
+ * One row per x value; band series give a low and a high column; `note` text (p-values, grades) is copied verbatim
+ * and never converted. `range` ({ x0, x1 }) limits the rows to the visible x range.
+ */
+export function chartCsv(spec, { range, originalUnit, approximate } = {}) {
+  const header = [
+    `# Trend Detective chart: ${spec.title}`,
+    spec.source ? `# Source: ${spec.source}` : null,
+    spec.unit ? `# Units: ${spec.unit}${spec.yLabel ? ` ${spec.yLabel}` : ""}` : null,
+    originalUnit && originalUnit !== spec.unit
+      ? `# Converted for display from ${originalUnit}${approximate ? " (approximate)" : ""}. p-values, significance and evidence labels are not converted.`
+      : null,
+    "# Values are the plotted values returned by the backend; nothing is smoothed or filled in.",
+  ].filter(Boolean);
+  const cols = [];
+  for (const s of spec.series) {
+    if (s.type === "band") {
+      cols.push({ name: `${s.label} low`, s, key: "lo" }, { name: `${s.label} high`, s, key: "hi" });
+    } else {
+      cols.push({ name: s.label, s, key: "y" });
+    }
+    if (s.data.some((d) => d.note)) cols.push({ name: `${s.label} note`, s, key: "note" });
+  }
+  const xs = [...new Set(spec.series.flatMap((s) => s.data.map((d) => d.x)))]
+    .filter((x) => Number.isFinite(x) && (!range || ((range.x0 == null || x >= range.x0) && (range.x1 == null || x <= range.x1))))
+    .sort((a, b) => a - b);
+  const index = cols.map((c) => new Map(c.s.data.map((d) => [d.x, d])));
+  const labelOf = (x) => {
+    for (const s of spec.series) {
+      const d = s.data.find((p) => p.x === x);
+      if (d?.label) return d.label;
+    }
+    return csvNumber(x);
+  };
+  const rows = xs.map((x) =>
+    [labelOf(x), ...cols.map((c, i) => {
+      const d = index[i].get(x);
+      if (!d) return "";
+      return c.key === "note" ? escape(d.note ?? "") : csvNumber(d[c.key]);
+    })].map((v, i) => (i === 0 ? escape(v) : v)).join(","),
+  );
+  return [...header, [spec.xLabel ?? "x", ...cols.map((c) => c.name)].map(escape).join(","), ...rows].join("\n");
 }

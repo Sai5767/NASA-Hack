@@ -107,3 +107,14 @@ Agent 0C: news `publisher_verified` (boolean, next to `publisher`, from `news.VE
 4. Repeat within the same hour: same `fetched_at` (served from cache; no second Meteomatics call in your account log).
 5. `GET /api/health/details`: `features.meteomatics.status` is `available`, `telemetry.last_status` is `healthy`, and no credential appears.
 6. Check the console output for the username or password: neither may appear.
+
+---
+
+## 7. Verification pass (2026-11-15, V3 gate, section 8 of the frontend plan)
+
+- Command (from `backend/`): `<venv>\Scripts\python -m pytest -q`, Python 3.12.10, Windows 11. Result: **342 passed, 0 failed** (one more than the 341 above; no code or test changed in this pass).
+- Docker is not installed on this host, so the supported target was checked with the 3.12 venv only. The Docker image build itself was not run; rerun the same command inside the image before release.
+- Network guard re-confirmed in `backend/tests/conftest.py`: every non-loopback `connect`, `connect_ex` and `getaddrinfo` raises `NetworkBlockedError`, so NASA POWER, OpenAI, Meteomatics and GDELT cannot be reached; `TD_LOAD_ENV_FILE=0` keeps developer keys out.
+- Drift check: contract, fixtures and code agree (contract-fixture tests pass). Query parameters on all routes are bounded (lat/lon ranges, grid sides, year caps, `limit`, `hours`); caches, rate limiters, the Meteomatics 512 KB stream cap, per-visitor and whole-server quotas, and `TD_TRUSTED_PROXY_HOPS` handling are covered by passing tests listed in section 2. No defect found; no statistical reference value touched.
+- Both owner-run smoke checklists are in 6.2 (OpenAI, one call) and 6.3 (Meteomatics, one call). They are manual, contain no secrets, and are not automated.
+- Coarse whole-Earth preview data: `/api/world?variable=...` returns trend plus yearly `series` for each of the 68 gazetteer sites (`places.PLACES`; sample sites, not a regular grid, and the response says so). There is no per-month world layer or regular-grid endpoint; `/api/monthly-frames` is local (at most 3 x 3 cells) and `/api/grid` is at most 5 x 5 around one point. A cheap whole-Earth layer would need a new endpoint or a precomputed static asset.

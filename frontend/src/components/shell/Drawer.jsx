@@ -2,7 +2,8 @@ import { createContext, useContext, useRef } from "react";
 import { useDialogFocus } from "../Modal.jsx";
 
 /**
- * The single right-hand drawer slot (spec 7: evidence, why, news and account share it; opening one closes the others).
+ * The right focus panel (V3 section 4.4): one calm reading plane with one close action. Account, news detail, evidence,
+ * live weather and Why share it; opening one closes the others. Esc closes it and focus returns where it was.
  * Desktop/tablet: a right drawer `--drawer-w` wide. Mobile: a full-height sheet. Both are focus-trapped dialogs.
  *
  * Any component inside the app can use the slot:
@@ -24,8 +25,8 @@ export function Drawer({ id, title, eyebrow, onClose, children }) {
   const headingId = `drawer-title-${id}`;
   return (
     <div className="td-drawer-layer">
-      <div className="td-scrim" onMouseDown={onClose} aria-hidden="true" />
-      <aside className="td-drawer" role="dialog" aria-modal="true" aria-labelledby={headingId} ref={ref}>
+      <div className="td-scrim focus-scrim" onMouseDown={onClose} aria-hidden="true" />
+      <aside className="td-drawer focus-panel" role="dialog" aria-modal="true" aria-labelledby={headingId} ref={ref}>
         <header className="td-drawer-head">
           <div>
             {eyebrow && <p className="eyebrow">{eyebrow}</p>}

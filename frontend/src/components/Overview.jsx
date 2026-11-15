@@ -12,7 +12,7 @@ const GRADE_WORDS = { strong: "Strong evidence", moderate: "Likely real", weak: 
 
 function Answer({ n, question, tone = "", headline, children, more, onMore }) {
   return (
-    <section className={`answer ${tone} reveal`} style={{ "--d": `${200 + n * 110}ms` }}>
+    <section className={`answer ${tone}`}>
       <p className="eyebrow">{question}</p>
       <h3>{headline}</h3>
       {children}
@@ -50,7 +50,7 @@ function ForecastHeadline({ data, onMore }) {
   const units = variable.units;
 
   return (
-    <section className="card forecast-head reveal" style={{ "--d": "700ms" }}>
+    <section className="forecast-head">
       <p className="eyebrow">What might come next <span className="badge ml">machine learning, run locally</span></p>
       {loading && <p className="mono dim">Backtesting eight forecasting models…</p>}
       {error && <p className="dim">The forecast is unavailable right now: {error}</p>}
@@ -121,14 +121,14 @@ export default function Overview({ data, onDetail, onGo, events = [], onEvent, v
       </div>
 
       <InView minHeight={380}>
-        <section className="card chart-card">
+        <section className="chart-card">
           <h3>The record</h3>
-          <TrendChart data={data} events={events} onEvent={onEvent} />
+          <TrendChart data={data} events={events} onEvent={onEvent} title={`${data.variable.label}, yearly average`} source="NASA POWER" />
         </section>
       </InView>
 
       {events.length > 0 && (
-        <section className="card events-strip reveal" style={{ "--d": "600ms" }}>
+        <section className="events-strip">
           <p className="eyebrow">Major events near here</p>
           <div className="chip-row">
             {events.map((ev) => (
@@ -143,7 +143,7 @@ export default function Overview({ data, onDetail, onGo, events = [], onEvent, v
 
       <ForecastHeadline data={data} onMore={() => onDetail("forecast")} />
 
-      <section className="card go-deeper reveal" style={{ "--d": "800ms" }}>
+      <section className="go-deeper">
         <p className="eyebrow">Go deeper</p>
         <div className="chip-row">
           <button type="button" className="chip" onClick={() => onDetail("evidence")}>Evidence and tests</button>

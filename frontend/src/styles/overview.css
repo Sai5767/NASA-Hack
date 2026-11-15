@@ -11,37 +11,36 @@
   gap: 6px;
   align-content: start;
   padding: 14px 15px 14px 18px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--panel);
-  backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
 }
-.answer::before { content: ""; position: absolute; left: 0; top: 12px; bottom: 12px; width: 3px; border-radius: 2px; background: var(--flat); }
-.answer.up::before { background: var(--up); }
-.answer.down::before { background: var(--down); }
-.answer h3 { font-size: 18px; line-height: 1.22; letter-spacing: -0.01em; }
-.answer p:not(.eyebrow) { font-size: 13px; line-height: 1.5; }
+.answer::before { content: ""; position: absolute; left: 0; top: 12px; bottom: 12px; width: 3px; border-radius: var(--radius-xs); background: var(--trend-flat); }
+.answer.up::before { background: var(--trend-up); }
+.answer.down::before { background: var(--trend-down); }
+.answer h3 { font-size: var(--fs-lead); line-height: 1.22; letter-spacing: -0.01em; }
+.answer p:not(.eyebrow) { font-size: var(--fs-body); line-height: 1.5; }
 .answer .linklike { justify-self: start; }
 
 .forecast-head { padding: 16px 18px; display: grid; gap: 6px; }
-.forecast-head h3 { font-size: 19px; }
+.forecast-head h3 { font-size: var(--fs-title); }
 .go-deeper { padding: 14px 16px; display: grid; gap: 10px; }
 .chip-row { display: flex; flex-wrap: wrap; gap: 6px; }
 
 .jump { display: flex; flex-wrap: wrap; gap: 6px; }
-.fold { border: 1px solid var(--line); border-radius: var(--radius); background: rgba(var(--ink-rgb), 0.55); }
+.fold { border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
 .fold > summary {
   display: flex; justify-content: space-between; align-items: center; gap: 10px;
-  padding: 11px 14px; cursor: pointer; list-style: none; border-radius: var(--radius);
+  padding: 11px 14px; cursor: pointer; list-style: none; border-radius: var(--radius-md);
 }
 .fold > summary::-webkit-details-marker { display: none; }
-.fold > summary b { font-size: 15px; }
-.fold > summary small { font-size: 12px; }
-.fold > summary:hover { background: rgba(255, 255, 255, 0.03); }
-.fold > summary i { width: 9px; height: 9px; border-right: 2px solid var(--text-dim); border-bottom: 2px solid var(--text-dim); transform: rotate(45deg); transition: transform 0.2s; flex: none; margin-right: 4px; }
-.fold[open] > summary i { transform: rotate(-135deg); }
+.fold > summary b { font-size: var(--fs-body); }
+.fold > summary small { font-size: var(--fs-label); }
+.fold > summary:hover { background: var(--hover); }
+.fold > summary i { width: 9px; height: 9px; border-right: 2px solid var(--text-dim); border-bottom: 2px solid var(--text-dim); transform: none; transition: transform 0.2s; flex: none; margin-right: 4px; }
+.fold[open] > summary i { transform: none; }
 .fold-body { display: grid; gap: 16px; padding: 4px 10px 12px; }
-.btn.on { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+.btn.on { border-color: var(--text); color: var(--text); background: var(--selected); }
 
 /* ---------- Home: watchlist, profile, For you ---------- */
 
@@ -49,22 +48,22 @@
 
 .watchlist { padding: 14px 16px; display: grid; gap: 10px; }
 .watch-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-.watch-head h3 { font-size: 16px; }
+.watch-head h3 { font-size: var(--fs-body); }
 .watchlist ul { display: grid; gap: 6px; }
-.watch-row { display: flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 10px; background: rgba(255, 255, 255, 0.02); }
-.watch-row.up { border-left: 3px solid var(--up); }
-.watch-row.down { border-left: 3px solid var(--down); }
-.watch-row.flat { border-left: 3px solid var(--flat); }
+.watch-row { display: flex; align-items: center; gap: 6px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--hover); }
+.watch-row.up { border-left: var(--border-width) solid var(--trend-up); }
+.watch-row.down { border-left: var(--border-width) solid var(--trend-down); }
+.watch-row.flat { border-left: var(--border-width) solid var(--trend-flat); }
 .watch-main {
   flex: 1; min-width: 0; display: grid; grid-template-columns: minmax(0, 1.4fr) auto minmax(86px, auto); align-items: center; gap: 10px;
-  padding: 8px 10px; border: 0; background: transparent; text-align: left; border-radius: 10px;
+  padding: 8px 10px; border: 0; background: transparent; text-align: left; border-radius: var(--radius-md);
 }
-.watch-main:hover { background: rgba(255, 255, 255, 0.04); }
+.watch-main:hover { background: var(--hover); }
 .watch-name { display: grid; min-width: 0; }
-.watch-name b { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.watch-name small { font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.watch-delta { display: grid; text-align: right; font-size: 13px; }
-.watch-delta small { font-size: 10.5px; color: var(--text-faint); }
+.watch-name b { font-size: var(--fs-body); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.watch-name small { font-size: var(--fs-label); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.watch-delta { display: grid; text-align: right; font-size: var(--fs-body); }
+.watch-delta small { font-size: var(--fs-label); color: var(--text-faint); }
 
 .profile-strip { padding: 14px 16px; display: grid; gap: 8px; }
 
@@ -73,30 +72,30 @@
 .foryou ul { display: grid; gap: 6px; }
 .foryou button:not(.btn) {
   display: grid; gap: 2px; width: 100%; text-align: left; padding: 9px 12px;
-  border: 1px solid var(--line-strong); border-radius: 10px; background: rgba(var(--ink-rgb), 0.86); backdrop-filter: blur(8px);
+  border: 1px solid var(--border-control); border-radius: var(--radius-md); background: var(--surface); 
   transition: border-color 0.18s, transform 0.18s;
 }
-.foryou button:not(.btn):hover { border-color: var(--accent); transform: translateY(-1px); }
-.foryou b { font-size: 13.5px; }
-.foryou span { font-size: 12px; color: var(--text-dim); line-height: 1.4; }
-.foryou em { font-style: normal; font-size: 11.5px; color: var(--accent); font-family: var(--font-mono); }
+.foryou button:not(.btn):hover { border-color: var(--text);  }
+.foryou b { font-size: var(--fs-body); }
+.foryou span { font-size: var(--fs-label); color: var(--text-dim); line-height: 1.4; }
+.foryou em { font-style: normal; font-size: var(--fs-label); color: var(--text); font-family: var(--font-value); }
 
 /* ---------- Tabs: essentials and explore more ---------- */
 
 .tab-groups { display: grid; gap: 8px; }
 .tab-group { display: grid; gap: 4px; }
-.tab-group-label { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-faint); padding-left: 4px; }
+.tab-group-label { font-family: var(--font-value); font-size: var(--fs-label); letter-spacing: var(--tracking-label); text-transform: none; color: var(--text-faint); padding-left: 4px; }
 .tabs.more { flex-wrap: wrap; }
 .tabs.more .tab { flex: 1 1 78px; padding: 7px 6px; }
-.tabs.more .tab b { font-size: 13px; }
+.tabs.more .tab b { font-size: var(--fs-body); }
 .tabs.more .tab small { display: none; }
 
 /* ---------- Intake wizard ---------- */
 
 .choice-grid.one { grid-template-columns: minmax(0, 1fr); }
-.choice[aria-pressed="true"], .choice.on { border-color: var(--accent); background: var(--accent-dim); box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), 0.4); }
+.choice[aria-pressed="true"], .choice.on { border-color: var(--text); background: var(--selected); box-shadow: none; }
 .wizard-foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 16px; }
 .wizard-dots { display: flex; gap: 6px; }
-.wizard-dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--line-strong); }
-.wizard-dots i.on { background: var(--accent); }
+.wizard-dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--border-control); }
+.wizard-dots i.on { background: var(--text); }
 .wizard-dots i.done { background: var(--text-dim); }

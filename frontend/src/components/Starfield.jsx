@@ -12,20 +12,22 @@ function mulberry32(seed) {
   };
 }
 
-function layer(count, seed, color) {
+function layer(count, seed) {
   const rand = mulberry32(seed);
-  return Array.from({ length: count }, () => `${(rand() * 100).toFixed(2)}vw ${(rand() * 100).toFixed(2)}vh 0 0 ${color}`).join(",");
+  return Array.from({ length: count }, () => `${(rand() * 100).toFixed(2)}vw ${(rand() * 100).toFixed(2)}vh 0 0 var(--star)`).join(",");
 }
 
-/** Fixed, drifting, twinkling stars behind the whole app. Pure CSS animation. */
-export default function Starfield({ accentRgb = "180,155,255" }) {
+/**
+ * Sparse, static, dim neutral stars behind the whole app (V3: about 60, no twinkle, no drift, no colour).
+ * Two layers: many faint 1px stars and a few slightly brighter 2px ones. Opacity lives in theme.css (.starfield).
+ */
+export default function Starfield() {
   const layers = useMemo(
     () => [
-      { shadow: layer(140, 11, "rgba(190,210,255,0.75)"), size: 1, cls: "stars-a" },
-      { shadow: layer(60, 23, "rgba(190,230,255,0.85)"), size: 2, cls: "stars-b" },
-      { shadow: layer(16, 37, `rgba(${accentRgb},0.9)`), size: 3, cls: "stars-c" },
+      { shadow: layer(48, 11), size: 1, cls: "stars-a" },
+      { shadow: layer(12, 23), size: 2, cls: "stars-b" },
     ],
-    [accentRgb],
+    [],
   );
   return (
     <div className="starfield" aria-hidden="true">

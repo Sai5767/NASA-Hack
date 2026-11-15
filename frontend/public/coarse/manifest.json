@@ -1,0 +1,66 @@
+{
+ "source": "NASA POWER",
+ "endpoint": "https://power.larc.nasa.gov/api/temporal/monthly/point",
+ "community": "RE",
+ "retrieved": "2026-11-15",
+ "months": [
+  "2023-01",
+  "2023-02",
+  "2023-03",
+  "2023-04",
+  "2023-05",
+  "2023-06",
+  "2023-07",
+  "2023-08",
+  "2023-09",
+  "2023-10",
+  "2023-11",
+  "2023-12",
+  "2024-01",
+  "2024-02",
+  "2024-03",
+  "2024-04",
+  "2024-05",
+  "2024-06",
+  "2024-07",
+  "2024-08",
+  "2024-09",
+  "2024-10",
+  "2024-11",
+  "2024-12",
+  "2025-01",
+  "2025-02",
+  "2025-03",
+  "2025-04",
+  "2025-05",
+  "2025-06",
+  "2025-07",
+  "2025-08",
+  "2025-09",
+  "2025-10",
+  "2025-11",
+  "2025-12"
+ ],
+ "variables": {
+  "T2M": {
+   "file": "T2M.json",
+   "unit": "\u00b0C",
+   "label": "Air temperature at 2 m",
+   "bytes": 38056
+  },
+  "PRECTOTCORR": {
+   "file": "PRECTOTCORR.json",
+   "unit": "mm/day",
+   "label": "Precipitation (corrected)",
+   "bytes": 34965
+  },
+  "CLOUD_AMT": {
+   "file": "CLOUD_AMT.json",
+   "unit": "%",
+   "label": "Cloud amount",
+   "bytes": 38743
+  }
+ },
+ "points": 264,
+ "failedPoints": 0
+}

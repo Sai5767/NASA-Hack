@@ -1,31 +1,50 @@
 /**
- * The single V2 "mission" theme. The CSS tokens live in styles/theme.css; this file holds the static fallback of the
- * colours that JavaScript draws (map dots, pins, the globe's land and sea, the stars) for code and tests with no DOM.
- * Values match the :root token block in theme.css (V2 visual spec, section 2.2).
+ * The single V3 "Quiet Earth" theme. The tokens live in styles/theme.css (the one source of truth); this file holds the
+ * static mirror of the colours JavaScript draws (map dots, pins, the globe's land and sea) for code and tests with no DOM.
+ * See docs/V3_QUIET_EARTH_VISUAL_SPEC.md.
  *
- * The theme switch was removed (spec Q2). The old ids "nebula" and "classic" still resolve, to the mission theme, so a
- * stored V1 preference never breaks anything.
+ * There is no theme picker. The id "mission" and the retired ids ("nebula", "classic", anything unknown) all resolve to
+ * the one theme, and every V2 export is kept so existing imports keep working.
  */
 export const THEMES = {
   mission: {
-    label: "Mission",
-    colors: { a: "#b3a1ff", b: "#ff8fd6" },
-    accentRgb: "179,161,255",
+    label: "Quiet Earth",
+    // a = pin A / primary marker (--accent, now white); b = pin B / live (--live, now silver). Interface is monochrome.
+    colors: { a: "#f2f2f2", b: "#a3a3a3" },
+    accentRgb: "242,242,242",
+    // Earth exceptions (spec 3B): natural ocean, muted land, a subtle blue rim. Inside the globe only.
     globe: {
-      atmosphere: "110,160,255",
-      oceanA: "#12356b",
-      oceanB: "#061226",
-      flatOcean: "#0a1a36",
-      land: "#1b3555",
-      coast: "rgba(159, 196, 255, 0.60)",
-      border: "rgba(159, 196, 255, 0.16)",
-      grid: "rgba(125, 160, 230, 0.10)",
+      atmosphere: "120,170,230",
+      oceanA: "#1d4a72",
+      oceanB: "#061525",
+      flatOcean: "#0a2236",
+      land: "#3f5236",
+      coast: "rgba(225, 232, 225, 0.26)",
+      border: "rgba(255, 255, 255, 0.07)",
+      grid: "rgba(255, 255, 255, 0.035)",
+      limb: "rgba(150, 190, 235, 0.30)",
     },
   },
 };
 
-/** Data colours drawn by JavaScript. They never change with any interface theme. */
-export const DATA_COLORS = { up: "#ff7a5c", down: "#5ab4ff", flat: "#9aa4b8", failed: "#8c97b0" };
+/** Data colours drawn by JavaScript (data layers and their legends only; UI arrows are monochrome --trend-*). */
+export const DATA_COLORS = { up: "#d08455", down: "#6f9fc9", flat: "#7a7a7a", failed: "#8c8c8c" };
+
+/**
+ * Saved-pin palette (owner feedback item 10): never news red/amber/green, always drawn with a label and pin glyph.
+ * Mirrors --pin-1..--pin-6 in theme.css. `outline` is the ring colour to draw around the marker.
+ */
+export const PIN_COLORS = [
+  { id: "snow", label: "Snow", hex: "#f5f5f5", outline: "#050505" },
+  { id: "silver", label: "Silver", hex: "#a3a3a3", outline: "#050505" },
+  { id: "ice", label: "Ice", hex: "#9fd3f0", outline: "#050505" },
+  { id: "lavender", label: "Lavender", hex: "#c4b5fd", outline: "#050505" },
+  { id: "sand", label: "Sand", hex: "#d6c7a1", outline: "#050505" },
+  { id: "graphite", label: "Graphite", hex: "#5c5c5c", outline: "#ffffff" },
+];
+
+/** News attention colours (verified markers: outline/glyph/leader only). Mirrors --news-* in theme.css. */
+export const NEWS_COLORS = { low: "#4cc38a", medium: "#f5b83d", high: "#f2555a", unverified: "#8c8c8c" };
 
 export const THEME_IDS = Object.keys(THEMES);
 export const DEFAULT_THEME = "mission";
@@ -33,7 +52,7 @@ export const DEFAULT_THEME = "mission";
 /** The theme for an id; anything unknown (including the retired V1 themes) falls back to the default. */
 export const themeOf = (id) => THEMES[id] ?? THEMES[DEFAULT_THEME];
 
-/** The id after `id` in the cycle of themes (with one theme, always the mission theme). */
+/** Kept for compatibility: with one theme the "next" theme is always the same one. */
 export function nextTheme(id) {
   const i = THEME_IDS.indexOf(id);
   return THEME_IDS[(i < 0 ? 0 : i + 1) % THEME_IDS.length];
@@ -48,7 +67,7 @@ export function applyTheme(id) {
   }
 }
 
-/** Kept for main.jsx: there is only one theme now. */
+/** Kept for main.jsx: there is only one theme. */
 export const savedTheme = () => DEFAULT_THEME;
 
 /** Reflect the in-app "Reduce motion" preference on <html> so motion.css can switch animation off. */

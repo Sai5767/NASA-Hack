@@ -55,7 +55,7 @@ function InsightBlock({ data, technical, onTrendRefreshed }) {
     <div className="cf-insight">
       <VerdictCard data={data} eyebrow="Verdict" onHowTested={() => setHow((o) => !o)} onWhy={() => setWhy((o) => !o)} whyOpen={why} />
       {how && (
-        <section className="card cf-how" aria-label={HOW_BUTTON}>
+        <section className="cf-how" aria-label={HOW_BUTTON}>
           <div className="cf-insight-head">
             <h3>{HOW_BUTTON}</h3>
             <button type="button" className="btn btn-sm btn-ghost" onClick={() => setHow(false)} aria-label={`Close ${HOW_BUTTON}`}>✕</button>
@@ -64,7 +64,7 @@ function InsightBlock({ data, technical, onTrendRefreshed }) {
         </section>
       )}
       {why && (
-        <section className="card cf-why why-inline" aria-label={WHY_BUTTON}>
+        <section className="cf-why why-inline" aria-label={WHY_BUTTON}>
           <div className="cf-insight-head">
             <h3>{WHY_BUTTON}</h3>
             <button type="button" className="btn btn-sm btn-ghost" onClick={() => setWhy(false)} aria-label={`Close ${WHY_BUTTON}`}>✕</button>
@@ -129,37 +129,37 @@ export default function CaseFile({ data, view, onView, onGo, onEvent, watched, o
   const sectionBody = {
     record: (
       <InView minHeight={380}>
-        <section className="card chart-card">
+        <section className="chart-card">
           <h3>The record</h3>
-          <TrendChart data={data} events={nearby} onEvent={onEvent} />
-          <Stripes annual={annual} units={units} />
+          <TrendChart data={data} events={nearby} onEvent={onEvent} title={`${variable.label}, yearly average`} source="NASA POWER" />
+          <Stripes annual={annual} units={units} title={`${variable.label}: each year as a stripe`} source="NASA POWER" />
         </section>
       </InView>
     ),
     pattern: (
       <InView minHeight={320}>
-        <section className="card duo">
+        <section className="duo">
           <div>
             <h3><Term id="fingerprint">Trend fingerprint</Term></h3>
-            <Fingerprint rows={fingerprint} agreement={agreement} units={units} />
+            <Fingerprint rows={fingerprint} agreement={agreement} units={units} title={`${variable.label}: trend of each calendar month`} source="NASA POWER" />
           </div>
           <div>
             <h3><Term id="emergence">When the evidence emerged</Term></h3>
-            <Emergence series={emergence.series} year={emergence.year} significant={stats.significant} />
+            <Emergence series={emergence.series} year={emergence.year} significant={stats.significant} title={`${variable.label}: when the trend became clear`} source="NASA POWER" />
           </div>
         </section>
       </InView>
     ),
     evidence: (
       <InView minHeight={300}>
-        <section className="card locker">
+        <section className="locker">
           <div className="locker-head">
             <h3><Term id="grade">Evidence locker</Term></h3>
             <span className={`grade-pill grade-${grade.code}`}>{grade.label} · {grade.passed}/{grade.total}</span>
           </div>
           <ul className="checks">
             {checks.map((c, i) => (
-              <li key={c.id} className={`${c.passed ? "pass" : "fail"} reveal-slide`} style={{ "--d": `${i * 120}ms` }}>
+              <li key={c.id} className={`${c.passed ? "pass" : "fail"}`}>
                 <span className="mark" aria-hidden="true">{c.passed ? "✓" : "✕"}</span>
                 <div>
                   <b>{c.label}</b>
@@ -219,7 +219,7 @@ export default function CaseFile({ data, view, onView, onGo, onEvent, watched, o
       </InView>
     ),
     notes: (
-      <section className="card notes">
+      <section className="notes">
         <h3>Detective's notes</h3>
         <ul>
           {caveats.map((c) => (
@@ -233,9 +233,9 @@ export default function CaseFile({ data, view, onView, onGo, onEvent, watched, o
 
   return (
     <article className="casefile" key={play}>
-      <header className="card cf-head reveal">
+      <header className="cf-head">
         <div>
-          <p className="eyebrow">Case file</p>
+          <p className="cf-kicker faint">Case file</p>
           <h2>{variable.label}</h2>
           <p className="mono dim cf-meta">
             {formatPlace(location.lat, location.lon)} · {period.start_year}–{period.end_year} · {quality.years_used} complete years · {coverage}% of months
@@ -252,7 +252,7 @@ export default function CaseFile({ data, view, onView, onGo, onEvent, watched, o
             className="btn btn-sm"
             onClick={() => downloadText(`trend-detective_${variable.id}_${location.lat}_${location.lon}.csv`, caseFileCsv(data))}
           >
-            ⤓ CSV
+            Download CSV
           </button>
         </div>
       </header>
@@ -276,9 +276,9 @@ export default function CaseFile({ data, view, onView, onGo, onEvent, watched, o
           <InsightBlock data={data} technical onTrendRefreshed={onTrendRefreshed} />
 
           <div className="metrics">
-            <Metric term="sens" label="Rate of change" delay={350} tone={tone} sub={<>95% range <b className="mono">{signed(stats.ci_low_per_decade)}</b> to <b className="mono">{signed(stats.ci_high_per_decade)}</b></>}>
+            <Metric term="sens" label="Rate of change" delay={350} tone={tone} sub={<><Term id="ci">95% range</Term> <b className="mono">{signed(stats.ci_low_per_decade)}</b> to <b className="mono">{signed(stats.ci_high_per_decade)}</b></>}>
               <Count value={stats.slope_per_decade} format={(v) => signed(v, 3)} delay={500} />
-              <small>{units} / decade</small>
+              <small>{units} <Term id="perdecade">per decade</Term></small>
             </Metric>
             <Metric label="Total change" delay={450} tone={tone} sub={<>over {stats.span_years} years{stats.percent_of_mean != null && <> · <b className="mono">{signed(stats.percent_of_mean, 3)}%</b> of the average</>}</>}>
               <Count value={stats.total_change} format={(v) => signed(v, 3)} delay={600} />

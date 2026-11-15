@@ -1,32 +1,36 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchArchetypes, fetchDuel, fetchGrid, fetchLedger, fetchPlaces, fetchSweep, fetchTrend, fetchVariables, fetchVersion, fetchVitals, fetchWorld } from "./api.js";
-import { CLUSTER_COLORS } from "./components/Archetypes.jsx";
+import { CLUSTER_COLORS, clusterGlyph, clusterName } from "./components/Archetypes.jsx";
 import Briefing from "./components/Briefing.jsx";
 import { AboutDialog, CasesDialog, GlossaryDialog } from "./components/Dialogs.jsx";
 import { ExplainContext } from "./components/ExplainContext.js";
 import Explainer from "./components/Explainer.jsx";
 import Globe, { applyGlobePalette } from "./components/Globe.jsx";
 import GlobeLegend from "./components/globe/GlobeLegend.jsx";
+import { useGlobeLayers } from "./components/globe/useGlobeLayers.jsx";
 import ExplorePanel from "./components/insight/ExplorePanel.jsx";
+import ExploreTabs from "./components/insight/ExploreTabs.jsx";
 import { VerdictSlot } from "./components/main/InsightSlots.jsx";
-import { ForecastSlot, MainLayersProvider, MainStage, NewsSlot, WeatherSlot } from "./components/main/MainLayers.jsx";
-import SetupPanel from "./components/SetupPanel.jsx";
+import { ForecastSlot, MainLayersProvider, MainStage, WeatherSlot } from "./components/main/MainLayers.jsx";
 import AccountPanel from "./components/shell/AccountPanel.jsx";
-import Dashboard, { DataPicker, PlaceSwitcher, Slot } from "./components/shell/Dashboard.jsx";
+import Dashboard, { DataPicker, PlaceSwitcher, RailGroup } from "./components/shell/Dashboard.jsx";
 import { Drawer, ShellContext } from "./components/shell/Drawer.jsx";
 import Onboarding from "./components/shell/Onboarding.jsx";
+import { PinSwatch, SavePinForm } from "./components/shell/SavedPins.jsx";
 import SignIn from "./components/shell/SignIn.jsx";
-import TopBar, { Brand } from "./components/shell/TopBar.jsx";
+import TopBar from "./components/shell/TopBar.jsx";
+import Vishwa from "./components/shell/Vishwa.jsx";
 import { MOBILE_QUERY, REDUCED_QUERY, TABLET_QUERY, useMedia, useProfileStore } from "./components/shell/useShellState.js";
 import Starfield from "./components/Starfield.jsx";
+import { WorldLegend } from "./components/World.jsx";
 import { CASES, FIRST_YEAR, LAST_FULL_YEAR } from "./lib/cases.js";
 import { EVENTS, EVENT_BY_ID, KINDS } from "./lib/events.js";
-import { clamp, formatP, formatPlace, round2, signed } from "./lib/format.js";
+import { clamp, formatPlace, round2 } from "./lib/format.js";
 import { cellContains, nearestPlace } from "./lib/geo.js";
-import { intensity, mixHex, prepareLapse } from "./lib/lapse.js";
+import { cellStylesShown, lapseDots, scanCells, worldDots } from "./lib/globeDots.js";
+import { prepareLapse } from "./lib/lapse.js";
 import {
   INTERESTS,
-  MAX_PLACES,
   addPlace,
   defaultView,
   hasPlace,
@@ -39,7 +43,21 @@ import {
   variablesFor,
   withAccount,
 } from "./lib/profile.js";
-import { DEFAULT_EXPLORE_TAB, EXPLORE_TABS, flipDirection, hashFromRoute, historyMode, routeFromHash } from "./lib/route.js";
+import {
+  addSavedPin,
+  clearSavedPins,
+  createResultCache,
+  findSavedPin,
+  loadSavedPins,
+  newPinId,
+  popPin,
+  pushPin,
+  removeSavedPin,
+  saveSavedPins,
+  savedPinMarkers,
+  scanSummary,
+} from "./lib/pins.js";
+import { DEFAULT_EXPLORE_TAB, canCombine, flipDirection, hashFromRoute, historyMode, routeFromHash } from "./lib/route.js";
 import { DATA_COLORS, DEFAULT_THEME, themeOf } from "./lib/theme.js";
 import { compareVersions, describeVersion } from "./lib/version.js";
 
@@ -57,7 +75,18 @@ applyGlobePalette(PALETTE.globe);
 const EMPTY = { data: null, key: "", loading: false, error: "" };
 const MAX_YEAR = new Date().getFullYear();
 
-const PAGE_NAMES = { main: "Main dashboard", explore: "Explore" };
+const PAGE_NAMES = { main: "Main", explore: "Explore" };
+
+/** True when a key press is meant for a text field (Ctrl/Cmd+Z there undoes typing, not a pin). */
+const isTyping = (el) => !!el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
+
+/** The pin a scan request key describes (keys.grid order: variable, lat, lon, start, end, size, n). */
+function pinFromGridKey(key) {
+  const [variable, lat, lon, start, end, size, n] = String(key ?? "").split("|");
+  const p = { variable, lat: Number(lat), lon: Number(lon), start: Number(start), end: Number(end) };
+  if (!variable || ![p.lat, p.lon, p.start, p.end].every(Number.isFinite)) return null;
+  return { params: p, cfg: { size: Number(size), n: Number(n) } };
+}
 
 const keys = {
   trend: (p) => [p.variable, p.lat, p.lon, p.start, p.end].join("|"),
@@ -101,74 +130,6 @@ function midpoint(a, b) {
   return { lat: Math.atan2(z, Math.hypot(x, y)) / rad, lon: Math.atan2(y, x) / rad };
 }
 
-function scanCells(data) {
-  const units = data.variable.units;
-  const ok = data.cells.filter((c) => c.ok);
-  const maxAbs = Math.max(...ok.map((c) => Math.abs(c.slope_per_decade)), 1e-9);
-  return data.cells.map((c) => {
-    const place = formatPlace(c.lat, c.lon);
-    if (!c.ok) {
-      return { lat: c.lat, lon: c.lon, fill: COLORS.failed, alpha: 0.16, stroke: "rgba(160,170,200,0.5)", strokeWidth: 1, dash: [3, 3], tip: `${place} · not analyzed` };
-    }
-    const color = c.slope_per_decade >= 0 ? COLORS.up : COLORS.down;
-    const strength = Math.abs(c.slope_per_decade) / maxAbs;
-    const status = c.significant_fdr ? "holds up after correction" : c.significant ? "significant, not after correction" : "no clear trend";
-    return {
-      lat: c.lat,
-      lon: c.lon,
-      fill: c.significant ? color : COLORS.flat,
-      alpha: c.significant ? 0.26 + 0.5 * strength : 0.14,
-      stroke: c.significant ? color : "rgba(150,165,205,0.4)",
-      strokeWidth: c.significant_fdr ? 2.2 : 1,
-      dash: c.significant && !c.significant_fdr ? [4, 3] : null,
-      tip: `${place} · ${signed(c.slope_per_decade)} ${units}/decade · p ${formatP(c.p_value)} · ${status}`,
-    };
-  });
-}
-
-/** One dot per place in the world survey: color = direction, ring = survives correction, size = signal vs noise. */
-function worldDots(data) {
-  const units = data.variable.units;
-  return data.places.map((p) => {
-    if (!p.ok) {
-      return { id: p.id, name: p.name, lat: p.lat, lon: p.lon, color: COLORS.failed, r: 3.5, ring: false, failed: true, tip: `${p.name} · not measurable here` };
-    }
-    const color = p.significant ? (p.slope_per_decade >= 0 ? COLORS.up : COLORS.down) : COLORS.flat;
-    const status = p.significant_fdr ? "holds up after correction" : p.significant ? "significant, not after correction" : "no clear trend";
-    return {
-      id: p.id,
-      name: p.name,
-      lat: p.lat,
-      lon: p.lon,
-      color,
-      r: 4 + Math.min(5, Math.abs(p.signal_to_noise ?? 0) * 1.6),
-      ring: p.significant_fdr,
-      sign: p.significant ? (p.slope_per_decade >= 0 ? "up" : "down") : undefined,
-      failed: false,
-      tip: `${p.name} · ${signed(p.slope_per_decade)} ${units}/decade · ${status}`,
-    };
-  });
-}
-
-/** Time-lapse: each dot fades from grey toward red (above the site's own average) or blue (below) for the chosen year. */
-function lapseDots(data, prepared, year) {
-  const units = data.variable.units;
-  return data.places.map((p) => {
-    const base = { id: p.id, name: p.name, lat: p.lat, lon: p.lon, ring: false };
-    if (!p.ok) return { ...base, color: COLORS.failed, r: 3.5, failed: true, tip: `${p.name} · not measurable here` };
-    const a = prepared.at(p.id, year);
-    if (a == null) return { ...base, color: COLORS.failed, r: 3, tip: `${p.name} · no value for ${year}` };
-    const k = intensity(a, prepared.scale);
-    return {
-      ...base,
-      color: mixHex(COLORS.flat, a >= 0 ? COLORS.up : COLORS.down, k),
-      r: 4 + 5 * k,
-      sign: a > 0 ? "up" : a < 0 ? "down" : undefined,
-      tip: `${p.name} · ${year}: ${signed(a, 3)} ${units} vs its own average`,
-    };
-  });
-}
-
 /** One dot per place, colored by the archetype (cluster) it belongs to. */
 function archetypeDots(data) {
   return data.places.map((p) => ({
@@ -179,7 +140,7 @@ function archetypeDots(data) {
     color: CLUSTER_COLORS[p.cluster % CLUSTER_COLORS.length],
     r: 6,
     ring: false,
-    tip: `${p.name} · archetype ${p.cluster + 1} · twins: ${p.twins.map((t) => t.name).join(", ")}`,
+    tip: `${p.name} · ${clusterGlyph(p.cluster)} ${clusterName(p.cluster)} · twins: ${p.twins.map((t) => t.name).join(", ")}`,
   }));
 }
 
@@ -224,38 +185,67 @@ function usePlaces() {
   return state;
 }
 
-/** Sign-in and the two onboarding questions, inside one centred frame. The dashboard is not rendered behind it. */
+/**
+ * The base-only welcome Earth: the real Globe renderer with no data, news, live weather, pins or picking, rotating
+ * slowly behind sign-in and onboarding. Decorative (inert, hidden from assistive tech); it makes no request.
+ */
+function WelcomeEarth({ focus, reduced }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    if (ref.current) ref.current.inert = true;
+  }, []);
+  return (
+    <div className="welcome-globe" ref={ref} aria-hidden="true">
+      <Globe idleSpin={!reduced} focus={focus} reducedMotion={reduced} controls={false} />
+    </div>
+  );
+}
+
+/**
+ * News loads automatically once the workspace is open (onboarding is done) and the user has saved places: the layer
+ * then fetches news for those saved places only and shows it as globe markers. There is no news list on Main.
+ */
+function AutoNews() {
+  const L = useGlobeLayers();
+  const count = L?.places?.length ?? 0;
+  useEffect(() => {
+    if (L && !L.newsWanted && count > 0) L.setNewsWanted(true);
+  }, [L?.newsWanted, count]); // eslint-disable-line react-hooks/exhaustive-deps
+  return null;
+}
+
+/** Sign-in and the two onboarding questions over the welcome Earth. The workspace is not rendered behind it. */
 function Welcome({ store, places, placesStatus }) {
   const { profile } = store;
   const stage = stageOf(profile);
   const [about, setAbout] = useState(false);
+  const [focus, setFocus] = useState(null);
+  const reduced = useMedia(REDUCED_QUERY) || profile.prefs.reduceMotion;
+  const orient = useCallback((p) => p && setFocus({ lat: p.lat, lon: p.lon, k: 1.1, nonce: Date.now() }), []);
   return (
-    <div className="welcome">
-      <Starfield accentRgb={PALETTE.accentRgb} />
-      <div className="welcome-limb" aria-hidden="true" />
+    <div className={`welcome welcome--${stage}`}>
+      <Starfield />
+      <WelcomeEarth focus={focus} reduced={reduced} />
       <StorageNotice status={store.status} migrated={false} onDismiss={store.dismissNotice} />
       <main className="welcome-main">
-        <header className="welcome-brand">
-          <Brand as="h1" />
-        </header>
-        <div className={`welcome-card card${stage === "onboarding" ? " wide" : ""}`}>
-          <div key={stage} className="card-swap">
-            {stage === "signin" ? (
-              <SignIn onSignIn={(email) => store.update((p) => withAccount(p, email))} />
-            ) : (
-              <Onboarding
-                profile={profile}
-                places={places}
-                placesStatus={placesStatus}
-                onFinish={(draft) => store.update({ ...draft, onboarding: "done" })}
-                onSkip={(draft) => store.update({ ...draft, onboarding: "skipped" })}
-              />
-            )}
-          </div>
+        <h1 className="sr-only">Trend Detective</h1>
+        <div key={stage} className={stage === "signin" ? "welcome-surface" : "welcome-flow"}>
+          {stage === "signin" ? (
+            <SignIn onSignIn={(email) => store.update((p) => withAccount(p, email))} />
+          ) : (
+            <Onboarding
+              profile={profile}
+              places={places}
+              placesStatus={placesStatus}
+              onFocusPlace={orient}
+              onFinish={(draft) => store.update({ ...draft, onboarding: "done" })}
+              onSkip={(draft) => store.update({ ...draft, onboarding: "skipped" })}
+            />
+          )}
         </div>
       </main>
-      <footer className="welcome-foot faint small">
-        Independent project, not endorsed by NASA. · <button type="button" className="linklike" onClick={() => setAbout(true)}>About</button>
+      <footer className="welcome-foot">
+        Not endorsed by NASA · <button type="button" className="linklike" onClick={() => setAbout(true)}>About</button>
       </footer>
       {about && <AboutDialog onClose={() => setAbout(false)} />}
     </div>
@@ -275,7 +265,10 @@ function Workspace({ store, places, placesStatus }) {
   const initial = useMemo(() => routeFromHash(window.location.hash), []);
   const [page, setPage] = useState(initial.page);
   const [exploreTab, setExploreTab] = useState(initial.page === "explore" ? initial.tab : DEFAULT_EXPLORE_TAB);
+  const [exploreAlso, setExploreAlso] = useState(initial.page === "explore" ? initial.also ?? null : null);
   const tab = page === "main" ? "investigate" : exploreTab;
+  // A tool is open when it is the primary tool or the second one beside it (Explore only).
+  const open = (id) => tab === id || (page === "explore" && exploreAlso === id);
   const [flip, setFlip] = useState("none");
   const [announce, setAnnounce] = useState("");
   const [variables, setVariables] = useState([]);
@@ -317,8 +310,15 @@ function Workspace({ store, places, placesStatus }) {
   const [drawer, setDrawer] = useState(null); // { id, title, eyebrow, render } — single occupancy
   const [dashOpen, setDashOpen] = useState(false);
   const [dataType, setDataType] = useState(null);
+  const [pinHistory, setPinHistory] = useState([]);
+  const [savedPins, setSavedPins] = useState(() => loadSavedPins());
+  const [savedNote, setSavedNote] = useState("");
+  const [savingPin, setSavingPin] = useState(false);
+  const resultCache = useRef(null);
+  if (!resultCache.current) resultCache.current = createResultCache();
   const tablet = useMedia(TABLET_QUERY);
   const mobile = useMedia(MOBILE_QUERY);
+  const compact = tablet || mobile; // the rail becomes a bottom sheet below 1200px
   const reducedMotion = useMedia(REDUCED_QUERY) || profile.prefs.reduceMotion;
   const askExplainer = useCallback((request) => setExplainer({ started: true, open: true, request: request ? { ...request, nonce: Date.now() } : null }), []);
   const explainTerm = useCallback((id) => askExplainer({ id }), [askExplainer]);
@@ -329,6 +329,12 @@ function Workspace({ store, places, placesStatus }) {
   draftRef.current = draft;
   const paramsRef = useRef(params);
   paramsRef.current = params;
+  const scanCfgRef = useRef(scanCfg);
+  scanCfgRef.current = scanCfg;
+  const gridRef = useRef(grid);
+  gridRef.current = grid;
+  const pinHistoryRef = useRef(pinHistory);
+  pinHistoryRef.current = pinHistory;
   const autoScan = useRef(false);
   const resultsRef = useRef(null);
   const headingRef = useRef(null);
@@ -350,7 +356,7 @@ function Workspace({ store, places, placesStatus }) {
   // ---------------------------------------------------------------- URL / history (lib/route.js)
 
   useEffect(() => {
-    const next = { page, tab, params, pinB };
+    const next = { page, tab, params, pinB, also: page === "explore" ? exploreAlso : null };
     const mode = historyMode(routeRef.current, next);
     routeRef.current = next;
     if (mode === "none") return;
@@ -362,23 +368,26 @@ function Workspace({ store, places, placesStatus }) {
     } catch {
       /* the URL is only a convenience */
     }
-  }, [page, tab, params, pinB]);
+  }, [page, tab, params, pinB, exploreAlso]);
 
   useEffect(() => {
     const onPop = () => {
       const r = routeFromHash(window.location.hash);
       const kept = r.params ?? paramsRef.current; // a page without a place in its URL keeps the current place
-      routeRef.current = { ...r, params: kept, pinB: r.tab === "duel" ? r.pinB : null };
+      routeRef.current = { ...r, params: kept, pinB: r.tab === "duel" || r.also === "duel" ? r.pinB : null };
       setPage((prev) => {
         if (prev !== r.page) setFlip(flipDirection(prev, r.page));
         return r.page;
       });
-      if (r.page === "explore") setExploreTab(r.tab);
+      if (r.page === "explore") {
+        setExploreTab(r.tab);
+        setExploreAlso(r.also ?? null);
+      }
       if (r.params) {
         setParams(r.params);
         setDraft((d) => ({ ...d, ...toDraftPatch(r.params) }));
       }
-      if (r.tab === "duel") setPinB(r.pinB);
+      if (r.tab === "duel" || r.also === "duel") setPinB(r.pinB);
       setDrawer(null);
       setDashOpen(false);
     };
@@ -399,6 +408,7 @@ function Workspace({ store, places, placesStatus }) {
   );
   const goTool = useCallback((t) => {
     setExploreTab(t);
+    setExploreAlso((a) => (a && canCombine(t, a).ok ? a : null));
     setSelectedCell(null);
     setPage((prev) => {
       if (prev !== "explore") setFlip("forward");
@@ -425,13 +435,24 @@ function Workspace({ store, places, placesStatus }) {
   );
   const vitalsYears = useMemo(() => ({ start: params?.start ?? FIRST_YEAR, end: params?.end ?? LAST_FULL_YEAR }), [params]);
 
-  const run = useCallback(async (kind, key, setter, call) => {
+  // `cache: true` keeps completed results in memory (lib/pins.js) so undo, Saved ▸ Open and the scan indicator restore
+  // a result without refetching. Errors are never cached.
+  const run = useCallback(async (kind, key, setter, call, opts = {}) => {
     controllers.current[kind]?.abort();
+    const cacheKey = `${kind}:${key}`;
+    if (opts.cache) {
+      const hit = resultCache.current.get(cacheKey);
+      if (hit) {
+        setter({ data: hit, key, loading: false, error: "" });
+        return hit;
+      }
+    }
     const controller = new AbortController();
     controllers.current[kind] = controller;
     setter({ ...EMPTY, key, loading: true });
     try {
       const data = await call(controller.signal);
+      if (opts.cache) resultCache.current.set(cacheKey, data);
       setter({ data, key, loading: false, error: "" });
       return data;
     } catch (e) {
@@ -443,11 +464,15 @@ function Workspace({ store, places, placesStatus }) {
   useEffect(() => () => Object.values(controllers.current).forEach((c) => c?.abort()), []);
 
   const runTrend = useCallback(
-    (p) => run("trend", keys.trend(p), setTrend, (s) => fetchTrend({ variable: p.variable, lat: p.lat, lon: p.lon, start_year: p.start, end_year: p.end }, s)),
+    (p) => run("trend", keys.trend(p), setTrend, (s) => fetchTrend({ variable: p.variable, lat: p.lat, lon: p.lon, start_year: p.start, end_year: p.end }, s), { cache: true }),
     [run],
   );
   // A stale-signature refetch inside the Why panel hands back the fresh trend for the same case; the key is unchanged.
-  const onTrendRefreshed = useCallback((fresh) => fresh && setTrend((s) => (s.data ? { ...s, data: fresh } : s)), []);
+  const onTrendRefreshed = useCallback((fresh) => {
+    if (!fresh) return;
+    if (paramsRef.current) resultCache.current.set(`trend:${keys.trend(paramsRef.current)}`, fresh);
+    setTrend((s) => (s.data ? { ...s, data: fresh } : s));
+  }, []);
   const runSweep = useCallback(
     (p) => run("sweep", keys.sweep(p), setSweep, (s) => fetchSweep({ lat: p.lat, lon: p.lon, start_year: p.start, end_year: p.end }, s)),
     [run],
@@ -495,6 +520,7 @@ function Workspace({ store, places, placesStatus }) {
     if (!params) return null;
     const data = await run("grid", keys.grid(params, scanCfg), setGrid, (s) =>
       fetchGrid({ variable: params.variable, lat: params.lat, lon: params.lon, size: scanCfg.size, n: scanCfg.n, start_year: params.start, end_year: params.end }, s),
+      { cache: true },
     );
     if (data) {
       setSelectedCell(null);
@@ -515,21 +541,21 @@ function Workspace({ store, places, placesStatus }) {
     if (!params) return;
     if (tab === "investigate" && trend.key !== keys.trend(params)) runTrend(params);
     if (page !== "explore") return;
-    if (tab === "sweep" && sweep.key !== keys.sweep(params)) runSweep(params);
-    if (tab === "duel" && pinB && duel.key !== keys.duel(params, pinB)) runDuel(params, pinB);
-  }, [page, tab, params, pinB, worldParams, vitalsYears, worldMode, archK]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (open("sweep") && sweep.key !== keys.sweep(params)) runSweep(params);
+    if (open("duel") && pinB && duel.key !== keys.duel(params, pinB)) runDuel(params, pinB);
+  }, [page, tab, exploreAlso, params, pinB, worldParams, vitalsYears, worldMode, archK]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (tab === "scan" && autoScan.current && params) {
+    if (open("scan") && autoScan.current && params) {
       autoScan.current = false;
       runScan();
     }
-  }, [tab, params, runScan]);
+  }, [tab, exploreAlso, params, runScan]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (tab === "duel" && !pinB) setPickTarget("B");
-    if (tab !== "duel") setPickTarget("A");
-  }, [tab, pinB]);
+    if (open("duel") && !pinB) setPickTarget("B");
+    if (!open("duel")) setPickTarget("A");
+  }, [tab, exploreAlso, pinB]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // On narrow screens the Explore results sit below the globe: bring them into view.
   useEffect(() => {
@@ -538,7 +564,23 @@ function Workspace({ store, places, placesStatus }) {
     }
   }, [trend.data, sweep.data, grid.data, duel.data, world.data, vitals.data, archetypes.data]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // The pin as it is now, for the undo history: its question, its scan settings and its scan result key (if held).
+  const snapshotPin = useCallback(() => {
+    const p = paramsRef.current;
+    if (!p) return null;
+    const cfg = scanCfgRef.current;
+    const g = gridRef.current;
+    const gridKey = g.data && g.key === keys.grid(p, cfg) ? g.key : null;
+    return { params: { ...p }, scanCfg: { ...cfg }, gridKey };
+  }, []);
+
   const commit = useCallback((patch, opts = {}) => {
+    const prev = paramsRef.current;
+    const moved = prev && ((patch.lat != null && patch.lat !== prev.lat) || (patch.lon != null && patch.lon !== prev.lon));
+    if (moved && opts.history !== false) {
+      const snap = snapshotPin();
+      if (snap) setPinHistory((h) => pushPin(h, snap));
+    }
     setParams((prev) => ({
       ...(prev ?? {
         variable: draftRef.current.variable,
@@ -551,9 +593,12 @@ function Workspace({ store, places, placesStatus }) {
     }));
     setDraft((d) => ({ ...d, ...toDraftPatch(patch) }));
     if (patch.lat != null && opts.fly !== false) setFocus({ lat: patch.lat, lon: patch.lon, k: opts.k, nonce: Date.now() });
-  }, []);
+  }, [snapshotPin]);
 
-  const gridFresh = tab === "scan" && !!grid.data && !!params && grid.key === keys.grid(params, scanCfg);
+  // A scan result is "held" while it belongs to the active pin, on any page or tab (owner item 12). Its cells are drawn on
+  // the Explore globe in Scan and in Duel, so Duel and Scan can be used together on the same pin (owner item 13).
+  const gridHeld = !!grid.data && !!params && grid.key === keys.grid(params, scanCfg);
+  const gridFresh = gridHeld && page === "explore" && (open("scan") || open("duel"));
   const cells = useMemo(() => (gridFresh ? scanCells(grid.data) : []), [gridFresh, grid.data]);
   const cellHalf = gridFresh ? grid.data.size / (grid.data.n - 1) / 2 : 0;
   const worldFresh = page === "explore" && tab === "world" && worldMode === "survey" && !!world.data && world.key === keys.world(worldParams);
@@ -637,12 +682,12 @@ function Workspace({ store, places, placesStatus }) {
     }
     setActiveCase(null);
     setSelectedCell(null);
-    if (tab === "duel" && pickTarget === "B") {
+    if (open("duel") && pickTarget === "B") {
       setPinB({ lat: la, lon: lo });
       return;
     }
     commit({ lat: la, lon: lo });
-    if (tab === "duel" && !pinB) setPickTarget("B");
+    if (open("duel") && !pinB) setPickTarget("B");
   };
 
   const selectPlace = (p) => {
@@ -685,13 +730,13 @@ function Workspace({ store, places, placesStatus }) {
     commit(parsed.value);
     if (tab === "investigate") runTrend(parsed.value);
     else if (tab === "sweep") runSweep(parsed.value);
-    else if (tab === "duel" && pinB) runDuel(parsed.value, pinB);
+    else if (open("duel") && pinB) runDuel(parsed.value, pinB);
   };
 
   const choosePlace = (place) => {
     setActiveCase(null);
     setSelectedCell(null);
-    if (tab === "duel" && pickTarget === "B") setPinB({ lat: place.lat, lon: place.lon });
+    if (open("duel") && pickTarget === "B") setPinB({ lat: place.lat, lon: place.lon });
     else commit({ lat: place.lat, lon: place.lon });
   };
 
@@ -763,7 +808,6 @@ function Workspace({ store, places, placesStatus }) {
       hasPlace(p, params.lat, params.lon) ? removePlace(p, placeId(params.lat, params.lon)) : addPlace(p, { name: placeNameFor(params.lat, params.lon), lat: params.lat, lon: params.lon }),
     );
   };
-  const saveActivePlace = () => activePlace && update((p) => addPlace(p, activePlace));
 
   const swapPlaces = () => {
     if (!pinB || !params) return;
@@ -772,6 +816,114 @@ function Workspace({ store, places, placesStatus }) {
     setPinB(a);
   };
 
+  // ---------------------------------------------------------------- pin history, saved pins, held scan (owner items 9, 10, 12)
+
+  /** Make `p` the active pin again, with its scan restored from the in-memory cache when one is held (no refetch). */
+  const restorePin = (p, cfg, gridKey) => {
+    setActiveCase(null);
+    setSelectedCell(null);
+    setParams({ ...p });
+    setDraft((d) => ({ ...d, ...toDraftPatch(p) }));
+    if (cfg && Number.isFinite(cfg.size) && Number.isFinite(cfg.n)) setScanCfg({ size: cfg.size, n: cfg.n });
+    const cached = gridKey ? resultCache.current.get(`grid:${gridKey}`) : null;
+    if (cached) setGrid({ data: cached, key: gridKey, loading: false, error: "" });
+    setFocus({ lat: p.lat, lon: p.lon, nonce: Date.now() });
+  };
+
+  const undoPin = () => {
+    const { entry, history } = popPin(pinHistoryRef.current);
+    if (!entry) return false;
+    setPinHistory(history);
+    restorePin(entry.params, entry.scanCfg, entry.gridKey);
+    setAnnounce(`Back to the previous pin, ${placeNameFor(entry.params.lat, entry.params.lon)}`);
+    return true;
+  };
+  const undoRef = useRef(undoPin);
+  undoRef.current = undoPin;
+  useEffect(() => {
+    const onKey = (e) => {
+      if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey || e.key.toLowerCase() !== "z") return;
+      if (isTyping(e.target) || isTyping(document.activeElement)) return;
+      if (!pinHistoryRef.current.length) return;
+      e.preventDefault();
+      undoRef.current();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+  const previousPin = pinHistory[pinHistory.length - 1]?.params ?? null;
+
+  const persistPins = (next) => {
+    const r = saveSavedPins(next);
+    setSavedPins(r.pins);
+    if (!r.ok) setSavedNote("Your browser is blocking storage, so saved pins last only until this tab closes.");
+    else if (r.dropped) setSavedNote(`Storage was nearly full, so ${r.dropped === 1 ? "an older scan result was" : `${r.dropped} older scan results were`} removed. The pins are kept; those scans reload when opened.`);
+  };
+  const savedHere = findSavedPin(savedPins, params);
+  const heldScan = () => (gridHeld ? { cfg: { ...scanCfg }, key: grid.key, summary: scanSummary(grid.data), data: grid.data } : null);
+  const savePin = ({ label, color }) => {
+    if (!params) return;
+    persistPins(addSavedPin(savedPins, { id: savedHere?.id ?? newPinId(), label, color, ...params, savedAt: Date.now(), scan: heldScan() ?? savedHere?.scan ?? null }));
+    setSavingPin(false);
+    setAnnounce(`Saved pin ${label}`);
+  };
+  const unpin = (id) => persistPins(removeSavedPin(savedPins, id));
+  const openSavedPin = (pin) => {
+    const p = { variable: pin.variable, lat: pin.lat, lon: pin.lon, start: pin.start, end: pin.end };
+    const snap = snapshotPin();
+    if (snap && !(snap.params.lat === p.lat && snap.params.lon === p.lon)) setPinHistory((h) => pushPin(h, snap));
+    let gridKey = null;
+    if (pin.scan) {
+      gridKey = keys.grid(p, pin.scan.cfg);
+      if (pin.scan.data) resultCache.current.set(`grid:${gridKey}`, pin.scan.data);
+      else autoScan.current = true; // payload was dropped to save space: run the scan again
+    }
+    restorePin(p, pin.scan?.cfg, gridKey);
+    if (pin.scan) goTool("scan");
+    else goPage("main");
+  };
+  // A scan that finishes for a saved pin is kept with that pin.
+  useEffect(() => {
+    if (!gridHeld || !savedHere || (savedHere.scan?.key === grid.key && savedHere.scan?.data)) return;
+    persistPins(savedPins.map((p) => (p.id === savedHere.id ? { ...p, scan: heldScan() } : p)));
+  }, [gridHeld, grid.key, savedHere?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // "Scan active · <place>" while any scan result is held; clicking it returns to that scan.
+  const scanPin = grid.data ? pinFromGridKey(grid.key) : null;
+  const scanActive = scanPin ? placeNameFor(scanPin.params.lat, scanPin.params.lon) : null;
+  const returnToScan = () => {
+    if (!scanPin) return;
+    if (!gridHeld) {
+      const snap = snapshotPin();
+      if (snap) setPinHistory((h) => pushPin(h, snap));
+      restorePin(scanPin.params, scanPin.cfg, grid.key);
+    }
+    goTool("scan");
+  };
+
+  const pinActions = (
+    <div className="pin-actions">
+      {savingPin && params ? (
+        <SavePinForm defaultLabel={savedHere?.label ?? activePlace?.name ?? ""} pins={savedPins} onSave={savePin} onCancel={() => setSavingPin(false)} />
+      ) : (
+        <>
+          {params && (
+            savedHere ? (
+              <span className="pin-saved"><PinSwatch color={savedHere.color} /> Saved as {savedHere.label}</span>
+            ) : (
+              <button type="button" className="linklike" onClick={() => setSavingPin(true)}>Save pin</button>
+            )
+          )}
+          {previousPin && (
+            <button type="button" className="linklike" onClick={undoPin} aria-keyshortcuts="Control+Z Meta+Z" title="Ctrl+Z / ⌘Z">
+              Back to previous pin
+            </button>
+          )}
+        </>
+      )}
+    </div>
+  );
+
   const retry = () => {
     if (tab === "world") return worldMode === "archetypes" ? runArchetypes(vitalsYears, archK) : runWorld(worldParams);
     if (tab === "vitals") return runVitals(vitalsYears);
@@ -779,7 +931,7 @@ function Workspace({ store, places, placesStatus }) {
     if (!params) return undefined;
     if (tab === "investigate") return runTrend(params);
     if (tab === "sweep") return runSweep(params);
-    if (tab === "duel" && pinB) return runDuel(params, pinB);
+    if (open("duel") && pinB) return runDuel(params, pinB);
     return undefined;
   };
 
@@ -800,6 +952,7 @@ function Workspace({ store, places, placesStatus }) {
     } catch {
       /* ignore */
     }
+    clearSavedPins();
     store.reset();
   };
 
@@ -833,13 +986,22 @@ function Workspace({ store, places, placesStatus }) {
       })),
     [profile.places, activePlace?.id],
   );
+  // Saved pins for the Globe agent to draw: [{ id, lat, lon, label, color, outline, colorId }].
+  const savedMarkers = useMemo(() => savedPinMarkers(savedPins), [savedPins]);
+  const pickSavedMarker = (m) => {
+    const pin = savedPins.find((p) => p.id === (m?.id ?? m));
+    if (pin) openSavedPin(pin);
+  };
   const mainGlobeProps = {
     pins: pinsFor(false),
     dots: savedDots,
     onDotPick: (d) => d.place && selectPlace(d.place),
+    savedPins: savedMarkers,
+    onSavedPinPick: pickSavedMarker,
     focus,
     busy: trend.loading,
-    idleSpin: !params && !reducedMotion,
+    // Spin whenever the user is not interacting; the Globe pauses for drag/hover/focus and its own pause button.
+    idleSpin: !reducedMotion,
     onPick: handlePick,
   };
   const layerProps = {
@@ -856,95 +1018,69 @@ function Workspace({ store, places, placesStatus }) {
 
   const mainPage = (
     <MainLayersProvider {...layerProps}>
+      <AutoNews />
       <div className="main-page">
-        <h1 className="sr-only" tabIndex={-1} ref={page === "main" ? headingRef : undefined}>Main dashboard</h1>
-
-        {/* Tablet summary strip: the whole strip opens the dashboard drawer. */}
-        <button type="button" className="summary-strip" onClick={() => setDashOpen(true)} aria-expanded={dashOpen} aria-controls="dashboard">
-          <span className="summary-open mono">☰ Dashboard</span>
-          <span className="summary-text">
-            {activePlace ? activePlace.name : "No place chosen"} · {variableInfo?.label ?? variableId}
-            {verdictText && <> · <b>{verdictText}</b></>}
-          </span>
-        </button>
-
-        {/* Mobile place bar: native pickers for place and variable. */}
-        <div className="place-bar">
-          <label className="sr-only" htmlFor="pb-place">Place</label>
-          <select
-            id="pb-place"
-            value={activePlace?.saved ? activePlace.id : activePlace ? "__here" : ""}
-            onChange={(e) => {
-              const p = profile.places.find((x) => x.id === e.target.value);
-              if (p) selectPlace(p);
-            }}
-          >
-            {!activePlace && <option value="">Choose a place</option>}
-            {activePlace && !activePlace.saved && <option value="__here">{activePlace.name} (not saved)</option>}
-            {profile.places.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
-          <label className="sr-only" htmlFor="pb-var">Variable</label>
-          <select id="pb-var" value={variableId} onChange={(e) => chooseVariable(e.target.value)} disabled={!variables.length}>
-            {(profile.interests.length ? profile.interests : INTERESTS.map((i) => i.id)).map((tid) => (
-              <optgroup key={tid} label={interestById(tid).label}>
-                {variablesFor(tid, variables).map((v) => <option key={`${tid}-${v.id}`} value={v.id}>{v.label}</option>)}
-              </optgroup>
-            ))}
-            {!variables.some((v) => v.id === variableId) && <option value={variableId}>{variableId}</option>}
-          </select>
-        </div>
+        <h1 className="sr-only" tabIndex={-1} ref={page === "main" ? headingRef : undefined}>Main</h1>
 
         <Dashboard
-          drawerMode={tablet}
+          sheet={compact}
           open={dashOpen}
+          onOpen={() => setDashOpen(true)}
           onClose={() => setDashOpen(false)}
-          header={
+          peek={
             <>
-              <PlaceSwitcher
-                places={profile.places}
-                place={activePlace}
-                onPlace={selectPlace}
-                onSave={saveActivePlace}
-                canSave={profile.places.length < MAX_PLACES}
-                onAdd={() => openDrawer({ id: "account", title: "Account" })}
-              />
-              <DataPicker
-                interests={profile.interests}
-                variables={variables}
-                variablesStatus={variablesStatus}
-                dataType={dataType}
-                variableId={variableId}
-                onDataType={chooseDataType}
-                onVariable={chooseVariable}
-              />
+              <b>{activePlace ? activePlace.name : "Choose a place"}</b>
+              <span> · {variableInfo?.label ?? variableId}</span>
+              {verdictText && <span> · {verdictText}</span>}
             </>
           }
           footer={
             <>
-              <button type="button" className="linklike" onClick={() => setModal("about")}>Sources &amp; credits</button>
-              <button type="button" className="linklike" onClick={() => goPage("explore")}>Open Explore ▸</button>
+              <button type="button" className="linklike" onClick={() => setModal("about")}>Sources</button>
+              <Vishwa />
             </>
           }
         >
-          <Slot name="verdict" index={1}>
-            <VerdictSlot
+          <RailGroup label="Place" name="place">
+            <PlaceSwitcher
+              places={profile.places}
               place={activePlace}
-              variable={variableInfo}
-              trend={mainTrend}
-              onRetry={() => params && runTrend(params)}
-              onOpenDetail={() => {
-                setViewPref("detail");
-                goTool("investigate");
-              }}
-              openDrawer={openDrawer}
-              closeDrawer={closeDrawer}
-              detailLevel={profile.prefs.detail}
-              onTrendRefreshed={onTrendRefreshed}
+              onPlace={selectPlace}
+              onAdd={() => openDrawer({ id: "account", title: "Account" })}
+              actions={pinActions}
             />
-          </Slot>
-          <Slot name="weather" index={2}><WeatherSlot {...layerProps} /></Slot>
-          <Slot name="forecast" index={3}><ForecastSlot {...layerProps} /></Slot>
-          <Slot name="news" index={4}><NewsSlot {...layerProps} /></Slot>
+          </RailGroup>
+          <RailGroup label="Following" name="subject">
+            <DataPicker
+              interests={profile.interests}
+              variables={variables}
+              variablesStatus={variablesStatus}
+              dataType={dataType}
+              variableId={variableId}
+              onDataType={chooseDataType}
+              onVariable={chooseVariable}
+            />
+          </RailGroup>
+          <RailGroup label="Snapshot" name="snapshot">
+            <div className="rail-snapshot" data-slot="verdict">
+              <VerdictSlot
+                place={activePlace}
+                variable={variableInfo}
+                trend={mainTrend}
+                onRetry={() => params && runTrend(params)}
+                onOpenDetail={() => {
+                  setViewPref("detail");
+                  goTool("investigate");
+                }}
+                openDrawer={openDrawer}
+                closeDrawer={closeDrawer}
+                detailLevel={profile.prefs.detail}
+                onTrendRefreshed={onTrendRefreshed}
+              />
+            </div>
+            <div className="rail-row" data-slot="weather"><WeatherSlot {...layerProps} /></div>
+            <div className="rail-row" data-slot="forecast"><ForecastSlot {...layerProps} /></div>
+          </RailGroup>
         </Dashboard>
 
         <div className="main-stage">
@@ -954,90 +1090,57 @@ function Workspace({ store, places, placesStatus }) {
     </MainLayersProvider>
   );
 
-  const onTabKey = (e) => {
-    const ids = EXPLORE_TABS.map((t) => t.id);
-    const i = ids.indexOf(exploreTab);
-    let next = null;
-    if (e.key === "ArrowRight") next = ids[(i + 1) % ids.length];
-    if (e.key === "ArrowLeft") next = ids[(i - 1 + ids.length) % ids.length];
-    if (e.key === "Home") next = ids[0];
-    if (e.key === "End") next = ids[ids.length - 1];
-    if (!next) return;
-    e.preventDefault();
-    goTool(next);
-    requestAnimationFrame(() => document.getElementById(`tab-${next}`)?.focus());
+  // One shared active pin for every Explore tool (owner item 13): Duel and Scan read the same pin A, pin B and held scan.
+  const sharedPin = {
+    params,
+    pinB,
+    place: activePlace,
+    pickTarget,
+    onPickTarget: setPickTarget,
+    onPinB: (p) => setPinB(p ? { lat: p.lat, lon: p.lon } : null),
+    scan: { held: gridHeld, r: grid, cfg: scanCfg, cells, cellHalf, selected: selectedCell, onRun: runScan },
+    duel: { data: duel.data && params && pinB && duel.key === keys.duel(params, pinB) ? duel.data : null, r: duel },
+    history: { canUndo: !!previousPin, previous: previousPin, onUndo: undoPin },
+    saved: { pins: savedPins, here: savedHere, onSave: savePin, onOpen: openSavedPin, onRemove: unpin },
   };
 
   const explorePage = (
     <div className="explore-page">
       <header className="explore-head">
         <h1 tabIndex={-1} ref={page === "explore" ? headingRef : undefined}>Explore</h1>
-        <p className="dim">Advanced tools for digging deeper</p>
+        {tab !== "saved" && tab !== "ask" && pinActions}
       </header>
       <div className="explore-tabs-wrap">
-        <div className="explore-tabs" role="tablist" aria-label="Explore tools" onKeyDown={onTabKey}>
-          {EXPLORE_TABS.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              role="tab"
-              id={`tab-${t.id}`}
-              aria-selected={exploreTab === t.id}
-              aria-controls="panel"
-              tabIndex={exploreTab === t.id ? 0 : -1}
-              className={`tab${t.divider ? " tab-divided" : ""}`}
-              onClick={() => goTool(t.id)}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
+        <ExploreTabs tab={exploreTab} also={exploreAlso} onTab={goTool} onAlso={setExploreAlso} scanActive={gridHeld} />
       </div>
 
       <div className="stage">
         <div className="globe-col">
           <Globe
-            pins={pinsFor(tab === "duel")}
+            pins={pinsFor(open("duel"))}
             cells={cells}
             cellHalf={cellHalf}
             selectedCell={selectedCell}
             dots={exploreDots}
             onDotPick={(d) => (d.event ? openEvent(d.event) : openPlace(d))}
+            savedPins={savedMarkers}
+            onSavedPinPick={pickSavedMarker}
             focus={focus}
             modeRequest={modeRequest}
             busy={busy}
-            idleSpin={!params && tab === "world" && !reducedMotion}
+            idleSpin={!reducedMotion}
             onPick={handlePick}
           >
-            {cells.length > 0 && (
-              <ul className="globe-legend mono" aria-label="Map key">
-                <li><i style={{ background: COLORS.up }} /> significant rise</li>
-                <li><i style={{ background: COLORS.down }} /> significant fall</li>
-                <li><i style={{ background: COLORS.flat }} /> no clear trend</li>
-                <li className="faint">solid outline = holds after correction</li>
-              </ul>
-            )}
+            {cells.length > 0 && <GlobeLegend scanStyles={cellStylesShown(cells)} />}
             {worldFresh && lapse.on && <div className="lapse-year" aria-live="polite">{lapse.year}</div>}
-            {cells.length === 0 && (worldFresh || archFresh) && <GlobeLegend sampleSites />}
-            {cells.length === 0 && worldFresh && lapse.on && (
-              <ul className="globe-legend mono" aria-label="Map key">
-                <li><i className="round" style={{ background: COLORS.up }} /> above the site's own average</li>
-                <li><i className="round" style={{ background: COLORS.down }} /> below it</li>
-                <li><i className="round" style={{ background: COLORS.flat }} /> near it · stronger colour = more unusual</li>
-              </ul>
-            )}
-            {cells.length === 0 && worldFresh && !lapse.on && exploreDots.length > 0 && (
-              <ul className="globe-legend mono" aria-label="Map key">
-                <li><i className="round" style={{ background: COLORS.up }} /> rising</li>
-                <li><i className="round" style={{ background: COLORS.down }} /> falling</li>
-                <li><i className="round" style={{ background: COLORS.flat }} /> no clear trend</li>
-                <li className="faint">ringed = holds after correction · size = signal vs noise</li>
-              </ul>
+            {cells.length === 0 && archFresh && <GlobeLegend sampleSites />}
+            {cells.length === 0 && worldFresh && exploreDots.length > 0 && (
+              <WorldLegend mode={lapse.on ? "lapse" : "trend"} variable={world.data?.variable} />
             )}
             {cells.length === 0 && archFresh && (
               <ul className="globe-legend mono" aria-label="Map key">
                 {archetypes.data.clusters.map((c) => (
-                  <li key={c.id}><i className="round" style={{ background: CLUSTER_COLORS[c.id % CLUSTER_COLORS.length] }} /> archetype {c.id + 1} · {c.size} places</li>
+                  <li key={c.id}><i className="round" style={{ background: CLUSTER_COLORS[c.id % CLUSTER_COLORS.length] }} /> <span aria-hidden="true">{clusterGlyph(c.id)}</span> {clusterName(c.id)} · {c.size} places</li>
                 ))}
                 <li className="faint">hover a dot for its climate twins</li>
               </ul>
@@ -1046,25 +1149,29 @@ function Workspace({ store, places, placesStatus }) {
         </div>
 
         <div className="console" ref={resultsRef}>
-          {tab !== "learn" && (
-            <SetupPanel
-              variables={variables}
-              places={places}
-              draft={draft}
-              onDraft={(patch) => setDraft((d) => ({ ...d, ...patch }))}
-              onVariable={chooseVariable}
-              onApply={applyDraft}
-              onPlace={choosePlace}
-              onAsk={openAsk}
-              disabled={busy || variables.length === 0}
-              message={formMsg}
-            />
-          )}
-
-          {activeCase && briefingTab && tab !== "learn" && <Briefing key={activeCase.id} item={activeCase} onClose={() => setActiveCase(null)} />}
+          {activeCase && briefingTab && tab !== "learn" && tab !== "saved" && tab !== "ask" && <Briefing key={activeCase.id} item={activeCase} onClose={() => setActiveCase(null)} />}
 
           <ExplorePanel
             tab={tab}
+            also={page === "explore" ? exploreAlso : null}
+            onCloseAlso={() => setExploreAlso(null)}
+            shared={sharedPin}
+            setup={{ variables, draft, onDraft: (patch) => setDraft((d) => ({ ...d, ...patch })), onVariable: chooseVariable, onApply: applyDraft, onPlace: choosePlace, disabled: busy || variables.length === 0, message: formMsg }}
+            ask={{
+              places,
+              variables,
+              currentVariable: draft.variable,
+              current: params,
+              onInvestigate: (p) => {
+                setActiveCase(null);
+                setFormMsg("");
+                commit(p);
+                setExploreTab("investigate");
+              },
+              onAsk: openAsk,
+            }}
+            onOpenAsk={() => goTool("ask")}
+            saved={{ note: savedNote, onDismissNote: () => setSavedNote(""), variables }}
             hasPin={!!params}
             serverDown={variablesStatus === "error"}
             onRetry={retry}
@@ -1111,7 +1218,7 @@ function Workspace({ store, places, placesStatus }) {
             }}
             world={{ mode: worldMode, onMode: setWorldMode, r: world, archetypes, onOpen: openPlace, lapse, lapseYears: lapseData?.years ?? [], onLapse: setLapse, onChooseK: setArchK }}
             vitals={{ r: vitals }}
-            ledger={{ r: ledger, onOpen: openLedgerRow }}
+            ledger={{ r: ledger, onOpen: openLedgerRow, variables }}
             events={{
               selectedId: eventId,
               onSelect: (id) => {
@@ -1142,7 +1249,7 @@ function Workspace({ store, places, placesStatus }) {
     <ExplainContext.Provider value={explainTerm}>
       <ShellContext.Provider value={shell}>
         <div className={`app page-${page}`}>
-          <Starfield accentRgb={PALETTE.accentRgb} />
+          <Starfield />
           <svg width="0" height="0" style={{ position: "absolute" }} aria-hidden="true" focusable="false">
             <defs>
               <filter id="ink" x="-5%" y="-5%" width="110%" height="110%">
@@ -1163,7 +1270,15 @@ function Workspace({ store, places, placesStatus }) {
             )}
           </nav>
 
-          <TopBar page={page} onPage={goPage} accountLabel={profile.account?.label} accountOpen={drawer?.id === "account"} onAccount={openAccount} />
+          <TopBar
+            page={page}
+            onPage={goPage}
+            accountLabel={profile.account?.label}
+            accountOpen={drawer?.id === "account"}
+            onAccount={openAccount}
+            scanActive={page === "explore" && open("scan") ? null : scanActive}
+            onScan={returnToScan}
+          />
           {versionWarn && (
             <div className="shell-strip warn" role="alert">
               This page ({describeVersion(PAGE_VERSION)}) and the analysis server ({describeVersion(serverVersion)}) are different versions. Close this window,

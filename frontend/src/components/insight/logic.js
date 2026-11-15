@@ -15,7 +15,7 @@ export const WHY_DISCLAIMER = "These are possible explanations, not proof that o
 /** S12: the evidence drawer's header note. */
 export const SERVER_NOTE = "Every number here was calculated on the server. This page only displays it.";
 export const WHY_BUTTON = "Why might this be happening?";
-export const HOW_BUTTON = "How did we test this?";
+export const HOW_BUTTON = "See how we know";
 /** The backend's own limit on the optional follow-up question (ExplanationRequest.question max_length). */
 export const QUESTION_MAX = 240;
 
@@ -29,9 +29,52 @@ export const VERDICT_FALLBACK_LABELS = {
 };
 const TIER_OF = { strong_evidence: 3, some_evidence: 2, no_clear_evidence: 1, insufficient_data: 0 };
 
+// ---------------------------------------------------------------------------------------------- shared trend language
+
+/** Direction glyphs and words (monochrome: the glyph carries the meaning, never a colour). */
+export const DIRECTION = {
+  up: { kind: "up", glyph: "▲", word: "Rising" },
+  down: { kind: "down", glyph: "▼", word: "Falling" },
+  flat: { kind: "flat", glyph: "–", word: "No clear change" },
+};
+/** "How sure are we?" words for 0–3 filled marks. */
+export const STRENGTH_WORDS = ["Not enough data", "No clear change yet", "Some evidence", "Strong evidence"];
+/** V1 grade code → number of filled marks (a display mapping of the backend's grade, not a new statistic). */
+export const GRADE_TIER = { strong: 3, moderate: 2, weak: 1, none: 0 };
+
+/** The plain Main headline for a verdict code: "Clear change" or "No clear change yet". */
+export function plainVerdict(code) {
+  if (code === "strong_evidence" || code === "some_evidence") return "Clear change";
+  if (code === "insufficient_data") return "Not enough data yet";
+  if (code === "no_clear_evidence") return "No clear change yet";
+  return null;
+}
+
+/**
+ * Line-style level for a tested row from its backend flags. Matches the scan cells on the globe:
+ * "holds" (solid) = significant after correction, "before" (dashed) = significant only before correction,
+ * "none" (plain) = no clear trend, "nodata" = not analysed.
+ */
+export function correctionLevel(row) {
+  if (!row || row.ok === false) return { level: "nodata", label: "Not analysed", term: "nodata" };
+  if (row.significant_fdr) return { level: "holds", label: "Holds after correction", term: "holds" };
+  if (row.significant) return { level: "before", label: "Only before correction", term: "beforeonly" };
+  return { level: "none", label: "No clear trend", term: null };
+}
+
+/** Direction key for a tested row: its sign when it is significant at all, otherwise "flat". */
+export function rowDirection(row) {
+  if (!row || !(row.significant || row.significant_fdr)) return "flat";
+  const s = row.sign ?? (typeof row.slope_per_decade === "number" ? (row.slope_per_decade > 0 ? "up" : row.slope_per_decade < 0 ? "down" : null) : null);
+  return s === "up" || s === "down" ? s : "flat";
+}
+
+/** "°C per decade" style rate units; a reading's "°C vs 1951–1980" baseline note is dropped for a rate. */
+export const rateUnits = (units) => String(units ?? "").split(" vs ")[0];
+
 // ---------------------------------------------------------------------------------------------------------- verdict
 
-const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+const num =(v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
 /**
  * Everything the verdict card shows, chosen from `evidence_trace` (falling back to the V1 `stats` block for the same
@@ -54,7 +97,7 @@ export function verdictView(trend) {
     if (sign === "up") direction = { kind: "up", glyph: "▲", text: "Rising" };
     else if (sign === "down") direction = { kind: "down", glyph: "▼", text: "Falling" };
   } else if (code === "no_clear_evidence") {
-    direction = { kind: "flat", glyph: "◆", text: "No clear direction" };
+    direction = { kind: "flat", glyph: "–", text: "No clear change" };
   }
 
   const slope = num(si.slope_per_decade) ?? num(st.slope_per_decade);
@@ -71,6 +114,8 @@ export function verdictView(trend) {
     code,
     tier,
     label: v.label || VERDICT_FALLBACK_LABELS[code],
+    /** Plain Main headline ("Clear change" / "No clear change yet"); the backend label stays one level deeper. */
+    plain: plainVerdict(code),
     summary: v.summary ?? trend.summary ?? "",
     direction,
     /** "full" for strong/some, "estimate" (dimmed, prefixed "Best estimate") for no clear evidence, null when withheld. */

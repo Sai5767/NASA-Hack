@@ -1,6 +1,8 @@
 import { formatP, formatPlace, signed } from "../lib/format.js";
 import { downloadText, scanCsv } from "../lib/csv.js";
 import Sparkline from "./charts/Sparkline.jsx";
+import { CorrectionSwatch, CorrectionTag, TrendArrow, TrendKey } from "./insight/Evidence.jsx";
+import { rowDirection } from "./insight/logic.js";
 import Term from "./Term.jsx";
 
 const SIZES = [5, 10, 20, 30, 40];
@@ -8,61 +10,70 @@ const GRIDS = [3, 4, 5];
 
 function CellCard({ cell, units, onOpen, onClear }) {
   return (
-    <div className="card cell-card reveal-pop">
+    <div className="scan-cell" role="region" aria-label={`Selected square ${formatPlace(cell.lat, cell.lon)}`}>
       <div className="cell-head">
         <b className="mono">{formatPlace(cell.lat, cell.lon)}</b>
         <button type="button" className="btn btn-sm btn-ghost" onClick={onClear} aria-label="Clear selection">✕</button>
       </div>
       {cell.ok ? (
         <>
-          <p className="mono cell-rate" style={{ color: cell.significant ? (cell.slope_per_decade > 0 ? "var(--up)" : "var(--down)") : "var(--text-dim)" }}>
-            {signed(cell.slope_per_decade)} {units} / decade
+          <p className="cell-rate">
+            <TrendArrow dir={rowDirection(cell)} label={false} /> <span className="mono">{signed(cell.slope_per_decade)} {units} per decade</span>
           </p>
-          <p className="dim">
-            p {formatP(cell.p_value)} ·{" "}
-            {cell.significant_fdr ? "holds up after correcting for testing many places" : cell.significant ? "significant on its own, but not after correcting for testing many places" : "not significant"}
-            {cell.signal_to_noise != null && <> · {Math.abs(cell.signal_to_noise).toFixed(1)}× normal swings</>}
-          </p>
-          <button type="button" className="btn btn-sm btn-primary" onClick={() => onOpen(cell.lat, cell.lon)}>Open full case file ▸</button>
+          <p><CorrectionTag row={cell} /></p>
+          <details className="td-disclosure">
+            <summary>See how we know</summary>
+            <div className="td-disclosure-body">
+              <p className="mono dim">
+                <Term id="pvalue">p</Term> {formatP(cell.p_value)}
+                {cell.signal_to_noise != null && <> · {Math.abs(cell.signal_to_noise).toFixed(1)}× normal swings</>}
+              </p>
+            </div>
+          </details>
+          <button type="button" className="btn btn-sm" onClick={() => onOpen(cell.lat, cell.lon)}>Open its case file ›</button>
         </>
       ) : (
-        <p className="dim">{cell.message}</p>
+        <p className="dim"><Term id="nodata">No data</Term>: {cell.message}</p>
       )}
     </div>
   );
 }
 
-function Extreme({ label, cell, units, onSelect, tone }) {
+function Extreme({ label, cell, units, onSelect, dir }) {
   if (!cell) return null;
   return (
-    <button type="button" className={`extreme ${tone}`} onClick={() => onSelect(cell)}>
-      <span className="eyebrow">{label}</span>
-      <span className="mono">{signed(cell.slope_per_decade)} {units}/decade</span>
-      <small className="mono">{formatPlace(cell.lat, cell.lon)}</small>
+    <button type="button" className="extreme" onClick={() => onSelect(cell)}>
+      <span className="extreme-label"><span aria-hidden="true">{dir === "up" ? "▲" : "▼"}</span> {label}</span>
+      <span className="mono">{signed(cell.slope_per_decade)} {units} per decade</span>
+      <small className="mono faint">{formatPlace(cell.lat, cell.lon)}</small>
     </button>
   );
 }
 
-/** Region scan controls and results. The colored cells themselves are drawn on the globe. */
+/**
+ * Region scan controls and results. The squares themselves are drawn on the globe; the summary chips here use the same
+ * encoding as those squares (owner item 6): solid outline = holds after correction, dashed = only before correction,
+ * plain = no clear trend, hatch = no data. Monochrome only (no news red/amber/green).
+ */
 export default function Scan({ cfg, onCfg, onRun, loading, hasPin, stale, data, selected, onSelect, onOpenCell }) {
   const units = data?.variable.units ?? "";
   const m = data?.morans;
   const spatial = !m
-    ? "Too few points had data to test whether neighbors share a trend."
+    ? "Too few squares had data to look for a pattern."
     : m.p_value >= 0.05
-      ? "No clear spatial pattern: nearby places do not share trends more than chance would predict."
+      ? "No clear pattern: nearby squares don't change alike more than chance would."
       : m.pattern === "clustered"
-        ? "Clustered: nearby places tend to trend in the same direction."
-        : "Dispersed: neighboring places tend to trend in opposite directions.";
+        ? "Clustered: nearby squares tend to change the same way."
+        : "Dispersed: neighbouring squares tend to change in opposite ways.";
+  const holds = data ? (data.counts.increase ?? 0) + (data.counts.decrease ?? 0) : 0;
+  const comp = data?.composite?.stats;
 
   return (
     <section className="scan">
-      <div className="card hud-card scan-controls reveal">
-        <p className="eyebrow">Region scan</p>
-        <h2>Is the change the same everywhere?</h2>
-        <p className="dim">
-          Tests a grid of points around the pin. Each colored square on the globe is one place. Because many places are tested at
-          once, results are also checked with <Term id="fdr">false-discovery control</Term>.
+      <div className="scan-controls">
+        <h2 className="tool-title">Is the change the same all around?</h2>
+        <p className="tool-lead">
+          Tests a grid of <Term id="gridcell">squares</Term> around your pin. Each square on the globe is one place.
         </p>
         <div className="scan-grid">
           <label className="field">
@@ -74,77 +85,95 @@ export default function Scan({ cfg, onCfg, onRun, loading, hasPin, stale, data, 
           <label className="field">
             Grid
             <select value={cfg.n} onChange={(e) => onCfg({ ...cfg, n: Number(e.target.value) })}>
-              {GRIDS.map((n) => <option key={n} value={n}>{n} × {n} ({n * n} places)</option>)}
+              {GRIDS.map((n) => <option key={n} value={n}>{n} × {n} ({n * n} squares)</option>)}
             </select>
           </label>
           <button type="button" className="btn btn-primary" onClick={onRun} disabled={loading || !hasPin}>
-            {loading ? "Scanning…" : "Scan region ▸"}
+            {loading ? "Scanning…" : data ? "Scan again" : "Scan region"}
           </button>
         </div>
-        {!hasPin && <p className="form-msg">Drop a pin on the globe first. The scan is centered on it.</p>}
-        {stale && data && <p className="form-msg">The pin, variable, years or grid changed since this scan. Run it again.</p>}
+        {!hasPin && <p className="form-msg">Choose a place first. The scan is centred on it.</p>}
+        {stale && data && <p className="form-msg">The place, variable, years or grid changed since this scan. Run it again.</p>}
       </div>
 
       {data && (
-        <div className="card scan-results reveal" style={{ "--d": "60ms" }}>
+        <div className="scan-results">
           <div className="scan-title">
-            <h3>{data.variable.label}, {data.period.start_year}–{data.period.end_year}</h3>
-            <button type="button" className="btn btn-sm" onClick={() => downloadText(`trend-detective_scan_${data.variable.id}.csv`, scanCsv(data))}>⤓ CSV</button>
+            <h3>{data.variable.label} <span className="faint mono">{units}</span>, {data.period.start_year}–{data.period.end_year}</h3>
+            <button type="button" className="btn btn-sm btn-ghost" onClick={() => downloadText(`trend-detective_scan_${data.variable.id}.csv`, scanCsv(data))}>Download CSV</button>
           </div>
-          <p className="dim">{data.counts.analyzed} of {data.counts.total} places analyzed.</p>
+          <p className="dim">{data.counts.analyzed} of {data.counts.total} squares checked.</p>
 
-          <ul className="count-chips">
-            <li className="up"><b>{data.counts.increase}</b> rising</li>
-            <li className="down"><b>{data.counts.decrease}</b> falling</li>
-            <li className="amber"><b>{data.counts.nominal_only}</b> significant only before correction</li>
-            <li><b>{data.counts.none}</b> no clear trend</li>
-            {data.counts.failed > 0 && <li className="faint"><b>{data.counts.failed}</b> not analyzed</li>}
+          <ul className="count-chips" aria-label="What the squares show">
+            <li className="cc cc--holds">
+              <CorrectionSwatch level="holds" />
+              <span><b className="mono">{holds}</b> <Term id="holds">hold after correction</Term> <span className="faint">(▲ {data.counts.increase} · ▼ {data.counts.decrease})</span></span>
+            </li>
+            <li className="cc cc--before">
+              <CorrectionSwatch level="before" />
+              <span><b className="mono">{data.counts.nominal_only}</b> <Term id="beforeonly">only before correction</Term></span>
+            </li>
+            <li className="cc cc--none">
+              <CorrectionSwatch level="none" />
+              <span><b className="mono">{data.counts.none}</b> no clear trend</span>
+            </li>
+            {data.counts.failed > 0 && (
+              <li className="cc cc--nodata">
+                <CorrectionSwatch level="nodata" />
+                <span><b className="mono">{data.counts.failed}</b> <Term id="nodata">no data</Term></span>
+              </li>
+            )}
           </ul>
+          <p className="faint scan-keynote">Same outlines as the squares on the globe. Fill colour shows direction and size; ▲ rising, ▼ falling.</p>
 
           {data.composite && (
             <div className="composite">
               <div>
-                <p className="eyebrow">The region as a whole</p>
-                <p className="mono composite-rate" style={{ color: data.composite.stats.significant ? (data.composite.stats.sign === "up" ? "var(--up)" : "var(--down)") : "var(--text-dim)" }}>
-                  {signed(data.composite.stats.slope_per_decade)} <small>{units}/decade</small>
+                <p className="composite-label">The region as a whole</p>
+                <p className="composite-rate">
+                  <TrendArrow dir={comp.significant ? comp.sign : "flat"} />{" "}
+                  <span className="mono">{signed(comp.slope_per_decade)} <small>{units} per decade</small></span>
                 </p>
-                <p className="dim small">
-                  95% range {signed(data.composite.stats.ci_low_per_decade)} to {signed(data.composite.stats.ci_high_per_decade)} · p {formatP(data.composite.stats.p_value)} ·{" "}
-                  {data.composite.stats.significant ? "significant" : "not significant"}.
+                <p className="dim">
+                  {comp.significant ? "A clear change across the area." : "No clear change across the area yet."} Average of {data.composite.n_cells} squares;{" "}
+                  {Math.round(data.composite.agreeing_share * 100)}% of them change clearly in the same direction.
                 </p>
-                <p className="dim small">
-                  Area-weighted average of {data.composite.n_cells} places. {Math.round(data.composite.agreeing_share * 100)}% of places have a
-                  significant trend in the same direction.
-                </p>
+                <details className="td-disclosure">
+                  <summary>See how we know</summary>
+                  <div className="td-disclosure-body">
+                    <p className="mono dim">
+                      <Term id="ci">95% range</Term> {signed(comp.ci_low_per_decade)} to {signed(comp.ci_high_per_decade)} {units} per decade ·{" "}
+                      <Term id="pvalue">p</Term> {formatP(comp.p_value)} · area-weighted average
+                    </p>
+                  </div>
+                </details>
               </div>
-              <Sparkline
-                values={data.composite.annual.map((a) => a.value)}
-                color={data.composite.stats.significant ? (data.composite.stats.sign === "up" ? "var(--up)" : "var(--down)") : "var(--flat)"}
-                width={150}
-                height={48}
-                delay={300}
-              />
+              <Sparkline values={data.composite.annual.map((a) => a.value)} width={150} height={48} expandable title={`${data.variable.label}, the region as a whole`} unit={units} years={data.composite.annual.map((a) => a.year)} source="NASA POWER" />
             </div>
           )}
 
           {data.opposite_trends && (
-            <div className="banner opposite reveal-pop">
-              <b>Opposite trends in one region.</b> Some places here are significantly rising while others are significantly falling:
-              the same variable can move in opposite directions even when one process drives both.
-            </div>
+            <p className="scan-opposite">
+              <b>Opposite trends in one region.</b> Some squares are clearly rising while others are clearly falling.
+            </p>
           )}
 
           <div className="extremes">
-            <Extreme label="Strongest rise" cell={data.strongest_increase} units={units} onSelect={onSelect} tone="up" />
-            <Extreme label="Strongest fall" cell={data.strongest_decrease} units={units} onSelect={onSelect} tone="down" />
+            <Extreme label="Strongest rise" cell={data.strongest_increase} units={units} onSelect={onSelect} dir="up" />
+            <Extreme label="Strongest fall" cell={data.strongest_decrease} units={units} onSelect={onSelect} dir="down" />
           </div>
 
           <div className="spatial">
-            <p className="eyebrow"><Term id="moran">Spatial pattern</Term></p>
+            <p className="spatial-label"><Term id="spatial">Pattern between neighbours</Term></p>
             <p>{spatial}</p>
-            {m && <p className="mono dim">Moran's I = {m.i.toFixed(2)} (chance level {m.expected.toFixed(2)}), p {formatP(m.p_value)}, {m.cells_used} places</p>}
+            {m && (
+              <p className="mono dim">
+                <Term id="moran">Moran's I</Term> = {m.i.toFixed(2)} (chance level {m.expected.toFixed(2)}), p {formatP(m.p_value)}, {m.cells_used} squares
+              </p>
+            )}
           </div>
-          <p className="faint small">Click a square on the globe to inspect it.</p>
+          <TrendKey arrows={false} />
+          <p className="faint">Select a square on the globe to inspect it.</p>
         </div>
       )}
 
