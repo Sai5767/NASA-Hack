@@ -50,6 +50,13 @@ from .monthly import (
     build_monthly_frames,
 )
 from .morans import morans_i
+from .meteomatics import (
+    DEFAULT_HOURS as DEFAULT_LIVE_WEATHER_HOURS,
+    MAX_HOURS as MAX_LIVE_WEATHER_HOURS,
+    MIN_HOURS as MIN_LIVE_WEATHER_HOURS,
+    fetch_live_weather,
+    meteomatics_health,
+)
 from .nasa_power import VARIABLES, PowerError, cache_health as nasa_cache_health
 from .news import fetch_news_context, news_health
 from .places import PLACES
@@ -545,6 +552,7 @@ def health_details() -> dict:
     streams_info = streams.cache_health()
     explain_info = explanation_health()
     news_info = news_health()
+    mm_info = meteomatics_health()
     overall = "ok"
     if nasa_info["status"] == "degraded":
         overall = "degraded"
@@ -555,6 +563,7 @@ def health_details() -> dict:
         "features": {
             "nasa_power": nasa_info,
             "planet_streams": streams_info,
+            "meteomatics": mm_info,
             "ai_explanations": explain_info,
             "news": news_info,
             "monthly_forecast": {
@@ -567,6 +576,21 @@ def health_details() -> dict:
             },
         },
     }
+
+
+@app.get("/api/live-weather")
+async def live_weather(
+    lat: float = Query(..., ge=-90, le=90),
+    lon: float = Query(..., ge=-180, le=180),
+    hours: int = Query(
+        DEFAULT_LIVE_WEATHER_HOURS,
+        ge=MIN_LIVE_WEATHER_HOURS,
+        le=MAX_LIVE_WEATHER_HOURS,
+        description="Forecast horizon in hours (1 to 72)",
+    ),
+) -> dict:
+    """Meteomatics operational current and short-range hourly weather for one location."""
+    return await fetch_live_weather(lat=lat, lon=lon, hours=hours)
 
 
 @app.get("/api/monthly-frames")

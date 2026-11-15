@@ -30,7 +30,9 @@ V = TypeVar("V")
 _SECRET_PATTERNS = [
     re.compile(r"sk-[A-Za-z0-9_\-]{10,}"),
     re.compile(r"(?i)(bearer\s+)[A-Za-z0-9._\-]+"),
-    re.compile(r"(?i)((?:api[_-]?key|token|secret|password|authorization)\s*[=:]\s*)([^\s&\"',;]+)"),
+    re.compile(r"(?i)(basic\s+)[A-Za-z0-9+/=._\-]+"),
+    re.compile(r"(https?://)[^/\s:@]+:[^/\s@]+@"),
+    re.compile(r"(?i)((?:api[_-]?key|token|secret|password|username|authorization)\s*[=:]\s*)([^\s&\"',;]+)"),
 ]
 
 _PROCESS_EPHEMERAL_SECRET = os.urandom(32).hex()
@@ -102,6 +104,11 @@ class AppConfig:
     news_api_key: str | None = field(default=None, repr=False)
     news_timeout_seconds: float = 12.0
     news_cache_ttl_seconds: int = 900
+    meteomatics_username: str | None = field(default=None, repr=False)
+    meteomatics_password: str | None = field(default=None, repr=False)
+    meteomatics_base_url: str = "https://api.meteomatics.com"
+    meteomatics_timeout_seconds: float = 10.0
+    meteomatics_cache_ttl_seconds: int = 900
     case_signing_secret: str = field(default=_PROCESS_EPHEMERAL_SECRET, repr=False)
 
     @property
@@ -112,6 +119,15 @@ class AppConfig:
     def news_enabled(self) -> bool:
         return self.news_provider not in ("disabled", "none", "off")
 
+    @property
+    def meteomatics_configured(self) -> bool:
+        return bool(
+            self.meteomatics_username
+            and self.meteomatics_username.strip()
+            and self.meteomatics_password
+            and self.meteomatics_password.strip()
+        )
+
 
 def load_config() -> AppConfig:
     """Read current configuration from environment variables."""
@@ -121,6 +137,9 @@ def load_config() -> AppConfig:
     raw_openai_url = os.environ.get("OPENAI_BASE_URL", "").strip() or "https://api.openai.com/v1/responses"
     raw_provider = (os.environ.get("NEWS_PROVIDER", "").strip() or "gdelt").lower()
     raw_news_url = os.environ.get("NEWS_API_URL", "").strip() or "https://api.gdeltproject.org/api/v2/doc/doc"
+    raw_mm_user = os.environ.get("METEOMATICS_USERNAME", "").strip() or None
+    raw_mm_pass = os.environ.get("METEOMATICS_PASSWORD", "").strip() or None
+    raw_mm_url = (os.environ.get("METEOMATICS_BASE_URL", "").strip() or "https://api.meteomatics.com").rstrip("/")
     raw_case_secret = os.environ.get("TD_CASE_SECRET", "").strip() or _PROCESS_EPHEMERAL_SECRET
 
     return AppConfig(
@@ -142,6 +161,11 @@ def load_config() -> AppConfig:
         news_api_key=raw_news_key,
         news_timeout_seconds=_env_float("NEWS_TIMEOUT_SECONDS", 12.0, 2.0, 30.0),
         news_cache_ttl_seconds=_env_int("NEWS_CACHE_TTL_SECONDS", 900, 900, 86400),
+        meteomatics_username=raw_mm_user,
+        meteomatics_password=raw_mm_pass,
+        meteomatics_base_url=raw_mm_url,
+        meteomatics_timeout_seconds=_env_float("METEOMATICS_TIMEOUT_SECONDS", 10.0, 2.0, 30.0),
+        meteomatics_cache_ttl_seconds=_env_int("METEOMATICS_CACHE_TTL_SECONDS", 900, 60, 86400),
         case_signing_secret=raw_case_secret,
     )
 
@@ -151,13 +175,21 @@ def redact_secrets(text: str | None) -> str:
     if not text:
         return ""
     cleaned = str(text)
-    for env_name in ("OPENAI_API_KEY", "NEWS_API_KEY", "TD_CASE_SECRET"):
+    for env_name in (
+        "OPENAI_API_KEY",
+        "NEWS_API_KEY",
+        "METEOMATICS_USERNAME",
+        "METEOMATICS_PASSWORD",
+        "TD_CASE_SECRET",
+    ):
         secret_val = os.environ.get(env_name, "").strip()
-        if secret_val and len(secret_val) >= 4:
+        if secret_val and len(secret_val) >= 3:
             cleaned = cleaned.replace(secret_val, "[REDACTED]")
     cleaned = _SECRET_PATTERNS[0].sub("[REDACTED_KEY]", cleaned)
     cleaned = _SECRET_PATTERNS[1].sub(r"\1[REDACTED]", cleaned)
     cleaned = _SECRET_PATTERNS[2].sub(r"\1[REDACTED]", cleaned)
+    cleaned = _SECRET_PATTERNS[3].sub(r"\1[REDACTED]@", cleaned)
+    cleaned = _SECRET_PATTERNS[4].sub(r"\1[REDACTED]", cleaned)
     return cleaned
 
 
