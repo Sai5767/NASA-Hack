@@ -11,6 +11,7 @@ This registry records all sources already used by the app and the additional res
 | [NOAA Global Monitoring Laboratory](https://gml.noaa.gov/ccgg/trends/) | Atmospheric CO₂ | Keep for planet vital. |
 | [NSIDC Sea Ice Index](https://nsidc.org/data/seaice_index) | Arctic and Antarctic sea ice extent | Keep for planet vitals. |
 | [NOAA CPC / NCEI](https://www.cpc.ncep.noaa.gov/), [NCEI](https://www.ncei.noaa.gov/) | ENSO, PDO, NAO status and climate-rhythm analysis | Keep. These explain co-movement, not causal certainty. |
+| [Meteomatics Weather API](https://www.meteomatics.com/en/api/getting-started/) | Global historic, current and forecast weather service; the supplied `t_2m:C` Berlin URL is a 2-metre temperature example | Integrate only through a server-side adapter using account credentials. Use for live weather/current and short-range temperature, precipitation and cloud-cover layers; keep distinct from NASA climate trends and internal monthly forecasts. |
 
 ## NASA data resources supplied by the team
 
@@ -38,6 +39,8 @@ This registry records all sources already used by the app and the additional res
 ## Source-combination policy
 
 The V2 baseline does not average overlapping products. A numerical average is valid only when the products measure the same quantity on compatible temporal/spatial scales, units and datum; their uncertainty/bias treatment is documented; and the combined result is clearly labelled. Otherwise, show the primary series with an independent comparison or validation panel.
+
+This rule is especially important for Meteomatics and NASA POWER: Meteomatics’s current/short-range operational weather values and NASA POWER’s monthly climate/reanalysis series answer different questions. Show both only in their respective source-labelled panels; do not calculate an average or imply that they are the same observation.
 
 ## Provenance requirements in the interface
 

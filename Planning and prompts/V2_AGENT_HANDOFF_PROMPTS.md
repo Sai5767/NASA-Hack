@@ -41,7 +41,7 @@ Read these first, in full:
 Core constraints:
 1. Preserve FastAPI, the audited hand-written trend statistics, existing public-data behaviour, and backwards-compatible existing API fields.
 2. There is no real account system or profile database. Profiles and saved locations stay in the browser. Do not add authentication, Supabase, passwords, or a server database.
-3. Secrets are server-only environment variables. OPENAI_API_KEY must never reach frontend code, a response, logging, tests, a source file, or a commit. The application must work without the key.
+3. Secrets are server-only environment variables. OPENAI_API_KEY and Meteomatics credentials must never reach frontend code, a response, logging, tests, a source file, or a commit. The application must work without either integration configured.
 4. An AI explanation must never calculate/alter the trend, claim causation, invent citations, or make a risk/emergency decision. Statistics are server-produced facts. The AI produces a hedged, source-cited explanation of possible drivers only.
 5. No blind averaging of overlapping scientific products. NASA POWER is the primary V2 point/monthly source; other listed resources are registry/reference candidates unless you implement a tested adapter and visible provenance.
 6. All new external dependencies require timeout, bounded retry/concurrency, typed errors, a cache policy, an offline fake in tests, and a usable API response when unavailable.
@@ -55,14 +55,21 @@ A. Contract and resilience foundation
 - Add GET /api/health/details. It reports non-secret availability/cache age for NASA, AI explain feature, news feature and forecast feature. It must not invoke costly upstream calls just to respond.
 - Update CORS deliberately for POST /api/explanations while retaining safe development/production origins.
 
-B. Observed monthly grid and honest monthly forecast
+B. Meteomatics live-weather integration
+- Add a MeteomaticsProvider behind a provider interface plus GET /api/live-weather. The provider is a complement to NASA POWER, never an averaging/replacement layer for historical trend tests.
+- Read credentials only from server environment settings. Support the account’s documented access-token or username/password authentication mechanism; do not embed credentials in endpoint URLs or send them to clients. Document variable names only, never values.
+- Implement an initial narrow parameter map: air temperature `t_2m:C`, hourly precipitation `precip_1h:mm`, and total cloud cover `total_cloud_cover:p`. Request JSON, normalise units/valid times/source/model metadata, cap coordinates/ranges/intervals/response size, and return the original provider parameter plus V2 field label.
+- Cache current results briefly and forecast results for a bounded short TTL. Handle missing credential, 401, 429, timeouts, malformed payload, unsupported range and stale-cache fallback with typed, non-secret responses. Tests must use a fake provider and prove no credential reaches a response or log fixture.
+- Do not represent Meteomatics frames as NASA satellite observations or Trend Detective ML predictions. It is a separately labelled operational weather current/forecast layer.
+
+C. Observed monthly grid and honest monthly forecast
 - Implement GET /api/monthly-frames for a chosen location/variable/month range and a tightly limited local grid. It is an analysis grid around a selected place, not a fake global satellite raster. Return source/provenance, resolution, per-cell missingness, request coverage, and monthly observed values.
 - Implement GET /api/monthly-forecast for T2M, PRECTOTCORR, and CLOUD_AMT only. Forecast one to three months per requested local-grid cell.
 - Use rolling-origin backtests and a seasonal-naive baseline. Candidate models should include seasonal naive and at least two appropriate alternatives such as harmonic/damped trend and regularised autoregression. The selected model must be deterministic/reproducible. Return model name, per-horizon scores, calibration/coverage result, training record range, `eligible`, and an explicit reason whenever forecast is withheld.
 - Never report forecast data as observed data. Never interpolate failed cells as actual observations. Cap grid size, requested history, concurrency, and response size to protect NASA POWER.
 - Reuse the project’s no-heavy-ML-library approach unless a dependency is truly justified and documented. Quality means demonstrably better backtest performance, not a fashionable model name.
 
-C. “Why might this be happening?” endpoint
+D. “Why might this be happening?” endpoint
 - Add POST /api/explanations. The browser submits only a short optional question and an analysis request/signature. Recompute/verify/retrieve the analysis server-side; never accept client-supplied p-values, slopes, source facts, or arbitrary hidden prompt text.
 - Use a backend-only OpenAI Responses API integration, configurable by OPENAI_API_KEY and OPENAI_EXPLANATION_MODEL. When live source research is enabled, use official/reputable science domain filtering where feasible and preserve the returned URL citations in a normalised response.
 - Validate structured model output on the server. Response shape: status, summary, drivers[], limitations[], citations[], generated_at, fallback. Each driver must distinguish evidence type and use citations; unsubstantiated drivers must be removed rather than displayed.
@@ -70,13 +77,13 @@ C. “Why might this be happening?” endpoint
 - Add 24-hour analysis-signature cache plus rate limiting. When unavailable, use the existing curated reasons.py content where available; otherwise return an honest unavailable/no-evidence response with HTTP success if the trend itself was valid.
 - Do not make frontend compilation or ordinary local use require an OpenAI key.
 
-D. Live-news context endpoint
+E. Live-news context endpoint
 - Create a NewsProvider interface and GET /api/news. Build one bounded default provider adapter suitable for a demo; keep provider specifics behind configuration so a later Azure service can replace it.
 - News items must include: id, title, publisher, canonical URL, published time, category, deterministic severity (green/amber/red), lat/lon, coordinate precision/uncertainty, and a `news context, not scientific evidence` label.
 - Query a small list of saved locations and a fixed global rotation set. Deduplicate, reject unusable URLs/dates, and do not scrape publisher HTML.
 - Use deterministic keyword/category severity rules; do not let an LLM invent a disaster severity. Cache at least 15 minutes. On provider failure return last successful results marked stale or an honest empty result — never synthetic headlines.
 
-E. Tests and handoff
+F. Tests and handoff
 - Add offline tests for all new endpoints, validation, quotas/missing-key paths, upstream timeout/malformed data, stale caches, forecast eligibility/non-eligibility, evidence trace consistency, structured AI output/citation rejection, and news de-duplication/severity/fallback.
 - Run all existing backend tests plus the new tests. Do not change reference values unless you first prove a defect and update the stats audit.
 - Update README and HANDOFF.md with new environment variables (names only), local behaviour, route overview and limitations.
@@ -139,7 +146,8 @@ B. Globe-first dashboard and news context
 C. Timeline, observed frames, forecast frames
 - Add an accessible bottom timeline rail under the globe: monthly label, range scrubber, play/pause, speed, observed/forecast boundary, source/status legend and reduced-motion-safe controls.
 - Drive observed frames from /api/monthly-frames. Render missing grid cells as visibly missing, not smoothed data.
-- Drive forecast frames from /api/monthly-forecast only when `eligible` is true. Forecast frames need a clearly different style, an explanation of model/backtest quality, and a prominent “Forecast — not observed data” label.
+- Add a separately selectable live-weather layer driven by /api/live-weather: Meteomatics current/short-range temperature, hourly precipitation and cloud cover. It needs provider name, original parameter, unit, valid/fetch time, stale state and a prominent `Meteomatics weather forecast — not NASA trend data` label. Do not put it on the NASA monthly-anomaly scale.
+- Drive the longer-horizon internal climate forecast frames from /api/monthly-forecast only when `eligible` is true. These frames need a clearly different style, an explanation of model/backtest quality, and a prominent `Trend Detective climate forecast — not observed data` label.
 - When forecast is not eligible, retain historical controls and explain exactly why the future frames are unavailable.
 
 D. Evidence verdict and optional why panel
@@ -161,7 +169,7 @@ At completion, report changed files, verification results, and any backend-contr
 
 1. Read both handoff documents and compare all actual response fixtures against `V2_API_CONTRACT.md`.
 2. Start with no `OPENAI_API_KEY` and no news configuration: verify local profile, trends, rationale fallback and empty-news state work.
-3. Enable each optional dependency one at a time: verify citations, stale cache display, rate limit, and no key leakage.
+3. Enable each optional dependency one at a time: Meteomatics, citations/AI, then news. Verify source labels, stale cache display, rate limits and no credential leakage.
 4. Simulate NASA timeout, partial grid data, offline browser cache, malformed model response, no forecast skill, and slow mobile CPU.
 5. Run `pytest`, `npm test`, `npm run build`, a Docker image build, and one-process local smoke test before Azure staging.
 6. On Azure staging, set secrets only in application settings, verify same-origin API traffic, inspect browser bundle/network requests for secrets, and check phone + desktop.

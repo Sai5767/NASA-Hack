@@ -10,13 +10,15 @@ V2 is a **hackathon demonstration** of Trend Detective. It must keep the existin
 4. A local-only demo profile: a welcome/login-style screen, personalised interests, and saved locations. This is **not authentication** and never collects a password.
 5. A new globe-first home screen: gentle rotating Earth, contextual live-news markers, account control at top-right, and a dashboard on the left.
 6. A higher-quality, honest monthly forecaster for **temperature, rainfall, and cloud cover**.
-7. Azure-ready reliability work so an outage gives a useful fallback rather than a broken screen.
+7. A **Meteomatics** live-weather layer for current conditions and short-range operational weather guidance at saved locations.
+8. Azure-ready reliability work so an outage gives a useful fallback rather than a broken screen.
 
 ## Non-negotiable product rules
 
 - Keep the existing FastAPI + React/Vite architecture and the audited statistics. Do not rewrite the trend engine merely to add V2.
 - Personal information, profile choices, saved locations, and watchlists stay in browser `localStorage`. There is no cloud account, database, password, or server-side profile record.
 - `OPENAI_API_KEY` belongs only in the backend process environment or Azure application settings. It must never appear in a browser bundle, URL, source file, test snapshot, or log.
+- Meteomatics credentials (an access token, or a username/password pair supported by the account) also belong only in backend/Azure application settings. Never call Meteomatics directly from the browser or expose its credential in a URL.
 - The AI must **not** calculate a trend, p-value, forecast score, or severity rating. The backend produces the numeric evidence first; the AI only explains it in plain language from supplied facts and cited sources.
 - “Why” means plausible explanations, associations, and published context — never proof of causation. Every answer must say this clearly.
 - A prediction is shown only when it beats the seasonal-naive baseline in rolling backtests. If it does not, the app says so and does not animate invented future data.
@@ -33,6 +35,7 @@ V2 is a **hackathon demonstration** of Trend Detective. It must keep the existin
 | World time-lapse and interactive canvas globe | Extend its controls and layers; do not replace it with a map library. |
 | Browser-only Personalise wizard, watchlist, saved interests | Evolve it into the demo account experience; do not add real auth. |
 | Forecast lab with rolling backtests and conformal intervals | Reuse its evaluation discipline; add a separate monthly short-range path for the three chosen variables. |
+| Meteomatics Weather API | Add as an optional, server-proxied current/short-range weather layer. It does not replace or average with NASA POWER. |
 
 ## Target user flows
 
@@ -80,8 +83,11 @@ After a user chooses a variable, place, and period:
 The bottom globe rail has month labels, scrubber, play/pause, speed, source status, and a clear `Observed` / `Forecast` boundary.
 
 - **Historical mode:** monthly anomalies for the selected variable. The globe layer is a labelled, coarse analysis grid around the user’s chosen area, not a falsely precise global satellite image.
-- **Forecast mode:** up to the next three months for air temperature (`T2M`), rainfall (`PRECTOTCORR`), and cloud cover (`CLOUD_AMT`) only. Forecast frames are visually distinct (for example, dashed border and `Forecast` label).
+- **Live weather mode:** server-proxied Meteomatics conditions and its short-range forecast, at the resolution and horizon the team’s Meteomatics subscription supports. Use the documented `t_2m:C`, `precip_1h:mm`, and `total_cloud_cover:p` parameter families (plus wind only if useful). Label every frame `Meteomatics weather forecast`, with fetch time, provider and model/source information when available. Do not describe this as a NASA observation or a custom ML prediction.
+- **Climate forecast mode:** up to the next three months for air temperature (`T2M`), rainfall (`PRECTOTCORR`), and cloud cover (`CLOUD_AMT`) only. These backtested internal forecast frames are visually distinct (for example, dashed border and `Trend Detective climate forecast` label).
 - **Quality gate:** forecast frames are unavailable if the selected model fails to beat seasonal-naive on rolling 1-, 2-, and 3-month backtests, required coverage is poor, data are too sparse, or a grid cell fails. The historical animation continues and the UI says why forecasts are withheld.
+
+The UI must not put hourly Meteomatics weather values on the same scale as monthly NASA POWER anomalies. It uses separate layers/time controls and a clear hand-off in the interface.
 
 ## Architecture and contracts
 
@@ -94,7 +100,8 @@ Browser
 
 FastAPI service (Azure App Service / container)
   in-memory bounded TTL cache: public NASA/news/AI responses
-  environment: OPENAI_API_KEY, OPENAI_EXPLANATION_MODEL, NEWS_PROVIDER settings
+  environment: OPENAI_API_KEY, OPENAI_EXPLANATION_MODEL, NEWS_PROVIDER settings,
+               METEOMATICS credentials/settings
   no user database and no user-profile persistence
 ```
 
@@ -111,9 +118,26 @@ The backend agent writes an explicit schema document and tests before the fronte
 | `GET /api/news` | News context near selected/saved locations | Return `{items, fetched_at, stale, provider, partial_failures}`; every item has a canonical article URL and approximate coordinates. |
 | `GET /api/monthly-frames` | Observed timeline grid around one selected location | Return coarse monthly fields, actual source/provenance, missing-cell information, and limits. |
 | `GET /api/monthly-forecast` | Backtested 1–3 month forecast frames | Return forecast only with per-variable/model metrics and explicit `eligible`; otherwise a reason. |
+| `GET /api/live-weather` | Meteomatics current and short-range weather for one saved/selected location | Return provider, provider parameter, provider/model metadata where available, fetched/valid times, units, `stale`, and feature availability. |
 | `GET /api/health/details` | Non-secret dependency health for diagnostics | Report source status, cache age, and feature availability; never include keys or raw upstream errors. |
 
 `POST /api/explanations` receives only a short user question plus a small, backend-generated `case_id`/request signature. It must reconstruct all statistical facts on the server or verify a signed/cached analysis result. Do not trust arbitrary values supplied by the browser.
+
+### Meteomatics integration design
+
+Meteomatics is a complementary operational weather source, not a long-record climate-trend source. Its API accepts time, parameter and coordinate queries and provides historic, current and forecast weather data; the example URL supplied by the team is a Berlin 2-metre-temperature request. The adapter must request JSON, not the sample HTML format.
+
+Create a `MeteomaticsProvider` behind a weather-provider interface. It maps the V2 cards and animation to this small initial set:
+
+| App field | Meteomatics parameter | Intended V2 use |
+| --- | --- | --- |
+| Air temperature | `t_2m:C` | Current card and hourly/short-range weather frames |
+| Precipitation | `precip_1h:mm` | Hourly rain amount/forecast frames |
+| Cloud cover | `total_cloud_cover:p` | Current sky condition/forecast frames |
+
+The backend, never the browser, authenticates with the account’s supported access token or username/password mechanism. It applies coordinate/range/interval limits, explicit connection and read timeouts, bounded retries for transient failures, response-size limits, and a short TTL cache (for example 5 minutes for current conditions and 15–30 minutes for forecast). The response normalises provider details and never forwards credentials or unfiltered upstream errors.
+
+If credentials are absent, invalid, rate-limited, or the provider is unavailable, return feature availability plus a precise non-secret reason. The home screen hides/disables live weather gracefully; NASA POWER historical analysis, local profile and internal forecast remain usable. Never substitute NASA POWER monthly data for a current Meteomatics reading without changing the visible source label.
 
 ### AI explanation design
 
@@ -158,6 +182,7 @@ NASA POWER remains the shipped, keyless source for point/monthly V2 trend and fo
 ### Phase 1 — backend resilience and contract (Gemini)
 
 - Centralise source clients behind adapters with timeout, retry, cancellation, bounded concurrency, cache age, and normalised error types.
+- Add the Meteomatics adapter and `GET /api/live-weather` early, using server-only configuration and offline provider fixtures. Its successful response must preserve the requested parameter, units, valid time, fetch time, provider/model metadata when available, and stale state.
 - Extend the trend response with an exact, testable evidence trace.
 - Add `/api/health/details`, feature flags, and deterministic fixture data for all new external integrations.
 - Add a local/ephemeral cache suitable for the demo. Do not introduce a profile database.
@@ -178,6 +203,7 @@ NASA POWER remains the shipped, keyless source for point/monthly V2 trend and fo
 - Implement the server-only OpenAI route, structured output validation, citation normalisation, cache, rate limit, and curated fallback.
 - Implement the news-provider interface, one default adapter, stale cache behaviour, source URLs, deterministic severity labels, and empty state.
 - Add tests that run fully offline via fake OpenAI/news clients.
+- Add Meteomatics-specific tests for parameter mapping, normalisation, missing/invalid credentials, 401/429/timeout/malformed response, cache/stale fallback, and proof that no credential reaches an API response or log fixture.
 
 **Exit gate:** the complete application runs without keys and shows clear unavailable/fallback states; keys remain server-side.
 
@@ -221,6 +247,7 @@ NASA POWER remains the shipped, keyless source for point/monthly V2 trend and fo
 | NASA/NOAA source timeout, 429, malformed response | Retry within a short bounded budget; use fresh/stale cache if available; otherwise show source-specific retry card while leaving prior result visible. |
 | Partial grid failure | Render valid cells, visually identify missing cells, report coverage; do not interpolate them as data. |
 | OpenAI key missing/quota/error/invalid JSON | Hide or disable live-AI button with a precise explanation; use curated reason if available. |
+| Meteomatics credential missing/invalid, quota, timeout or malformed response | Disable or mark the live-weather layer unavailable, with no secret detail; retain historical NASA analysis and cached/stale weather only when clearly timestamped. |
 | AI has no credible cited explanation | Say that the data establish a trend but cannot establish why. |
 | News provider outage/no stories | Show stale news with timestamp or an honest empty state; no placeholders. |
 | Forecast too short/poor backtest | Observed timeline remains available; forecast segment is disabled with a plain reason. |
@@ -238,6 +265,7 @@ V2 is demo-ready only when the following are true:
 - A completed analysis has a visual significance verdict, plain-language explanation, expandable calculations, source and limitations.
 - “Why?” has source links or honestly says why it cannot answer; it never asserts causal proof.
 - Temperature, rainfall, and cloud cover support an observed monthly timeline and only show 1–3 forecast months when backtesting earns it.
+- Meteomatics live temperature, hourly precipitation and cloud-cover data appear only when the backend provider is configured and available, with provider/time/source labels distinct from NASA history and internal forecasts.
 - The globe has a clean rotating presentation, accessible controls, data/news provenance, and safe green/amber/red news context markers.
 - Every new external dependency has a timeout, cache/fallback, offline test double, and visible degraded state.
 - Existing statistical-reference tests, new backend tests, frontend tests, production build, Docker build, and Azure staging smoke test pass.

@@ -1,0 +1,201 @@
+TREND DETECTIVE V2 - SIMPLE MANUAL PROCESS
+
+This file tells you what YOU need to do manually. The agents write code; you keep control of passwords, testing and deployment.
+
+IMPORTANT SAFETY RULE
+
+Do not put a real password, API key or token in GitHub, source code, a prompt, a README, a screenshot or browser code.
+If you shared a password in a chat or public place, change it before the final deployment.
+
+WHAT EXISTS ALREADY
+
+The app already has NASA POWER trend analysis, statistics, a globe, a time-lapse, local browser preferences and forecast logic.
+V2 adds:
+- a better local demo profile/account page;
+- a “Why might this be happening?” AI explanation;
+- Meteomatics live weather;
+- live-news markers on the globe;
+- a clearer time slider and forecast visuals.
+
+NASA POWER stays responsible for the long-term trend analysis.
+Meteomatics is for current and short-range weather.
+Do not average the two sources or label Meteomatics as NASA data.
+
+STEP 1 - READ THE PLANNING FILES
+
+Open these files in the “Planning and prompts” folder:
+
+1. V2_EXECUTION_PLAN.md - the full order of work.
+2. V2_DATA_SOURCE_REGISTRY.md - every data source and how it should be used.
+3. V2_AGENT_HANDOFF_PROMPTS.md - the main Gemini and Claude prompts.
+4. GEMINI_METEOMATICS_IMPLEMENTATION_PROMPT.md - the focused prompt for Meteomatics.
+
+STEP 2 - SEND GEMINI THE BACKEND TASK FIRST
+
+Give Gemini the backend prompt first. If you are doing Meteomatics first, use:
+
+  GEMINI_METEOMATICS_IMPLEMENTATION_PROMPT.md
+
+Gemini must:
+- keep the existing NASA trend calculations;
+- create a server-only Meteomatics connection;
+- add GET /api/live-weather;
+- use temperature, precipitation, cloud cover and wind data;
+- add tests that work without the real Meteomatics service;
+- make the app work even when Meteomatics is unavailable;
+- create V2_API_CONTRACT.md and V2_METEOMATICS_HANDOFF.md.
+
+Do not give Gemini your password in a prompt. Gemini only needs to know the names of the environment variables.
+
+STEP 3 - ADD METEOMATICS CREDENTIALS FOR LOCAL TESTING
+
+Meteomatics uses a username and password. It does not use a separate API key for this account.
+
+Only AFTER Gemini has implemented the backend route, open PowerShell and use this template:
+
+  $env:METEOMATICS_USERNAME = "your username goes here"
+  $env:METEOMATICS_PASSWORD = "your password goes here"
+  cd backend
+  .venv\Scripts\activate
+  uvicorn app.main:app --port 8000
+
+Leave that PowerShell window open. These values exist only for that window.
+
+Open a SECOND PowerShell window for the front end:
+
+  cd frontend
+  npm run dev
+
+Open this in your browser:
+
+  http://127.0.0.1:5173
+
+Test the new backend route in the browser:
+
+  http://127.0.0.1:8000/api/live-weather?lat=52.520551&lon=13.461804&hours=24
+
+You should get weather data for Berlin. It should clearly say Meteomatics and show a fetch time.
+It must not show your username or password.
+
+Note: Double-clicking START.bat will not automatically use temporary values set in another PowerShell window.
+Use the manual backend command above when testing Meteomatics locally.
+
+STEP 4 - CHECK THE BACKEND BEFORE CLAUDE STARTS
+
+Ask Gemini to confirm all backend tests pass. Then check that these files exist:
+
+  Planning and prompts/V2_API_CONTRACT.md
+  Planning and prompts/V2_BACKEND_HANDOFF.md or V2_METEOMATICS_HANDOFF.md
+
+Read the API contract. It tells Claude exactly what the backend returns.
+
+Check these situations manually:
+
+1. No Meteomatics login set: normal NASA trend analysis still works.
+2. Meteomatics login set: /api/live-weather works.
+3. Bad or missing login: the app says live weather is unavailable without showing secret details.
+4. Provider failure: old cached weather is marked “stale”, or the app shows an honest empty state.
+5. Meteomatics weather is separate from NASA history and separate from the app’s internal climate forecast.
+
+STEP 5 - SEND CLAUDE THE FRONTEND TASK
+
+After the API contract exists, give Claude the frontend prompt in:
+
+  V2_AGENT_HANDOFF_PROMPTS.md
+
+Claude must make:
+- a clean rotating globe;
+- account/profile control at the top right;
+- local saved places and interests;
+- a dashboard on the left;
+- live-news location markers;
+- a bottom timeline;
+- a clear difference between observed NASA history, Meteomatics weather forecast and internal climate forecast;
+- simple visual significance badges and an expandable technical explanation.
+
+The “account” is only local browser storage for the demo. It is not a real secure login and it must not ask for a password.
+
+STEP 6 - RUN ALL TESTS LOCALLY
+
+Backend:
+
+  cd backend
+  .venv\Scripts\activate
+  pytest
+
+Frontend:
+
+  cd frontend
+  npm test
+  npm run build
+
+Production-style local check after the frontend build:
+
+  cd backend
+  .venv\Scripts\activate
+  uvicorn app.main:app --port 8010
+
+Then open:
+
+  http://127.0.0.1:8010
+
+Manual checks:
+
+- Try the page on a phone-sized browser window and a desktop window.
+- Try keyboard navigation and globe controls.
+- Turn on reduced motion in your computer settings and check the globe/animations calm down.
+- Test a normal trend, an unavailable data source, no AI key, no Meteomatics login and bad network conditions.
+- Check every forecast says whether it is observed data or a prediction.
+- Check every data view shows its source and update time.
+
+STEP 7 - SET UP AZURE AFTER LOCAL TESTS PASS
+
+Do this only after the app works locally.
+
+1. Create or open your Azure App Service for Trend Detective.
+2. Use a staging app/slot first if possible. Do not test for the first time on your public demo URL.
+3. In Azure Portal, open:
+
+   App Services > your Trend Detective app > Settings > Environment variables > App settings
+
+4. Add these settings one at a time. Enter the real values only in Azure:
+
+   METEOMATICS_USERNAME
+   METEOMATICS_PASSWORD
+   OPENAI_API_KEY                 (only if you want the AI Why feature)
+   OPENAI_EXPLANATION_MODEL       (only if you want the AI Why feature)
+
+5. Save. Azure restarts the app with the values available to the backend.
+6. If deploying the repository Docker container, set this too if Azure asks which port the container uses:
+
+   WEBSITES_PORT = 8000
+
+7. Open the website and test:
+
+   https://YOUR-APP-NAME.azurewebsites.net/api/health/details
+   https://YOUR-APP-NAME.azurewebsites.net/api/live-weather?lat=52.520551&lon=13.461804&hours=24
+
+The health endpoint must only report whether services are available. It must never reveal a secret.
+
+STEP 8 - FINAL DEMO CHECK
+
+Run this simple journey before the hackathon demo:
+
+1. Open the app.
+2. Create the local demo profile and save a place.
+3. Pick a NASA variable and place.
+4. Show what changed, where, how much and whether it is statistically significant.
+5. Open the explanation and show that it says “possible causes”, not guaranteed causes.
+6. Show historical data, then Meteomatics current/short-range weather as a separate source.
+7. Show the globe news context and source links.
+8. Show one expected failure state, such as missing live weather, to prove the app does not break.
+
+FINAL RULES
+
+- Do not deploy before tests pass.
+- Do not merge agent work into main until you have checked it.
+- Do not let an AI explanation claim it proved the cause of a trend.
+- Do not let a news headline change scientific significance.
+- Do not call Meteomatics directly from the frontend.
+- Do not show a forecast as if it were observed satellite/NASA data.
+- Keep source names and limitations visible in the app.
