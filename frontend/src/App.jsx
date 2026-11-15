@@ -4,9 +4,12 @@ import Archetypes, { CLUSTER_COLORS } from "./components/Archetypes.jsx";
 import Boot from "./components/Boot.jsx";
 import Briefing from "./components/Briefing.jsx";
 import CaseFile from "./components/CaseFile.jsx";
-import { AboutDialog, CasesDialog, GlossaryDialog, IntakeDialog } from "./components/Dialogs.jsx";
+import { AboutDialog, CasesDialog, GlossaryDialog } from "./components/Dialogs.jsx";
 import Duel from "./components/Duel.jsx";
+import ForYou from "./components/ForYou.jsx";
 import Globe from "./components/Globe.jsx";
+import Home from "./components/Home.jsx";
+import IntakeWizard from "./components/Intake.jsx";
 import Loading from "./components/Loading.jsx";
 import Scan from "./components/Scan.jsx";
 import SetupPanel from "./components/SetupPanel.jsx";
@@ -14,9 +17,11 @@ import Starfield from "./components/Starfield.jsx";
 import Sweep from "./components/Sweep.jsx";
 import Vitals from "./components/Vitals.jsx";
 import World from "./components/World.jsx";
-import { FIRST_YEAR, LAST_FULL_YEAR } from "./lib/cases.js";
+import { useStoredState } from "./hooks.js";
+import { CASES, FIRST_YEAR, LAST_FULL_YEAR, SURPRISES } from "./lib/cases.js";
 import { clamp, formatP, formatPlace, round2, signed } from "./lib/format.js";
-import { cellContains } from "./lib/geo.js";
+import { cellContains, nearestPlace } from "./lib/geo.js";
+import { DEFAULT_PROFILE, addWatch, defaultView, hasWatch, removeWatch, suggest, toggleWatch } from "./lib/profile.js";
 import { decodeState, encodeState } from "./lib/share.js";
 
 const COLORS = { up: "#ff6a5c", down: "#4da6ff", flat: "#8794b8", failed: "#5f6a8a", a: "#4dffd9", b: "#ff6bd5" };
@@ -140,33 +145,6 @@ function seenBoot() {
   }
 }
 
-function Hero({ onCases, onIntake, placeCount }) {
-  const years = LAST_FULL_YEAR - FIRST_YEAR + 1;
-  return (
-    <section className="card hud-card hero reveal">
-      <p className="eyebrow">Earth system case files</p>
-      <h2>
-        Is it changing? <span>Where?</span> By how much? <span>Is it real?</span>
-      </h2>
-      <p className="dim">
-        Pick any spot on Earth and a variable. Trend Detective gathers {years} years of NASA data, measures the change, and tells you how much to
-        trust it, then checks what moves with it and whether independent records agree.
-      </p>
-      <div className="hero-actions">
-        <button type="button" className="btn btn-primary" onClick={onCases}>Open a case file ▸</button>
-        <button type="button" className="btn" onClick={onIntake}>Guided intake</button>
-      </div>
-      <p className="faint small">…or type a question above, or click anywhere on the globe to drop a pin.</p>
-      <ul className="hero-stats mono">
-        <li><b>19</b> Earth-system variables</li>
-        <li><b>8</b> NASA, NOAA and NSIDC data streams</li>
-        <li><b>{placeCount || 68}</b> places to survey</li>
-        <li><b>6</b> ways to investigate</li>
-      </ul>
-    </section>
-  );
-}
-
 function PinPrompt({ label }) {
   return (
     <div className="card hud-card prompt reveal">
@@ -220,6 +198,15 @@ export default function App() {
   const [worldMode, setWorldMode] = useState("survey");
   const [archetypes, setArchetypes] = useState(EMPTY);
   const [archK, setArchK] = useState(null);
+  const [storedProfile, setProfile] = useStoredState("td-profile", DEFAULT_PROFILE);
+  const [watch, setWatch] = useStoredState("td-watch", []);
+  const [viewPref, setViewPref] = useStoredState("td-view", null);
+  const [detailFocus, setDetailFocus] = useState(null);
+  const [forYouOpen, setForYouOpen] = useState(true);
+  const profile = useMemo(() => ({ ...DEFAULT_PROFILE, ...storedProfile }), [storedProfile]);
+  const view = viewPref ?? defaultView(profile);
+  const home = tab === "investigate" && !params;
+  const forYouItems = useMemo(() => suggest(profile, { limit: 3 }), [profile]);
 
   const controllers = useRef({});
   const draftRef = useRef(draft);
@@ -374,11 +361,18 @@ export default function App() {
   const worldFresh = tab === "world" && worldMode === "survey" && !!world.data && world.key === keys.world(worldParams);
   const archFresh =
     tab === "world" && worldMode === "archetypes" && !!archetypes.data?.ok && archetypes.key === keys.archetypes(vitalsYears, archK);
+  const watchDots = useMemo(
+    () =>
+      home
+        ? watch.map((w) => ({ id: w.id, name: w.name, lat: w.lat, lon: w.lon, color: COLORS.a, r: 6, ring: true, tip: `${w.name} · on your watchlist`, watch: w }))
+        : [],
+    [home, watch],
+  );
   const dots = useMemo(() => {
     if (worldFresh) return worldDots(world.data);
     if (archFresh) return archetypeDots(archetypes.data);
-    return [];
-  }, [worldFresh, archFresh, world.data, archetypes.data]);
+    return watchDots;
+  }, [worldFresh, archFresh, world.data, archetypes.data, watchDots]);
 
   const handlePick = (lat, lon) => {
     const la = round2(lat);
@@ -480,6 +474,57 @@ export default function App() {
     else chooseVariable(s.variable);
   };
 
+  const openWatch = (w) => {
+    setActiveCase(null);
+    setSelectedCell(null);
+    commit({ variable: w.variable, lat: w.lat, lon: w.lon });
+    setTab("investigate");
+  };
+
+  const placeNameFor = (lat, lon) => nearestPlace(places, lat, lon, 250)?.name ?? formatPlace(lat, lon);
+  const watchItem = params ? { variable: params.variable, lat: params.lat, lon: params.lon, name: placeNameFor(params.lat, params.lon) } : null;
+  const watched = !!watchItem && hasWatch(watch, watchItem);
+  const toggleCurrentWatch = () => watchItem && setWatch((list) => toggleWatch(list, watchItem));
+
+  const openSuggestion = (s) => {
+    if (s.kind === "case") openCase(s.case);
+    else openIntake(s.open);
+  };
+
+  const surprise = () => {
+    const pick = SURPRISES[Math.floor(Math.random() * SURPRISES.length)];
+    openIntake({ variable: pick.variable, lat: pick.lat, lon: pick.lon });
+  };
+
+  /** Save the answers, seed the watchlist from them, then do what the user said they wanted to do first. */
+  const finishIntake = (answers) => {
+    const next = { ...answers, done: true };
+    setProfile(next);
+    setViewPref(null); // let the chosen level of detail decide the starting view again
+    setForYouOpen(true);
+    const picks = suggest(next, { limit: 6 });
+    setWatch((list) => (list.length ? list : picks.filter((s) => s.kind === "place").slice(0, 3).reverse().reduce((acc, s) => addWatch(acc, s.open), [])));
+    setModal(null);
+    if (next.goal === "check") {
+      setTimeout(() => document.getElementById("ask-input")?.focus(), 150);
+      return;
+    }
+    if (next.goal === "learn") {
+      setModal("glossary");
+      return;
+    }
+    const wanted = next.goal === "compare" ? CASES.find((c) => c.tab === "duel") : next.goal === "forecast" ? CASES.find((c) => c.id === "forecast") : null;
+    if (wanted) {
+      openCase(wanted);
+      if (next.goal === "forecast") {
+        setViewPref("detail");
+        setDetailFocus({ id: "forecast", nonce: Date.now() });
+      }
+      return;
+    }
+    if (picks[0]) openSuggestion(picks[0]);
+  };
+
   const swapPlaces = () => {
     if (!pinB || !params) return;
     const a = { lat: params.lat, lon: params.lon };
@@ -504,14 +549,30 @@ export default function App() {
   const busy = trend.loading || sweep.loading || grid.loading || duel.loading || world.loading || vitals.loading || archetypes.loading;
   const scanStale = !!params && !!grid.data && grid.key !== keys.grid(params, scanCfg);
   const briefingTab = activeCase?.tab;
+  // Essentials are the challenge's required trio: one variable over time at a place, every variable at a place, a region.
   const tabs = [
-    { id: "investigate", label: "Case file", hint: "one place" },
-    { id: "sweep", label: "Sweep", hint: "all variables" },
-    { id: "scan", label: "Scan", hint: "a region" },
+    { id: "investigate", label: "Case file", hint: "one place", core: true },
+    { id: "sweep", label: "Sweep", hint: "all variables", core: true },
+    { id: "scan", label: "Scan", hint: "a region", core: true },
     { id: "duel", label: "Duel", hint: "two places" },
     { id: "world", label: "World", hint: places.length ? `${places.length} sites` : "sample sites" },
     { id: "vitals", label: "Vitals", hint: "the planet" },
   ];
+  const renderTab = (t) => (
+    <button
+      key={t.id}
+      type="button"
+      role="tab"
+      id={`tab-${t.id}`}
+      aria-selected={tab === t.id}
+      aria-controls="panel"
+      className="tab"
+      onClick={() => { setTab(t.id); setSelectedCell(null); }}
+    >
+      <b>{t.label}</b>
+      <small>{t.hint}</small>
+    </button>
+  );
 
   return (
     <div className="app">
@@ -547,7 +608,7 @@ export default function App() {
         </nav>
       </header>
 
-      <main className="stage">
+      <main className={`stage${home ? " home" : ""}`}>
         <div className="globe-col">
           <Globe
             pins={pins}
@@ -555,13 +616,16 @@ export default function App() {
             cellHalf={cellHalf}
             selectedCell={selectedCell}
             dots={dots}
-            onDotPick={openPlace}
+            onDotPick={(d) => (d.watch ? openWatch(d.watch) : openPlace(d))}
             focus={focus}
             modeRequest={modeRequest}
             busy={busy}
             idleSpin={!params}
             onPick={handlePick}
           >
+            {home && forYouOpen && forYouItems.length > 0 && (
+              <ForYou items={forYouItems} personal={profile.done} onOpen={openSuggestion} onClose={() => setForYouOpen(false)} />
+            )}
             {cells.length > 0 && (
               <ul className="globe-legend mono" aria-label="Map key">
                 <li><i style={{ background: COLORS.up }} /> significant rise</li>
@@ -590,22 +654,15 @@ export default function App() {
         </div>
 
         <div className="console" ref={resultsRef}>
-          <div className="tabs" role="tablist" aria-label="Investigation mode">
-            {tabs.map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                role="tab"
-                id={`tab-${t.id}`}
-                aria-selected={tab === t.id}
-                aria-controls="panel"
-                className="tab"
-                onClick={() => { setTab(t.id); setSelectedCell(null); }}
-              >
-                <b>{t.label}</b>
-                <small>{t.hint}</small>
-              </button>
-            ))}
+          <div className="tab-groups">
+            <div className="tab-group">
+              <span className="tab-group-label">Essentials</span>
+              <div className="tabs" role="tablist" aria-label="Essential investigations">{tabs.filter((t) => t.core).map(renderTab)}</div>
+            </div>
+            <div className="tab-group">
+              <span className="tab-group-label">Explore more</span>
+              <div className="tabs more" role="tablist" aria-label="More ways to investigate">{tabs.filter((t) => !t.core).map(renderTab)}</div>
+            </div>
           </div>
 
           <SetupPanel
@@ -626,13 +683,35 @@ export default function App() {
           <div id="panel" role="tabpanel" aria-labelledby={`tab-${tab}`} className="panel-stack">
             {tab === "investigate" &&
               (!params ? (
-                trend.error ? <ErrorCard message={trend.error} /> : <Hero placeCount={places.length} onCases={() => setModal("cases")} onIntake={() => setModal("intake")} />
+                trend.error ? (
+                  <ErrorCard message={trend.error} />
+                ) : (
+                  <Home
+                    placeCount={places.length}
+                    profile={profile}
+                    watch={watch}
+                    variables={variables}
+                    onCases={() => setModal("cases")}
+                    onIntake={() => setModal("intake")}
+                    onOpenWatch={openWatch}
+                    onRemoveWatch={(id) => setWatch((list) => removeWatch(list, id))}
+                  />
+                )
               ) : trend.loading ? (
                 <Loading title="Investigating" />
               ) : trend.error ? (
                 <ErrorCard message={trend.error} onRetry={retry} />
               ) : trend.data ? (
-                <CaseFile key={trend.key} data={trend.data} />
+                <CaseFile
+                  key={trend.key}
+                  data={trend.data}
+                  view={view}
+                  onView={setViewPref}
+                  onGo={(t) => { setTab(t); setSelectedCell(null); }}
+                  watched={watched}
+                  onToggleWatch={toggleCurrentWatch}
+                  focusSection={detailFocus}
+                />
               ) : null)}
 
             {tab === "sweep" &&
@@ -733,7 +812,7 @@ export default function App() {
       </footer>
 
       {modal === "cases" && <CasesDialog variables={variables} onOpen={openCase} onClose={() => setModal(null)} />}
-      {modal === "intake" && <IntakeDialog variables={variables} onOpen={openIntake} onClose={() => setModal(null)} />}
+      {modal === "intake" && <IntakeWizard initial={profile} onFinish={finishIntake} onSurprise={surprise} onClose={() => setModal(null)} />}
       {modal === "glossary" && <GlossaryDialog onClose={() => setModal(null)} />}
       {modal === "about" && <AboutDialog onClose={() => setModal(null)} />}
     </div>

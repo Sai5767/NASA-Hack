@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { CASES, INTAKE_PLACES, INTAKE_TOPICS, SURPRISES } from "../lib/cases.js";
+import { CASES } from "../lib/cases.js";
 import { GLOSSARY } from "../lib/glossary.js";
 import Modal from "./Modal.jsx";
 
@@ -28,58 +28,6 @@ export function CasesDialog({ variables, onOpen, onClose }) {
           </li>
         ))}
       </ul>
-    </Modal>
-  );
-}
-
-export function IntakeDialog({ variables, onOpen, onClose }) {
-  const [topic, setTopic] = useState(null);
-  const name = (id) => variables.find((v) => v.id === id)?.label ?? id;
-
-  const surprise = () => {
-    const pick = SURPRISES[Math.floor(Math.random() * SURPRISES.length)];
-    onOpen({ variable: pick.variable, lat: pick.lat, lon: pick.lon, name: pick.name });
-  };
-
-  return (
-    <Modal eyebrow={topic ? "Step 2 of 2" : "Step 1 of 2"} title={topic ? "Where in the world?" : "What are you curious about?"} onClose={onClose}>
-      {!topic ? (
-        <>
-          <p className="dim">Pick a kind of change and we'll choose the matching Earth-system variable.</p>
-          <ul className="choice-grid">
-            {INTAKE_TOPICS.map((t, i) => (
-              <li key={t.id} className="reveal-pop" style={{ "--d": `${i * 50}ms` }}>
-                <button type="button" className="choice" onClick={() => setTopic(t)}>
-                  <b>{t.label}</b>
-                  <small>{t.hint}</small>
-                </button>
-              </li>
-            ))}
-          </ul>
-          <button type="button" className="btn" onClick={surprise}>✦ Surprise me</button>
-        </>
-      ) : (
-        <>
-          <p className="dim">Investigating <b>{name(topic.variable)}</b>. Choose a kind of place, or pick your own spot on the globe.</p>
-          <ul className="choice-grid">
-            {INTAKE_PLACES.map((p, i) => (
-              <li key={p.id} className="reveal-pop" style={{ "--d": `${i * 50}ms` }}>
-                <button type="button" className="choice" onClick={() => onOpen({ variable: topic.variable, lat: p.lat, lon: p.lon, name: p.hint })}>
-                  <b>{p.label}</b>
-                  <small>{p.hint}</small>
-                </button>
-              </li>
-            ))}
-            <li>
-              <button type="button" className="choice own" onClick={() => onOpen({ variable: topic.variable, own: true })}>
-                <b>My own spot</b>
-                <small>Click anywhere on the globe</small>
-              </button>
-            </li>
-          </ul>
-          <button type="button" className="btn btn-sm btn-ghost" onClick={() => setTopic(null)}>← Back</button>
-        </>
-      )}
     </Modal>
   );
 }

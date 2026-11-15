@@ -44,16 +44,16 @@ Environment gotchas: Windows PowerShell 5.1 (no `&&`); git pushes work with the 
 
 - [x] 0. Branch, this file, first push
 - [x] 1. Significance maths audited (docs/STATS_AUDIT.md, tools/stats_audit/, backend/tests/test_stats_reference.py). Fixed: Sen CI rank, serial-correlation adjustment (bias-corrected, no gate, effective df in OLS), duel uses Welch t. 181 backend tests pass.
-- [ ] 2. Overview / Detail split
-- [ ] 3. Finance-style home: watchlist, For you, core vs extra tabs
-- [ ] 4. Question list and expanded intake
+- [x] 2. Overview / Detail split (CaseFile.jsx, Overview.jsx; view persisted as `td-view`; verified in the browser)
+- [x] 3. Finance-style home: watchlist (Watchlist.jsx), For you pop-ups on the globe (ForYou.jsx), Essentials vs Explore-more tabs, watchlist dots on the globe
+- [x] 4. Question list (docs/USER_QUESTIONS.md) and the 5-question wizard (Intake.jsx, lib/profile.js, tests in frontend/tests/profile.test.mjs)
 - [ ] 5. Requirements matrix
 - [ ] 6. Explainer chat and hover link
 - [ ] 7. Events catalogue, tab, chart markers
 - [ ] 8. Trend ledger and reasons
 - [ ] 9. Time-lapse
 - [ ] 10. Colour scheme and Classic theme
-- [ ] 11. Forecast headline in Overview
+- [x] 11. Forecast headline in Overview (ForecastHeadline in Overview.jsx; all ML runs locally in pure Python)
 - [ ] 12. Hosting config and docs (not published)
 - [ ] 13. Final: all tests green, README updated, branch pushed, merge-ready summary
 

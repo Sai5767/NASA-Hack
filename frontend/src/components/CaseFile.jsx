@@ -1,81 +1,48 @@
-import { useState } from "react";
-import { useCountUp, useTypewriter } from "../hooks.js";
-import { arrow, formatP, formatPlace, signed } from "../lib/format.js";
+import { useEffect, useState } from "react";
 import { caseFileCsv, downloadText } from "../lib/csv.js";
+import { arrow, formatP, formatPlace, signed } from "../lib/format.js";
+import { noiseSentence, shapeSub, shapeWord } from "../lib/words.js";
+import { Count, Metric, Verdict } from "./CaseParts.jsx";
 import Emergence from "./charts/Emergence.jsx";
 import Fingerprint from "./charts/Fingerprint.jsx";
 import Stripes from "./charts/Stripes.jsx";
 import TrendChart from "./charts/TrendChart.jsx";
-import InView from "./InView.jsx";
 import ForecastLab from "./ForecastLab.jsx";
+import InView from "./InView.jsx";
+import Overview from "./Overview.jsx";
 import Suspects from "./Suspects.jsx";
 import Term from "./Term.jsx";
 
-const STAMP_WORDS = { strong: "STRONG TREND", moderate: "LIKELY TREND", weak: "FAINT SIGNAL", none: "INCONCLUSIVE" };
+/** The collapsible groups of the Detail view, in reading order. */
+const SECTIONS = [
+  { id: "record", title: "The record", hint: "trend chart and climate stripes" },
+  { id: "pattern", title: "Seasons and timing", hint: "fingerprint, and when the evidence emerged" },
+  { id: "evidence", title: "Evidence locker", hint: "five checks, two tests, trimming the ends" },
+  { id: "rhythms", title: "What moves with it", hint: "climate rhythms, heat ratio, independent check" },
+  { id: "forecast", title: "Forecast lab", hint: "machine-learning backtest and five-year outlook" },
+  { id: "notes", title: "Detective's notes", hint: "caveats" },
+];
+const OPEN_AT_FIRST = { record: true, evidence: true };
 
-function Count({ value, format, delay = 0 }) {
-  const v = useCountUp(value, { duration: 1200, delay });
-  return <>{format(v)}</>;
-}
-
-function Typed({ text, delay = 0, speed = 8 }) {
-  const [shown, done, skip] = useTypewriter(text, { speed, delay });
+function Fold({ id, title, hint, open, onToggle, children }) {
   return (
-    <p className="typed" onClick={skip} title={done ? undefined : "Click to skip"}>
-      {shown}
-      {!done && <span className="caret">▍</span>}
-    </p>
+    <details id={`fold-${id}`} className="fold" open={open} onToggle={(e) => onToggle(id, e.currentTarget.open)}>
+      <summary>
+        <span>
+          <b>{title}</b> <small className="dim">{hint}</small>
+        </span>
+        <i aria-hidden="true" />
+      </summary>
+      {open && <div className="fold-body">{children}</div>}
+    </details>
   );
 }
 
-function Metric({ term, label, delay, tone = "", sub, children }) {
-  return (
-    <div className={`metric ${tone} reveal`} style={{ "--d": `${delay}ms` }}>
-      <span className="metric-label">{term ? <Term id={term}>{label}</Term> : label}</span>
-      <span className="metric-value mono">{children}</span>
-      <span className="metric-sub">{sub}</span>
-    </div>
-  );
-}
-
-function Stamp({ grade, stats }) {
-  const sub = stats.significant ? (stats.sign === "up" ? "▲ RISING" : "▼ FALLING") : "— NO CLEAR DIRECTION";
-  return (
-    <div className={`stamp stamp-${grade.code}`} style={{ "--d": "2500ms" }} aria-label={`${grade.label}. ${sub}`}>
-      <span className="stamp-word">{STAMP_WORDS[grade.code]}</span>
-      <span className="stamp-sub">{sub}</span>
-      <span className="stamp-score">{grade.passed}/{grade.total} CHECKS</span>
-    </div>
-  );
-}
-
-function shapeWord(shape) {
-  if (shape.label === "step") return `Step near ${shape.step_year}`;
-  if (shape.label === "steady") return "Steady ramp";
-  return "No clear shape";
-}
-
-function shapeSub(shape, units) {
-  const line = Math.round(shape.r2_line * 100);
-  const step = shape.r2_step == null ? null : Math.round(shape.r2_step * 100);
-  if (shape.label === "step") {
-    return `Average ${shape.mean_before.toPrecision(3)} → ${shape.mean_after.toPrecision(3)} ${units}. One step explains ${step}% of the variance, a straight line ${line}%.`;
-  }
-  if (shape.label === "steady") return `A straight line explains ${line}% of the variance${step != null ? `, a single step ${step}%` : ""}.`;
-  return `Neither a line (${line}%) nor a single step${step != null ? ` (${step}%)` : ""} explains much of the variance.`;
-}
-
-function noiseSentence(snr) {
-  if (snr == null) return "no variation to compare";
-  const x = Math.abs(snr);
-  if (x >= 2) return "clearly larger than a normal year-to-year swing";
-  if (x >= 1) return "larger than a normal year-to-year swing";
-  return "smaller than a normal swing: easy for natural variability to hide";
-}
-
-export default function CaseFile({ data }) {
+export default function CaseFile({ data, view, onView, onGo, watched, onToggleWatch, focusSection }) {
   const [play, setPlay] = useState(0);
   const [copied, setCopied] = useState(false);
+  const [open, setOpen] = useState(OPEN_AT_FIRST);
+  const [scrollTo, setScrollTo] = useState(null);
 
   const copyLink = async () => {
     try {
@@ -86,73 +53,42 @@ export default function CaseFile({ data }) {
       window.prompt("Copy this link to share the case:", window.location.href);
     }
   };
-  const { variable, location, period, quality, stats, ols, grade, summary, annual, checks, robustness, caveats, fingerprint, month_agreement: agreement, emergence } = data;
+
+  const goDetail = (id) => {
+    onView("detail");
+    setOpen((o) => ({ ...o, [id]: true }));
+    setScrollTo(id);
+  };
+
+  useEffect(() => {
+    if (focusSection) goDetail(focusSection.id);
+  }, [focusSection?.nonce]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!scrollTo || view !== "detail") return undefined;
+    const aim = (behavior) => document.getElementById(`fold-${scrollTo}`)?.scrollIntoView({ behavior, block: "start" });
+    const first = setTimeout(() => aim("smooth"), 80);
+    // The section's content mounts after it opens and can shift the page, so re-aim once it has settled.
+    const second = setTimeout(() => {
+      aim("auto");
+      setScrollTo(null);
+    }, 700);
+    return () => {
+      clearTimeout(first);
+      clearTimeout(second);
+    };
+  }, [scrollTo, view]);
+
+  const toggle = (id, isOpen) => setOpen((o) => (o[id] === isOpen ? o : { ...o, [id]: isOpen }));
+
+  const { variable, location, period, quality, stats, ols, grade, annual, checks, robustness, caveats, fingerprint, month_agreement: agreement, emergence } = data;
   const units = variable.units;
   const tone = stats.significant ? stats.sign : "flat";
   const coverage = Math.min(100, Math.round((quality.valid_months / Math.max(1, quality.expected_months)) * 100));
   const trimmed = robustness.filter((w) => w.same_direction).length;
 
-  return (
-    <article className="casefile" key={play}>
-      <header className="card cf-head reveal">
-        <div>
-          <p className="eyebrow">Case file</p>
-          <h2>{variable.label}</h2>
-          <p className="mono dim cf-meta">
-            {formatPlace(location.lat, location.lon)} · {period.start_year}–{period.end_year} · {quality.years_used} complete years · {coverage}% of months
-          </p>
-        </div>
-        <div className="cf-actions">
-          <button type="button" className="btn btn-sm" onClick={copyLink}>{copied ? "✓ Copied" : "⧉ Link"}</button>
-          <button type="button" className="btn btn-sm" onClick={() => setPlay((n) => n + 1)}>▶ Replay</button>
-          <button
-            type="button"
-            className="btn btn-sm"
-            onClick={() => downloadText(`trend-detective_${variable.id}_${location.lat}_${location.lon}.csv`, caseFileCsv(data))}
-          >
-            ⤓ CSV
-          </button>
-        </div>
-      </header>
-
-      <section className={`card hud-card verdict ${tone} reveal`} style={{ "--d": "80ms" }}>
-        <Stamp grade={grade} stats={stats} />
-        <div className="verdict-text">
-          <p className="eyebrow">Verdict</p>
-          <Typed text={summary} delay={300} />
-          <p className="verdict-hint dim">{variable.description}</p>
-        </div>
-      </section>
-
-      <div className="metrics">
-        <Metric term="sens" label="Rate of change" delay={350} tone={tone} sub={<>95% range <b className="mono">{signed(stats.ci_low_per_decade)}</b> to <b className="mono">{signed(stats.ci_high_per_decade)}</b></>}>
-          <Count value={stats.slope_per_decade} format={(v) => signed(v, 3)} delay={500} />
-          <small>{units} / decade</small>
-        </Metric>
-        <Metric label="Total change" delay={450} tone={tone} sub={<>over {stats.span_years} years{stats.percent_of_mean != null && <> · <b className="mono">{signed(stats.percent_of_mean, 3)}%</b> of the average</>}</>}>
-          <Count value={stats.total_change} format={(v) => signed(v, 3)} delay={600} />
-          <small>{units}</small>
-        </Metric>
-        <Metric term="snr" label="Signal vs noise" delay={550} sub={noiseSentence(stats.signal_to_noise)}>
-          {stats.signal_to_noise == null ? "—" : <><Count value={Math.abs(stats.signal_to_noise)} format={(v) => v.toFixed(1)} delay={700} />×</>}
-          <small>year-to-year swing</small>
-        </Metric>
-        <Metric
-          term="pvalue"
-          label="Evidence (p-value)"
-          delay={650}
-          sub={stats.autocorr.adjusted
-            ? <>adjusted for year-to-year correlation (unadjusted {formatP(stats.p_naive)})</>
-            : <>regression t-test: <b className="mono">{formatP(ols.p_value)}</b></>}
-        >
-          <Count value={stats.p_value} format={(v) => (stats.p_value < 0.001 ? "< 0.001" : v.toFixed(3))} delay={800} />
-          <small>{stats.significant ? "significant" : "not significant"}</small>
-        </Metric>
-        <Metric term="shape" label="Shape of the record" delay={750} sub={shapeSub(data.shape, units)}>
-          <span className="shape-word">{shapeWord(data.shape)}</span>
-        </Metric>
-      </div>
-
+  const sectionBody = {
+    record: (
       <InView minHeight={380}>
         <section className="card chart-card">
           <h3>The record</h3>
@@ -160,7 +96,8 @@ export default function CaseFile({ data }) {
           <Stripes annual={annual} units={units} />
         </section>
       </InView>
-
+    ),
+    pattern: (
       <InView minHeight={320}>
         <section className="card duo">
           <div>
@@ -173,7 +110,8 @@ export default function CaseFile({ data }) {
           </div>
         </section>
       </InView>
-
+    ),
+    evidence: (
       <InView minHeight={300}>
         <section className="card locker">
           <div className="locker-head">
@@ -230,15 +168,18 @@ export default function CaseFile({ data }) {
           )}
         </section>
       </InView>
-
+    ),
+    rhythms: (
       <InView minHeight={300}>
         <Suspects data={data} />
       </InView>
-
+    ),
+    forecast: (
       <InView minHeight={420}>
         <ForecastLab data={data} />
       </InView>
-
+    ),
+    notes: (
       <section className="card notes">
         <h3>Detective's notes</h3>
         <ul>
@@ -248,6 +189,88 @@ export default function CaseFile({ data }) {
         </ul>
         <p className="dim mono credit">Data: NASA Langley Research Center (LaRC) POWER Project, funded through the NASA Earth Science/Applied Science Program.</p>
       </section>
+    ),
+  };
+
+  return (
+    <article className="casefile" key={play}>
+      <header className="card cf-head reveal">
+        <div>
+          <p className="eyebrow">Case file</p>
+          <h2>{variable.label}</h2>
+          <p className="mono dim cf-meta">
+            {formatPlace(location.lat, location.lon)} · {period.start_year}–{period.end_year} · {quality.years_used} complete years · {coverage}% of months
+          </p>
+        </div>
+        <div className="cf-actions">
+          <button type="button" className={`btn btn-sm${watched ? " on" : ""}`} onClick={onToggleWatch} aria-pressed={watched} title="Keep this place and variable on your home watchlist">
+            {watched ? "★ Watching" : "☆ Watch"}
+          </button>
+          <button type="button" className="btn btn-sm" onClick={copyLink}>{copied ? "✓ Copied" : "⧉ Link"}</button>
+          <button type="button" className="btn btn-sm" onClick={() => setPlay((n) => n + 1)}>▶ Replay</button>
+          <button
+            type="button"
+            className="btn btn-sm"
+            onClick={() => downloadText(`trend-detective_${variable.id}_${location.lat}_${location.lon}.csv`, caseFileCsv(data))}
+          >
+            ⤓ CSV
+          </button>
+        </div>
+      </header>
+
+      <div className="seg view-switch" role="group" aria-label="Level of detail">
+        <button type="button" className={view === "overview" ? "on" : ""} onClick={() => onView("overview")}>Overview</button>
+        <button type="button" className={view === "detail" ? "on" : ""} onClick={() => onView("detail")}>Detail</button>
+      </div>
+
+      {view === "overview" ? (
+        <Overview data={data} onDetail={goDetail} onGo={onGo} />
+      ) : (
+        <>
+          <Verdict data={data} />
+
+          <div className="metrics">
+            <Metric term="sens" label="Rate of change" delay={350} tone={tone} sub={<>95% range <b className="mono">{signed(stats.ci_low_per_decade)}</b> to <b className="mono">{signed(stats.ci_high_per_decade)}</b></>}>
+              <Count value={stats.slope_per_decade} format={(v) => signed(v, 3)} delay={500} />
+              <small>{units} / decade</small>
+            </Metric>
+            <Metric label="Total change" delay={450} tone={tone} sub={<>over {stats.span_years} years{stats.percent_of_mean != null && <> · <b className="mono">{signed(stats.percent_of_mean, 3)}%</b> of the average</>}</>}>
+              <Count value={stats.total_change} format={(v) => signed(v, 3)} delay={600} />
+              <small>{units}</small>
+            </Metric>
+            <Metric term="snr" label="Signal vs noise" delay={550} sub={noiseSentence(stats.signal_to_noise)}>
+              {stats.signal_to_noise == null ? "—" : <><Count value={Math.abs(stats.signal_to_noise)} format={(v) => v.toFixed(1)} delay={700} />×</>}
+              <small>year-to-year swing</small>
+            </Metric>
+            <Metric
+              term="pvalue"
+              label="Evidence (p-value)"
+              delay={650}
+              sub={stats.autocorr.adjusted
+                ? <>adjusted for year-to-year correlation (unadjusted {formatP(stats.p_naive)})</>
+                : <>regression t-test: <b className="mono">{formatP(ols.p_value)}</b></>}
+            >
+              <Count value={stats.p_value} format={(v) => (stats.p_value < 0.001 ? "< 0.001" : v.toFixed(3))} delay={800} />
+              <small>{stats.significant ? "significant" : "not significant"}</small>
+            </Metric>
+            <Metric term="shape" label="Shape of the record" delay={750} sub={shapeSub(data.shape, units)}>
+              <span className="shape-word">{shapeWord(data.shape)}</span>
+            </Metric>
+          </div>
+
+          <nav className="jump" aria-label="Jump to a section">
+            {SECTIONS.map((s) => (
+              <button key={s.id} type="button" className="chip" onClick={() => goDetail(s.id)}>{s.title}</button>
+            ))}
+          </nav>
+
+          {SECTIONS.map((s) => (
+            <Fold key={s.id} id={s.id} title={s.title} hint={s.hint} open={!!open[s.id]} onToggle={toggle}>
+              {sectionBody[s.id]}
+            </Fold>
+          ))}
+        </>
+      )}
     </article>
   );
 }

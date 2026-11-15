@@ -17,6 +17,7 @@ export default function AskBox({ places, variables, currentVariable, onAsk }) {
       <label className="field">
         Ask the detective
         <input
+          id="ask-input"
           type="search"
           value={query}
           placeholder='Try "is Phoenix getting hotter?" or "Amazon rain"'

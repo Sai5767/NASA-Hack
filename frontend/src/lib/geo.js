@@ -23,6 +23,29 @@ export function cellRing(lat, lon, half, step = 2.5) {
   return ring;
 }
 
+/** Great-circle distance in kilometres. */
+export function distanceKm(aLat, aLon, bLat, bLon) {
+  const rad = Math.PI / 180;
+  const dLat = (bLat - aLat) * rad;
+  const dLon = (bLon - aLon) * rad;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(aLat * rad) * Math.cos(bLat * rad) * Math.sin(dLon / 2) ** 2;
+  return 2 * 6371 * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+/** The closest named place within `maxKm`, or null. */
+export function nearestPlace(places, lat, lon, maxKm = 300) {
+  let best = null;
+  let bestKm = Infinity;
+  for (const p of places) {
+    const km = distanceKm(lat, lon, p.lat, p.lon);
+    if (km < bestKm) {
+      bestKm = km;
+      best = p;
+    }
+  }
+  return best && bestKm <= maxKm ? best : null;
+}
+
 export function cellContains(cell, lat, lon, half) {
   return Math.abs(lat - cell.lat) <= half && Math.abs(wrapLon(lon - cell.lon)) <= half;
 }
