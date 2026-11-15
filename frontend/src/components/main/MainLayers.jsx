@@ -20,10 +20,12 @@ import Globe from "../Globe.jsx";
 import ForecastStatus from "../globe/ForecastStatus.jsx";
 import GlobeLegend from "../globe/GlobeLegend.jsx";
 import LiveWeatherCard from "../globe/LiveWeatherCard.jsx";
-import { NewsCallout, useOpenNews } from "../globe/News.jsx";
+import { CapitalCallout, NewsCallout, useOpenNews } from "../globe/News.jsx";
 import TimelineRail from "../globe/TimelineRail.jsx";
 import { GlobeLayersProvider, LayersBridge, useGlobeLayers, useNewsMarkers } from "../globe/useGlobeLayers.jsx";
 import { useShell } from "../shell/Drawer.jsx";
+import { useMemo } from "react";
+import { capitalMarkers } from "../../lib/capitals.js";
 import { isForecastIndex } from "../../lib/globeFrames.js";
 
 export function MainLayersProvider({ place, variable, places, interests, reducedMotion, newsWanted = true, children }) {
@@ -47,6 +49,9 @@ export function MainStage({ globeProps = {}, overlay, reducedMotion, onOpenNews,
   const shell = useShell();
   const newsOpen = shell.drawerId === "news";
   const markers = useNewsMarkers(newsOpen ? L?.openNewsPlace : null);
+  // Capital cities for the rotating popups: bundled geography, one popup at a time together with the news (lib/newsCycle.js).
+  const capitals = useMemo(() => capitalMarkers(), []);
+  const globeMarkers = useMemo(() => [...markers, ...capitals], [markers, capitals]);
   const openNewsPanel = useOpenNews();
   const forecastShown = !!L?.timeline && isForecastIndex(L.timeline, L.index);
   const frame = L?.frame;
@@ -74,8 +79,8 @@ export function MainStage({ globeProps = {}, overlay, reducedMotion, onOpenNews,
           {...globeProps}
           coarse={coarse}
           field={L?.field ?? null}
-          markers={markers}
-          renderMarkerCard={(m) => <NewsCallout marker={m} />}
+          markers={globeMarkers}
+          renderMarkerCard={(m) => (m.kind === "capital" ? <CapitalCallout marker={m} /> : <NewsCallout marker={m} />)}
           onMarkerPick={pickNews}
           liveGlyph={L?.liveGlyph ?? null}
           // Only an explicit pause or reading the open news detail stops rotation; data layers and playback do not.

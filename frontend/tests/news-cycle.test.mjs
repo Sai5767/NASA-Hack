@@ -141,3 +141,49 @@ test("markers carry the showcase flag so saved places can be ranked first", () =
   const [s] = markersFor([{ item, place: { id: "mine", name: "Home", lat: 51.51, lon: -0.13 } }]);
   assert.equal(s.showcase, false);
 });
+
+test("capitals: fifty unique main-country capitals with valid positions", async () => {
+  const { CAPITALS, capitalCard, capitalMarkers, coordText, equatorText, solarOffsetText } = await import("../src/lib/capitals.js");
+  assert.equal(CAPITALS.length, 50);
+  assert.equal(new Set(CAPITALS.map((c) => c.id)).size, 50);
+  assert.equal(new Set(CAPITALS.map((c) => c.country)).size, 50); // one capital per country
+  assert.ok(CAPITALS.every((c) => c.lat >= -90 && c.lat <= 90 && c.lon >= -180 && c.lon <= 180 && c.name && c.country));
+  // Spread over the planet: every inhabited continent has several.
+  assert.ok(CAPITALS.filter((c) => c.lon < -30 && c.lat > 10).length >= 3); // North America
+  assert.ok(CAPITALS.filter((c) => c.lon < -30 && c.lat < 10).length >= 5); // South America
+  assert.ok(CAPITALS.filter((c) => c.lon > -20 && c.lon < 40 && c.lat > 36).length >= 10); // Europe
+  assert.ok(CAPITALS.filter((c) => c.lon > -20 && c.lon < 52 && c.lat < 36 && c.lat > -35).length >= 5); // Africa
+  assert.ok(CAPITALS.filter((c) => c.lon > 60).length >= 10); // Asia and Oceania
+  // Details are derived from the position, never invented.
+  assert.equal(coordText(28.61, 77.21), "28.6° N, 77.2° E");
+  assert.equal(coordText(-41.29, 174.78), "41.3° S, 174.8° E");
+  assert.equal(solarOffsetText(77.21), "Sun time is 5 h 09 min ahead of Greenwich");
+  assert.equal(solarOffsetText(-77.04), "Sun time is 5 h 08 min behind Greenwich");
+  assert.equal(solarOffsetText(0.05), "On the Greenwich meridian");
+  assert.equal(equatorText(-0.18), "Almost on the equator");
+  assert.equal(equatorText(64.15), "7,130 km north of the equator");
+  const q = capitalCard(CAPITALS.find((c) => c.name === "La Paz"));
+  assert.equal(q.country, "Bolivia · seat of government");
+  assert.equal(q.details.length, 2); // position plus one derived detail
+  assert.match(q.fact, /highest seat of government/);
+  // Markers: neutral, hidden-at-rest dots with a card and no news story.
+  const ms = capitalMarkers();
+  assert.ok(ms.every((m) => m.kind === "capital" && m.tone === "capital" && m.lead === null && m.card && m.open === false));
+});
+
+test("news and capital popups take turns and share the single-popup invariant", () => {
+  const s = createCycle();
+  const mixed = [cand("n1", { order: 0 }), cand("n2", { order: 1 }), cand("c1", { kind: "capital", order: 2 }), cand("c2", { kind: "capital", order: 3 })];
+  const seen = run(s, { enabled: true, candidates: mixed }, 5_000, 120_000);
+  const order = [];
+  for (const id of seen) if (id && order[order.length - 1] !== id) order.push(id);
+  const kinds = order.map((id) => (id.startsWith("c") ? "capital" : "news"));
+  for (let i = 1; i < kinds.length; i += 1) assert.notEqual(kinds[i], kinds[i - 1], `turns alternate: ${order.join(",")}`);
+  assert.ok(kinds.includes("capital") && kinds.includes("news"));
+  // With no news available, capitals run alone; with only news, news runs alone.
+  const alone = createCycle();
+  const onlyCaps = run(alone, { enabled: true, candidates: [cand("c1", { kind: "capital" }), cand("c2", { kind: "capital" })] }, 5_000, 60_000);
+  assert.ok(onlyCaps.filter(Boolean).length > 0);
+  const onlyNews = run(createCycle(), { enabled: true, candidates: [cand("n1")] }, 5_000, 60_000);
+  assert.ok(onlyNews.filter(Boolean).length > 0);
+});

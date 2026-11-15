@@ -61,6 +61,22 @@ VISHWA = Validated Insights on Significant Hydro-climate and Weather Anomalies (
    rate-limiting); it proved the mechanics (max one callout, takeover in ~140 ms, resume ~1.3 s after release, limb close,
    reduced motion, detail drawer text) but is not evidence of real stories. Not captured: screenshots or a recording.
 
+## Capital-city popups on Main (15 November 2026, late)
+As the Earth rotates, a popup with a leader line comes out of a capital city: 50 main countries across every inhabited continent
+(`frontend/src/lib/capitals.js`, static hand-written geography, positions to about 0.01 degrees, nothing fetched).
+- Not crowded: capitals share the SAME single-popup queue as the news (`lib/newsCycle.js`): exactly one automatic popup at a
+  time, news and capitals take turns (capitals run alone when no news is available), the same dwell, gap, cooldown, limb and
+  takeover rules. Capital dots stay hidden at rest; only the active one is drawn (neutral white, never a news colour).
+- Details are derived or fixed, never invented: name, country (and "seat of government" / "executive capital" where a country
+  has more than one), the position, and ONE more derived detail that alternates city by city (Sun time against Greenwich, or
+  distance from the equator). A few cities add one well-known fixed fact (Reykjavik, Wellington, La Paz, Brasilia, Abuja,
+  Islamabad, Canberra). Sun time is mean solar time (15 degrees = 1 hour), not the legal clock time.
+- Decorative: the capital markers are aria-hidden and not clickable. They are illustration, not data, and are not a source for
+  anything else in the app. With reduced motion nothing cycles, so capitals are not shown.
+- Tests: 2 more in frontend/tests/news-cycle.test.mjs (data validity, derived text, alternation); front-end tests 139/139.
+  Browser check at 1440x900 and 375x812: one popup at a time, always inside the stage, clear of the timeline, card height
+  about 105-170 px.
+
 ## Full feature test (15 November 2026, real browser, local backend)
 Passed: month slider (arrows, PageUp/PageDown = 12, Home/End, playback stops at the end, aria-valuetext), rotation pause/resume, help and Key,
 evidence drawer (five questions, Plain words/With the numbers, Esc), forecast gate then forecast months on the slider labelled Forecast,

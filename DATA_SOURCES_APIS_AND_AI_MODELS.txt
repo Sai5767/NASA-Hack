@@ -56,6 +56,8 @@ NOAA Climate Prediction Center and NCEI climate indices
 GDELT DOC 2.0 API
   Endpoint family: https://api.gdeltproject.org/api/v2/doc/doc (server-side, backend/app/news.py GdeltNewsProvider)
   Kind: news context (not scientific evidence)
+  Capital-city popups (not a service): frontend/src/lib/capitals.js is a hand-written list of 50 capitals with approximate
+    positions (static geography, bundled, no request). The popups show derived details and a few fixed facts only.
   When it runs: automatically on Main once onboarding is finished (never before), for the user's saved places first and
     then a fixed showcase of ten cities (London, New York, Sao Paulo, Cairo, Delhi, Singapore, Tokyo, Sydney,
     Johannesburg, Mexico City; frontend/src/lib/showcaseCities.js), in batches of at most five, one batch at a time,

@@ -20,11 +20,12 @@ export const CYCLE = {
 };
 
 export function createCycle() {
-  return { activeId: null, since: 0, nextAt: 0, resumeAt: 0, lastShown: new Map(), wasEnabled: false };
+  return { activeId: null, since: 0, nextAt: 0, resumeAt: 0, lastShown: new Map(), wasEnabled: false, lastKind: null };
 }
 
 const shownAt = (state, id) => state.lastShown.get(id) ?? Number.NEGATIVE_INFINITY;
 const rank = (c) => (c.showcase ? 1 : 0); // saved places before showcase cities
+const kindOf = (c) => (c.kind === "capital" ? "capital" : "news");
 
 /**
  * Which candidate opens next, or null. `candidates` are `{ id, showcase, order, eligible }`.
@@ -34,7 +35,11 @@ export function pickNext(candidates, state, now, cfg = CYCLE) {
   const ok = candidates.filter((c) => c.eligible);
   if (!ok.length) return null;
   const rested = ok.filter((c) => now - shownAt(state, c.id) >= cfg.cooldownMs);
-  const pool = rested.length ? rested : ok; // everything is cooling down: repeat the least recent rather than go dark
+  const cooled = rested.length ? rested : ok; // everything is cooling down: repeat the least recent rather than go dark
+  // News and capital popups take turns, so neither can crowd the other out; if only one kind is available it runs alone.
+  const wanted = state.lastKind === "news" ? "capital" : "news";
+  const turn = cooled.filter((c) => kindOf(c) === wanted);
+  const pool = turn.length ? turn : cooled;
   return [...pool].sort((a, b) => rank(a) - rank(b) || shownAt(state, a.id) - shownAt(state, b.id) || a.order - b.order)[0].id;
 }
 
@@ -78,6 +83,7 @@ export function stepCycle(state, { enabled, candidates }, now, cfg = CYCLE) {
       state.activeId = id;
       state.since = now;
       state.lastShown.set(id, now);
+      state.lastKind = kindOf(candidates.find((c) => c.id === id) ?? {});
     }
   }
   return state;

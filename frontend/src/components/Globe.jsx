@@ -500,7 +500,7 @@ export default function Globe({
           if (c && c.offsetHeight) lay.sizes.set(id, [c.offsetWidth || CALLOUT_W, c.offsetHeight]);
         }
         const order = [...pts]
-          .filter((p) => p.pt && p.fade > 0)
+          .filter((p) => p.pt && p.fade > 0 && p.m.kind !== "capital") // capital dots stay hidden; they never cluster news
           .sort((a, b) => (b.m.id === L.reading) - (a.m.id === L.reading) || (b.m.open - a.m.open) || b.f - a.f);
         const kept = [];
         const clusters = new Map();
@@ -523,13 +523,16 @@ export default function Globe({
         }
         // Automatic: exactly one callout at a time, chosen by the deterministic queue in lib/newsCycle.js.
         const orderOf = new Map(L.markers.map((m, i) => [m.id, i]));
-        const candidates = kept.map((p) => {
+        // News markers and capital cities share this one queue, so there is never more than one automatic popup.
+        const capitals = pts.filter((p) => p.m.kind === "capital" && p.pt && p.fade > 0);
+        const candidates = [...kept, ...capitals].map((p) => {
           const placeable = callouts.has(p.m.id) || calloutEnd(p.pt, isGlobe, cx, cy, R, w, h, avoid, lay.choice.get(p.m.id), calloutSize(p.m.id)).overlap === 0;
           return {
             id: p.m.id,
+            kind: p.m.kind === "capital" ? "capital" : "news",
             showcase: !!p.m.showcase,
             order: orderOf.get(p.m.id) ?? 0,
-            eligible: isEligible({ fade: p.fade, clustered: false, hasStory: !!p.m.lead, placeable }),
+            eligible: isEligible({ fade: p.fade, clustered: false, hasStory: !!(p.m.lead || p.m.card), placeable }),
           };
         });
         const enabled =
@@ -545,7 +548,7 @@ export default function Globe({
           (typeof document === "undefined" || document.visibilityState !== "hidden");
         stepCycle(cycle.current, { enabled, candidates }, now);
         const auto = cycle.current.activeId;
-        const autoPt = auto != null ? kept.find((p) => p.m.id === auto) : null;
+        const autoPt = auto != null ? [...kept, ...capitals].find((p) => p.m.id === auto) : null;
         if (autoPt && !callouts.has(auto)) {
           const e = calloutEnd(autoPt.pt, isGlobe, cx, cy, R, w, h, avoid, lay.choice.get(auto), calloutSize(auto));
           avoid.push(e.rect);
@@ -580,7 +583,8 @@ export default function Globe({
         }
         const clustered = lay.hidden.has(p.m.id);
         const callout = !clustered && lay.callouts.has(p.m.id);
-        el.dataset.state = clustered ? "hidden" : callout ? "callout" : "marker";
+        // A capital city is only ever drawn while it is the active popup; at rest its dot stays hidden.
+        el.dataset.state = clustered ? "hidden" : callout ? "callout" : p.m.kind === "capital" ? "hidden" : "marker";
         el.style.transform = `translate(${p.pt[0]}px, ${p.pt[1]}px)`;
         el.style.setProperty("--fade", p.fade.toFixed(3));
         const n = lay.clusters.get(p.m.id) ?? 0;
@@ -1158,7 +1162,25 @@ export default function Globe({
 
       {markers.length > 0 && (
         <ul className="gl-news-layer" aria-label="News context markers">
-          {markers.map((m) => (
+          {markers.map((m) => m.kind === "capital" ? (
+            // A capital city: purely decorative geography (aria-hidden, no interaction); only the active popup is drawn.
+            <li
+              key={m.id}
+              className="gl-news gl-news--capital"
+              data-state="hidden"
+              aria-hidden="true"
+              ref={(el) => {
+                if (el) newsEls.current.set(m.id, el);
+                else newsEls.current.delete(m.id);
+              }}
+            >
+              <span className="gl-news-leader" aria-hidden="true"><i /></span>
+              <span className="gl-news-dot gl-news-dot--capital" />
+              <span className="gl-callout-pos">
+                <span className="gl-callout gl-callout--capital">{renderMarkerCard ? renderMarkerCard(m) : m.name}</span>
+              </span>
+            </li>
+          ) : (
             <li
               key={m.id}
               className={`gl-news gl-news--${m.tone}${m.open ? " is-open" : ""}`}

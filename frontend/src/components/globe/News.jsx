@@ -59,6 +59,25 @@ export function NewsCallout({ marker }) {
   );
 }
 
+/**
+ * Capital-city popup (Main page, rotating globe): capital and country, then derived details (position, Sun time against
+ * Greenwich, distance from the equator) and, for a few cities, one fixed well-known fact. Static geography, not data.
+ */
+export function CapitalCallout({ marker }) {
+  const c = marker?.card;
+  if (!c) return null;
+  return (
+    <span className="gl-callout-body">
+      <span className="gl-callout-title">{c.title}</span>
+      <span className="gl-callout-country">{c.country}</span>
+      {c.details.map((d) => (
+        <span key={d} className="gl-callout-detail">{d}</span>
+      ))}
+      {c.fact && <span className="gl-callout-fact">{c.fact}</span>}
+    </span>
+  );
+}
+
 /** The panel body (rendered in the shell drawer). Reads live news state, so a retry or refresh updates it. */
 export function NewsPanel({ placeId, placeName }) {
   const snap = useNewsSnapshot();

@@ -110,6 +110,15 @@
   cursor: pointer;
 }
 .gl-news-dot::after { content: ""; position: absolute; inset: -11px; } /* 44px hit area */
+/* Capital city popup: neutral white, a small filled dot, nothing to click. */
+.gl-news--capital { color: var(--text); }
+.gl-news-dot--capital { pointer-events: none; left: -4px; top: -4px; width: 8px; height: 8px; border: 0; background: currentColor; cursor: default; }
+.gl-news-dot--capital::after { content: none; }
+.gl-callout--capital { cursor: default; border-style: solid; }
+.gl-callout-title { display: block; font-weight: var(--fw-medium); line-height: var(--lh-snug); }
+.gl-callout-country { display: block; font-size: var(--fs-label); color: var(--text-dim); }
+.gl-callout-detail { display: block; font-size: var(--fs-label); color: var(--text-faint); }
+.gl-callout-fact { display: block; margin-top: 2px; font-size: var(--fs-label); color: var(--text-dim); }
 .gl-news--unverified .gl-news-dot { border-style: dashed; border-width: 1.5px; }
 .gl-news.is-open .gl-news-dot { outline: var(--border-width) solid var(--white); outline-offset: 2px; }
 .gl-news-dot:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: 2px; box-shadow: var(--focus-halo); }
