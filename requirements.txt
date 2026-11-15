@@ -1,0 +1,10 @@
+# Python libraries for Trend Detective (the FastAPI backend and its tests).
+#
+#   python -m venv .venv
+#   .venv\Scripts\activate          (macOS/Linux: source .venv/bin/activate)
+#   pip install -r requirements.txt
+#
+# The pinned list lives in backend/requirements.txt, which START.bat and the Dockerfile also use, so there is one source of truth.
+# The front-end's libraries are listed in frontend/package.json and installed with `npm install` (inside the frontend folder).
+# The optional statistics-audit scripts have their own list: tools/stats_audit/requirements.txt.
+-r backend/requirements.txt

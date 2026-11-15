@@ -12,6 +12,18 @@ frontend/dist/
 .env
 .env.*
 
+# Rally agent wiring, written by "npx rally-project-brain-mcp login". These hold a personal token and tell every agent to
+# upload its sessions, so they stay on this machine and are never committed.
+.mcp.json
+.claude/
+.cursor/
+.gemini/
+CLAUDE.md
+AGENTS.md
+GEMINI.md
+.cursorrules
+.windsurfrules
+
 # Process ids written by START.bat
 .app-pids.json
 

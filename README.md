@@ -132,13 +132,15 @@ same version and warns if the page and the server disagree. `STOP.bat` also stop
 touches other programs. Keep a single copy of the project: a second folder (for example "NASA-Hack - Copy") has its own, older
 launcher, and starting the app from it runs its older code.
 
-Manual setup, for other systems or if you prefer separate terminals:
+Manual setup, for other systems or if you prefer separate terminals. **Libraries:** the Python ones are in `requirements.txt` (it points at
+`backend/requirements.txt`, the one list `START.bat` and the Dockerfile also use), and the front-end ones are in `frontend/package.json`.
+The commands below install both:
 
 ```bash
-cd backend
-python -m venv .venv
-.venv\Scripts\activate
+python -m venv backend/.venv
+backend\.venv\Scripts\activate          # macOS/Linux: source backend/.venv/bin/activate
 pip install -r requirements.txt
+cd backend
 uvicorn app.main:app --port 8000
 ```
 
@@ -147,6 +149,8 @@ cd frontend
 npm install
 npm run dev
 ```
+
+(Running `pip install -r requirements.txt` from inside `backend/` works too.)
 
 API docs: http://127.0.0.1:8000/docs
 
@@ -173,6 +177,7 @@ Parsers are tested on samples copied from the real files, and a failing stream i
 
 ```
 START.bat       one-click start and stop on Windows (with STOP.bat, start-app.ps1, stop-app.ps1)
+requirements.txt  the Python libraries (points at backend/requirements.txt); front-end libraries are in frontend/package.json
 backend/app/    nasa_power.py  streams.py  stats.py  analysis.py  context.py  planet.py  places.py  morans.py  main.py
                 ml.py (ridge, k-means, silhouette, stability)  forecast.py  archetypes.py
                 ledger.py  reasons.py (the trend ledger and its sourced context)  deploy.py (one-process hosting)
@@ -181,7 +186,7 @@ frontend/src/   components/ (Globe, CaseFile, Overview, Home, Watchlist, Intake,
                 lib/ (profile, explain, events, lapse, theme …)  styles/
 frontend/tests/ logic tests (60)
 docs/           STATS_AUDIT.md  REQUIREMENTS.md  USER_QUESTIONS.md  DEPLOY.md
-tools/          stats_audit/ (reproducible audit against SciPy and friends; needs its own throwaway environment)
+tools/          stats_audit/ (reproducible audit against SciPy and friends; needs its own throwaway environment and requirements.txt)
 Dockerfile  render.yaml    one-image, one-process hosting (prepared, not published)
 HANDOFF.md      working notes for whoever continues the project
 ```

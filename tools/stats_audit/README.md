@@ -8,7 +8,7 @@ These scripts need libraries the app itself does not use, so install them in a t
 ```bash
 python -m venv audit-env
 audit-env\Scripts\activate
-pip install numpy scipy pymannkendall pyhomogeneity
+pip install -r tools\stats_audit\requirements.txt   # numpy, scipy, pymannkendall, pyhomogeneity
 python tools\stats_audit\audit_stats.py
 python tools\stats_audit\calibration_variants.py
 ```

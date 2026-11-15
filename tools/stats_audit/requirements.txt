@@ -1,0 +1,7 @@
+# Reference libraries for the statistics audit (tools/stats_audit/README.md).
+# The app itself does not use these; install them in a throwaway environment, never in backend/.venv.
+# Lower bounds, not exact pins, so pip picks builds that exist for your Python version.
+numpy>=1.26
+scipy>=1.11            # scipy.stats.false_discovery_control (Benjamini-Hochberg reference) needs 1.11 or newer
+pymannkendall>=1.4.3   # Mann-Kendall and Sen's slope reference
+pyhomogeneity>=1.1     # Pettitt change-point reference
