@@ -57,7 +57,7 @@ Independent read-only project reviews have already found:
 4. Why might this be happening remains a manual, opt-in, source-cited and cautious explanation. It must not claim causation.
 5. This is a local demo profile, not real authentication. Check email/password only in the browser, immediately discard the password, and never save, hash, log or transmit it. Save only display label, locations and interests to localStorage.
 6. Never expose OpenAI, Meteomatics, news-provider, TD_CASE_SECRET or any other secret to browser code, logs, fixtures, screenshots, Git or prompts.
-7. Do not draw a fake global raster. The backend returns a local 1×1–3×3 grid for a chosen place and sample points for world views. Render only returned values; do not smooth, interpolate or call sample coverage a global satellite layer.
+7. Do not present an invented global field as an exact scientific measurement. The backend returns a local 1×1–3×3 grid for a chosen place and sample points for world views. Exact data visualisations, trends, evidence levels, values and forecasts must use only returned/source-backed values; do not smooth, interpolate or call sample coverage a global satellite layer.
 8. Do not use Google Earth imagery, Google map tiles or Google branding. A Google-Earth-like finish means a realistic and elegant Earth, not copied assets.
 9. Any base imagery must be properly licensed, static, credited on screen and recorded in DATA_SOURCES_APIS_AND_AI_MODELS.txt with source URL, licence, file size and retrieval date. It must not be made to look live. If that cannot be done reliably, build a refined procedural Earth instead.
 10. Maintain keyboard canvas controls, accessible HTML equivalents for all canvas data, focus visibility, 200% text zoom, responsive behaviour and prefers-reduced-motion support.
@@ -195,7 +195,12 @@ A. Base Earth
 
 B. Data layers on the Earth
 
-- Selecting temperature, rainfall, cloud cover or another monthly variable places that month’s returned cells directly on the globe surface.
+- Selecting temperature, rainfall, cloud cover or another primary metric must immediately place a whole-Earth animated visual preview on the globe. Do this before the user selects a point; waiting for a location selection makes the globe feel empty and defeats the visual-first experience.
+- This instant whole-Earth layer may be a deliberately coarse, low-compute preview assembled from bundled low-resolution source data, a cached coarse global product, or clearly bounded interpolation/estimation. It is an orientation layer, not a measurement product. Label it in the compact legend as Coarse global preview / approximate pattern, state the time/data basis, and never attach p-values, trend claims, forecast claims, exact values or local conclusions to it.
+- The preview must be fast enough to appear immediately on metric selection without a network wait. Prefer precomputed/bundled low-resolution frames, cache them aggressively, and use a visual loading transition only if an initial asset genuinely is unavailable. Do not issue expensive point-by-point global requests on metric selection.
+- The same floating monthly slider updates the coarse preview when the user changes month. If no matching coarse frame exists, keep the last available preview visibly labelled as such rather than inventing a precise new frame.
+- Selecting or saving a location then overlays/replaces the relevant patch with the returned NASA/local data at its true resolution. This exact local layer is visually and textually identified as Detailed local data. It always takes precedence over the coarse preview.
+- Selecting temperature, rainfall, cloud cover or another monthly variable places that month’s returned detailed local cells directly on the globe surface once a place is active.
 - The timeline changes the displayed month; moving it cross-fades only actual adjacent returned frames in roughly 150–300 ms. Never fabricate a value between frames.
 - Give the active layer one short plain-language legend, such as Warmer or cooler than this place’s usual month. Put full methodology behind an info action.
 - Missing values use a neutral hatch and accessible No data text, never zero or an arbitrary colour.
@@ -209,6 +214,7 @@ Visual presentation of change and significance
 - Do not colour ordinary trends red, amber or green, because those colours are reserved for news attention. Use monochrome shape, position, label and optional data-layer legend instead.
 - A student should be able to tell at a glance: going up, going down, no clear change, strong evidence, some evidence or not enough data. A short tappable label explains the evidence level; exact p-values and calculations remain one level deeper.
 - Data layers must look integrated with the curved Earth surface: correct clipping at the limb, consistent opacity, crisp but unobtrusive legends, gentle cross-fades and no rectangular overlay that makes the globe look like a flat map.
+- The coarse global preview must also be clipped and lit like part of the sphere. Its lower resolution should look intentional and atmospheric, not pixelated, misleadingly precise or visually disconnected from the Earth.
 
 C. Thin floating timeline
 
@@ -352,7 +358,8 @@ Phase 3 — Earth and time
 2. F retains existing active-place/active-variable monthly frame plumbing and renders returned local cells on globe surface.
 3. F installs the thin monthly slider and source-safe observed/forecast distinction.
 4. F replaces the eight-second rotation logic with automatic short resume after interaction.
-5. F replaces default news list with automatic saved-location marker/callout discovery.
+5. F makes every selected primary metric appear instantly as an explicitly approximate whole-Earth preview, then overlays exact detailed local data when a place is selected.
+6. F replaces default news list with automatic saved-location marker/callout discovery.
 
 Phase 4 — Backend gate and safe integration
 
@@ -395,6 +402,7 @@ Do not call this complete until every point is true:
 - A non-technical first-time user can understand the initial view through visuals and short labels, then open a consistent plain-language explanation for every important graph, layer, marker and result.
 - Navigation is consistent and recoverable across welcome, onboarding, Main, Explore, Account, detail panels and browser history.
 - Timeline is a thin floating monthly scrubber. Month changes animate actual returned data on the Earth surface, not merely a timeline graph.
+- Selecting a primary metric immediately shows a whole-Earth, clearly labelled coarse/approximate animated preview without requiring a point selection or expensive global request; detailed local source data replaces it for the selected place.
 - Main has no default news sidebar/list. Saved-place news appears automatically as clean anchored markers/callouts from source locations.
 - Every popup visibly grows outward from its true location as the Earth rotates, remains correctly attached during movement and uses a restrained accessible entrance animation.
 - Trend and significance visuals communicate direction and confidence clearly in monochrome before any technical explanation is opened.
