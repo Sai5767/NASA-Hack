@@ -60,6 +60,7 @@ const polygon = (lat, lon, half) => ({ type: "Polygon", coordinates: [cellRing(l
 
 const COARSE_SCALE = 1 / 5; // drawn at a fifth of the resolution, then softened and scaled up
 const coarseBuffers = { a: null, b: null };
+export const COARSE_ALPHA = { globe: 0.36, flat: 0.32, dim: 0.14 };
 
 function buffer(key, w, h) {
   if (typeof document === "undefined") return null;
@@ -152,7 +153,9 @@ export function drawCoarse(ctx, { path, makeProjection, geoPathFor, w, h, isGlob
   ctx.beginPath();
   path({ type: "Sphere" });
   ctx.clip();
-  ctx.globalAlpha = coarse.dim ? 0.32 : isGlobe ? 0.58 : 0.5;
+  // Low opacity so ocean, land and coastlines stay legible (the caller redraws coastlines on top); dimmer still while
+  // a place's detailed cells are shown, so the local grid reads as the data and the preview as background.
+  ctx.globalAlpha = coarse.dim ? COARSE_ALPHA.dim : isGlobe ? COARSE_ALPHA.globe : COARSE_ALPHA.flat;
   ctx.imageSmoothingEnabled = true;
   if ("imageSmoothingQuality" in ctx) ctx.imageSmoothingQuality = "high";
   ctx.drawImage(b, 0, 0, w, h);

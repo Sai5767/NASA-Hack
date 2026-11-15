@@ -245,7 +245,7 @@
 
 .main-page { position: relative; }
 
-.rail { display: flex; flex-direction: column; min-width: 0; padding: var(--space-2) var(--space-6) var(--space-4); }
+.rail { display: flex; flex-direction: column; min-width: 0; overflow-x: hidden; padding: var(--space-2) var(--space-6) var(--space-4); }
 .rail-group { display: grid; gap: var(--space-3); padding: var(--space-5) 0; min-width: 0; }
 .rail-group + .rail-group { border-top: var(--border-width) solid var(--border); }
 .rail-group:empty { display: none; }
@@ -292,6 +292,21 @@
 .rail-snapshot { min-width: 0; }
 .rail-row { min-width: 0; }
 .rail-row:empty { display: none; }
+.rail-row + .rail-row { margin-top: calc(-1 * var(--space-2)); }
+/* Compact snapshot rows: short label, value, chevron; the detail opens in the drawer. */
+.rail-kv {
+  display: flex; align-items: center; gap: var(--space-2); width: 100%; min-width: 0; min-height: var(--hit-min);
+  padding: 0 var(--space-1); background: none; border: 0; border-radius: var(--radius-sm);
+  color: var(--text-dim); font: inherit; font-size: var(--fs-body); text-align: left; cursor: pointer;
+}
+.rail-kv:hover { background: var(--hover); color: var(--text); }
+.rail-kv:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-offset); box-shadow: var(--focus-halo); }
+.rail-kv[aria-expanded="true"] { color: var(--text); }
+.rail-kv-glyph { flex: none; width: 1.1em; text-align: center; color: var(--text-faint); }
+.rail-kv-label { flex: none; }
+.rail-kv-value { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; font-family: var(--font-value); font-size: var(--fs-label); color: var(--text-faint); }
+.rail-kv--forecast .rail-kv-value { color: var(--forecast-line); }
+.rail-kv-go { flex: none; color: var(--text-faint); }
 
 /* Pin actions (save pin, back to previous pin), in the rail and the Explore head. */
 .pin-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); font-size: var(--fs-small); color: var(--text-dim); }
@@ -333,7 +348,7 @@
 @media (min-width: 1200px) {
   .app.page-main { height: 100vh; height: 100dvh; overflow: hidden; }
   .main-page { height: 100%; display: grid; grid-template-columns: var(--rail-w) minmax(0, 1fr); }
-  .main-page .rail { overflow-y: auto; overscroll-behavior: contain; }
+  .main-page .rail { overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; }
 }
 
 /* Tablet and phone: Earth first and dominant; the rail is a bottom sheet with a one-row peek. */
@@ -503,7 +518,8 @@
   bottom: calc(100% + var(--space-2));
   z-index: var(--z-popover);
   width: max-content;
-  max-width: 260px;
+  max-width: min(260px, calc(100vw - 32px));
+  white-space: normal;
   padding: var(--space-2) var(--space-3);
   border: var(--border-width) solid var(--border);
   border-radius: var(--radius-md);

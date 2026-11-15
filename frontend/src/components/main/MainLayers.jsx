@@ -22,7 +22,7 @@ import GlobeLegend from "../globe/GlobeLegend.jsx";
 import LiveWeatherCard from "../globe/LiveWeatherCard.jsx";
 import { NewsCallout, useOpenNews } from "../globe/News.jsx";
 import TimelineRail from "../globe/TimelineRail.jsx";
-import { GlobeLayersProvider, useGlobeLayers, useNewsMarkers } from "../globe/useGlobeLayers.jsx";
+import { GlobeLayersProvider, LayersBridge, useGlobeLayers, useNewsMarkers } from "../globe/useGlobeLayers.jsx";
 import { useShell } from "../shell/Drawer.jsx";
 import { isForecastIndex } from "../../lib/globeFrames.js";
 
@@ -101,14 +101,82 @@ export function MainStage({ globeProps = {}, overlay, reducedMotion, onOpenNews,
   );
 }
 
-/** Live-weather row (plan 4.2): collapsed by default, no request until expanded or "Show on globe" is on. */
-export function WeatherSlot() {
-  return <LiveWeatherCard />;
+/**
+ * One compact rail row (quiet rail spec): a 2–5 word label, a short value, a chevron. The full detail opens in the
+ * shell drawer; nothing is requested until then.
+ */
+function RailRow({ label, value, glyph, onOpen, expanded, tone }) {
+  return (
+    <button type="button" className={`rail-kv${tone ? ` rail-kv--${tone}` : ""}`} onClick={onOpen} aria-haspopup="dialog" aria-expanded={expanded}>
+      {glyph && <span className="rail-kv-glyph" aria-hidden="true">{glyph}</span>}
+      <span className="rail-kv-label">{label}</span>
+      <span className="rail-kv-value">{value}</span>
+      <span className="rail-kv-go" aria-hidden="true">›</span>
+    </button>
+  );
 }
 
-/** Forecast row: /api/monthly-forecast only when the user presses "Check forecast". */
+function weatherValue(L) {
+  if (!L.place) return "No place yet";
+  const s = L.weatherState;
+  if (s.kind === "idle") return "Open";
+  if (s.kind === "loading") return "Loading…";
+  if (s.kind === "available" || s.kind === "stale") {
+    const t = L.weatherReq.data?.current?.temperature_c;
+    return Number.isFinite(t) ? `${t.toFixed(0)} °C now${s.kind === "stale" ? " · saved" : ""}` : "Available";
+  }
+  if (s.kind === "unconfigured") return "Not set up";
+  if (s.kind === "rate_limited") return "Busy, try later";
+  return "Unavailable";
+}
+
+function forecastValue(L) {
+  if (!L.place || !L.variable) return "No place yet";
+  const s = L.forecastStatus;
+  if (s.kind === "idle") return "Not checked";
+  if (s.kind === "loading") return "Checking…";
+  if (s.kind === "error") return "Couldn't check";
+  if (s.kind === "withheld") return "Withheld";
+  return s.first === s.last ? s.first : `${s.first} – ${s.last}`;
+}
+
+/** Live-weather row (plan 4.2): one compact row; the card opens in the drawer and only then requests data. */
+export function WeatherSlot() {
+  const L = useGlobeLayers();
+  const shell = useShell();
+  if (!L) return null;
+  const open = () =>
+    shell.openDrawer({
+      id: "live-weather",
+      title: L.place ? `Live weather · ${L.place.name}` : "Live weather",
+      eyebrow: "Meteomatics, not NASA trend data",
+      render: () => <LayersBridge><LiveWeatherCard inPanel /></LayersBridge>,
+    });
+  return <RailRow label="Live weather" glyph="◔" value={weatherValue(L)} onOpen={open} expanded={shell.drawerId === "live-weather"} />;
+}
+
+/** Forecast row: one compact row; /api/monthly-forecast only when the user presses "Check forecast" in the drawer. */
 export function ForecastSlot() {
-  return <ForecastStatus />;
+  const L = useGlobeLayers();
+  const shell = useShell();
+  if (!L) return null;
+  const open = () =>
+    shell.openDrawer({
+      id: "forecast",
+      title: "Forecast status",
+      eyebrow: "Forecast, not observed",
+      render: () => <LayersBridge><ForecastStatus inPanel /></LayersBridge>,
+    });
+  return (
+    <RailRow
+      label="Forecast"
+      glyph="▨"
+      value={forecastValue(L)}
+      tone={L.forecastStatus?.kind === "eligible" ? "forecast" : undefined}
+      onOpen={open}
+      expanded={shell.drawerId === "forecast"}
+    />
+  );
 }
 
 /**

@@ -100,6 +100,33 @@ const Ctx = createContext(null);
 export const GlobeLayersContext = Ctx;
 export const useGlobeLayers = () => useContext(Ctx);
 
+// ---------------------------------------------------------------- live layer state for the shell drawer
+// Same reason as the news store: rail rows open their full detail (live weather, forecast) in the shell drawer,
+// which renders outside the provider. LayersBridge re-provides the live value there.
+let layersSnapshot = null;
+const layersListeners = new Set();
+function publishLayers(next) {
+  layersSnapshot = next;
+  for (const l of layersListeners) l();
+}
+function useLayersSnapshot() {
+  return useSyncExternalStore(
+    (l) => {
+      layersListeners.add(l);
+      return () => layersListeners.delete(l);
+    },
+    () => layersSnapshot,
+    () => layersSnapshot,
+  );
+}
+/** Wrap drawer content that needs the globe layers (the drawer renders outside GlobeLayersProvider). */
+export function LayersBridge({ children }) {
+  const inside = useContext(Ctx);
+  const live = useLayersSnapshot();
+  if (inside) return children;
+  return <Ctx.Provider value={live}>{children}</Ctx.Provider>;
+}
+
 export function GlobeLayersProvider({ place, variable, places = [], reducedMotion = false, newsWanted: newsWantedProp = true, children }) {
   const reduced = !!reducedMotion || motionReduced();
   const frames = useRequest(framesCache);
@@ -380,6 +407,10 @@ export function GlobeLayersProvider({ place, variable, places = [], reducedMotio
   useEffect(() => {
     publishNews({ req: newsReq, stories: allStories, retry: () => loadNews(true) });
   }, [newsReq, allStories, loadNews]);
+  useEffect(() => {
+    publishLayers(value);
+  });
+  useEffect(() => () => publishLayers(null), []);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

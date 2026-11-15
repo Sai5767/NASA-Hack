@@ -11,7 +11,7 @@ const KEY = new Set(["Validated", "Insights", "Significant", "Hydro-climate", "W
 export default function Vishwa({ prefix = "", className = "" }) {
   return (
     <span className={`vishwa ${className}`.trim()}>
-      {prefix && <span className="vishwa-prefix">{prefix} </span>}
+      {prefix && <span className="vishwa-prefix">{prefix}{" "}</span>}
       <a className="vishwa-link" href={VISHWA_URL} target="_blank" rel="noopener noreferrer" aria-label={`VISHWA: ${VISHWA_EXPANSION} (opens vishwa.earth in a new tab)`}>
         VISHWA
       </a>

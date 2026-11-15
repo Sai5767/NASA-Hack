@@ -104,6 +104,15 @@ export default function Explainer({ request, data, open, onClose }) {
   useEffect(() => {
     if (!desktop) setPos(null);
   }, [desktop]);
+  // Esc closes the explainer even when focus is elsewhere on the page (inner popovers handle their own Esc first).
+  useEffect(() => {
+    if (!open) return undefined;
+    const onKey = (e) => {
+      if (e.key === "Escape" && !e.defaultPrevented) onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
   useEffect(() => {
     keepInside();
   }, [large, keepInside]);

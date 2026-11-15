@@ -420,3 +420,19 @@ button.news-card { cursor: pointer; }
 :root[data-motion="reduced"] .gl-callout,
 :root[data-motion="reduced"] .tl-thumb { transition: none !important; }
 :root[data-motion="reduced"] .gl-live--sweep .gl-live-value { animation: none; stroke-dashoffset: 0; }
+
+/* Compact legend: title + ramp + end labels; the rest behind the small "i" toggle. */
+.gl-legend.is-compact .gl-legend-body { max-width: 248px; gap: var(--space-1); }
+.gl-legend.is-compact .gl-legend-ramp i { flex: 1 1 12px; width: auto; min-width: 6px; }
+.gl-legend-head { display: flex; align-items: flex-start; gap: var(--space-2); }
+.gl-legend-head > .gl-legend-group { flex: 1; min-width: 0; }
+.gl-legend-more {
+  flex: none; position: relative; display: grid; place-items: center; width: 20px; height: 20px; padding: 0;
+  border: var(--border-width) solid var(--border-control); border-radius: var(--radius-pill); background: none;
+  color: var(--text-dim); font: italic var(--fw-medium) var(--fs-label) / 1 var(--font-ui); cursor: pointer;
+}
+.gl-legend-more::after { content: ""; position: absolute; inset: -12px; } /* 44px hit area */
+.gl-legend-more:hover, .gl-legend-more[aria-expanded="true"] { color: var(--text); border-color: var(--text-faint); }
+.gl-legend-more:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: 2px; box-shadow: var(--focus-halo); }
+.gl-legend-extra { display: grid; gap: var(--space-2); max-height: min(50vh, 340px); overflow-y: auto; padding-top: var(--space-2); border-top: var(--border-width) solid var(--border); }
+.gl-legend-extra[hidden] { display: none; }

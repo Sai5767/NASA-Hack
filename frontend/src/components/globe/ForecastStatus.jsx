@@ -8,12 +8,13 @@ import { useGlobeLayers } from "./useGlobeLayers.jsx";
 
 const pct = (v) => (v == null || !Number.isFinite(v) ? "—" : `${Math.round(v * 1000) / 10}%`);
 
-export default function ForecastStatus() {
+/** `inPanel`: the full detail in the shell drawer (the rail shows a compact row); the drawer supplies the title. */
+export default function ForecastStatus({ inPanel = false }) {
   const L = useGlobeLayers();
   if (!L) return null;
   const head = (
     <header className="slot-head">
-      <h2 className="slot-title">Forecast status</h2>
+      {!inPanel && <h2 className="slot-title">Forecast status</h2>}
       <Badge kind="forecast">Forecast — not observed</Badge>
     </header>
   );

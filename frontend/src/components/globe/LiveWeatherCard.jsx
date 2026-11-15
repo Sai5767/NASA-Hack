@@ -37,7 +37,11 @@ function HourChart({ data, hours }) {
   );
 }
 
-export default function LiveWeatherCard() {
+/**
+ * `inPanel`: rendered as the full detail in the shell drawer (the rail shows only a compact row). It is always
+ * expanded there, with no title of its own (the drawer has one).
+ */
+export default function LiveWeatherCard({ inPanel = false }) {
   const L = useGlobeLayers();
   const [tick, setTick] = useState(0);
   const s = L?.weatherState;
@@ -47,10 +51,17 @@ export default function LiveWeatherCard() {
     const t = setInterval(() => setTick((n) => n + 1), 1000);
     return () => clearInterval(t);
   }, [wait, tick]);
+  useEffect(() => {
+    if (inPanel && L && !L.weatherOpen) L.setWeatherOpen(true);
+  }, [inPanel, L?.weatherOpen]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!L) return null;
 
-  const open = L.weatherOpen;
-  const head = (
+  const open = inPanel || L.weatherOpen;
+  const head = inPanel ? (
+    <header className="slot-head">
+      <Badge kind="live">LIVE · Meteomatics</Badge>
+    </header>
+  ) : (
     <header className="slot-head">
       <h2 className="slot-title">
         <button type="button" className="lw-toggle" aria-expanded={open} aria-controls="lw-body" onClick={() => L.setWeatherOpen(!open)}>

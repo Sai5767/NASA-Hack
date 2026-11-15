@@ -15,6 +15,10 @@ import "../styles/globe.css";
 const LAND = feature(world, world.objects.land);
 const BORDERS = mesh(world, world.objects.countries, (a, b) => a !== b);
 const SPHERE = { type: "Sphere" };
+// Ice sheets drawn from the real land shapes (Antarctica, Greenland), never as a latitude cap: no oval, no rings.
+const ICE_SHEETS = world.objects.countries.geometries
+  .filter((g) => g.properties?.name === "Antarctica" || g.properties?.name === "Greenland")
+  .map((g) => ({ shape: feature(world, g), alpha: g.properties.name === "Antarctica" ? 0.7 : 0.55 }));
 
 /**
  * Base-globe palette. The CSS tokens (--earth-*, docs/V3_QUIET_EARTH_VISUAL_SPEC.md 2.2) win; this object is only the
@@ -71,8 +75,8 @@ function earthPalette() {
   };
 }
 
-// Soft climate tints on the land only (drawn clipped to land): dry subtropical belts and polar ice, each as three
-// nested low-alpha bands so the edges feather. Approximate look only, never data.
+// Soft climate tint on the land only (drawn clipped to land): dry subtropical belts as three nested low-alpha bands
+// so the edges feather. Approximate look only, never data.
 const capCircle = (lat, radius) => geoCircle().center([0, lat]).radius(radius)();
 const DRY_BANDS = [
   [13, 37], [17, 33], [21, 29],
@@ -80,13 +84,17 @@ const DRY_BANDS = [
   { outer: capCircle(90, 90 - a), inner: capCircle(90, 90 - b) },
   { outer: capCircle(-90, 90 - a), inner: capCircle(-90, 90 - b) },
 ]);
-const ICE_CAPS = [capCircle(90, 18), capCircle(90, 22), capCircle(90, 26), capCircle(-90, 24), capCircle(-90, 28), capCircle(-90, 32)];
 
 const VIEW_DEFAULTS = {
   globe: { lon: -40, lat: 24, k: 1 },
   flat: { lon: 0, lat: 12, k: 1.7 },
 };
 const K_LIMITS = { globe: [0.8, 14], flat: [1, 24] };
+// Auto-fly to a local grid stops here, so the curved Earth (limb, coastlines) stays in view and the grid reads as a
+// patch on the planet. Manual zoom (+, wheel, keys) can still go to K_LIMITS.
+const AUTO_K_MAX = { globe: 3, flat: 6 };
+const AUTO_GRID_MIN_PX = 34; // ...but never so small that the cells collapse to a swatch (small phone stages)
+const AUTO_GRID_FRACTION = 0.1; // the local grid spans ~10% of the stage
 
 // Idle rotation (plan 5.4): ~2 degrees per second, resuming ~1 s after the last interaction with a gentle ramp.
 const IDLE_DEFAULTS = { degPerS: 2, resumeMs: 1000, rampMs: 900 };
@@ -238,7 +246,7 @@ export default function Globe({
   const idle = useRef(IDLE_DEFAULTS);
   const patterns = useRef(null);
   const live = useRef({});
-  const layout = useRef({ at: 0, callouts: new Set(), clusters: new Map(), hidden: new Set() });
+  const layout = useRef({ at: 0, callouts: new Set(), clusters: new Map(), hidden: new Set(), kept: [], choice: new Map() });
 
   const polys = useMemo(
     () => cells.map((c) => ({ type: "Polygon", coordinates: [cellRing(c.lat, c.lon, cellHalf)] })),
@@ -345,15 +353,17 @@ export default function Globe({
     startFly({ lon: focus.lon, lat: clamp(focus.lat, -80, 80), k: clamp(k, ...K_LIMITS[m]) });
   }, [focus?.nonce]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // When a new local grid arrives, fly so it spans a readable part of the stage (capped at the zoom limit).
+  // When a new local grid arrives, fly so it spans ~10% of the stage, capped so the planet stays visible.
   useEffect(() => {
     if (!field?.flyKey || field.loading || !field.extent) return;
     const m = live.current.mode;
     const { w, h } = sizeRef.current;
     const spanDeg = Math.max(field.extent.north - field.extent.south, field.extent.east - field.extent.west, 0.5);
     const base = m === "globe" ? (Math.min(w, h) / 2) * 0.88 : (w * 0.94) / 5.41;
-    const want = (0.35 * Math.min(w, h)) / ((spanDeg * Math.PI) / 180) / base;
-    startFly({ lon: field.extent.lon, lat: clamp(field.extent.lat, -80, 80), k: clamp(want, ...K_LIMITS[m]) });
+    const want = (AUTO_GRID_FRACTION * Math.min(w, h)) / ((spanDeg * Math.PI) / 180) / base;
+    const spanRad = (spanDeg * Math.PI) / 180;
+    const k = Math.min(want, Math.max(AUTO_K_MAX[m], AUTO_GRID_MIN_PX / spanRad / base));
+    startFly({ lon: field.extent.lon, lat: clamp(field.extent.lat, -80, 80), k: clamp(k, ...K_LIMITS[m]) });
   }, [field?.flyKey, field?.loading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const switchMode = (next) => {
@@ -370,9 +380,15 @@ export default function Globe({
     return 180 / Math.PI / scale;
   };
 
+  /** + / − buttons: step from where the camera is heading (a fly's target), not from a mid-fly zoom. */
   const zoomBy = (factor) => {
     const m = live.current.mode;
-    startFly({ k: clamp(view.current.k * factor, ...K_LIMITS[m]) }, 380, false);
+    const f = fly.current;
+    const fromK = f ? f.to.k : view.current.k;
+    const to = f ? { lon: f.to.lon, lat: f.to.lat } : {};
+    // A fly in progress keeps heading to its place (for the rest of its time) while the zoom retargets.
+    const dur = f ? Math.max(380, f.t0 + f.dur - performance.now()) : 380;
+    startFly({ ...to, k: clamp(fromK * factor, ...K_LIMITS[m]) }, dur, false);
   };
 
   /**
@@ -435,6 +451,16 @@ export default function Globe({
       const cy = h / 2;
       const facing = (lon, lat) => (isGlobe ? Math.cos(geoDistance([lon, lat], [v.lon, v.lat])) : 1);
       const fadeOf = (f) => clamp((f - 0.06) / 0.22, 0, 1); // tuck away gracefully before the limb
+      // Screen areas a callout box must not cover: the local grid (plus its tag above) and every visible marker.
+      const fieldRect = L.field && !L.field.loading && L.field.extent ? extentScreenRect(proj, L.field.extent, isGlobe, v) : null;
+      // The callout's real size (its text can wrap to more lines than the default), measured in the layout pass.
+      const calloutSize = (id) => lay.sizes?.get(id) ?? [CALLOUT_W, CALLOUT_H];
+      const lay = layout.current;
+      const baseAvoid = (list) => {
+        const out = fieldRect ? [{ x0: fieldRect.x0 - 6, y0: fieldRect.y0 - 28, x1: fieldRect.x1 + 6, y1: fieldRect.y1 + 6 }] : [];
+        for (const k of list) out.push({ x0: k.pt[0] - 16, y0: k.pt[1] - 16, x1: k.pt[0] + 16, y1: k.pt[1] + 16 });
+        return out;
+      };
 
       // 1. Project every news marker.
       const pts = [];
@@ -445,9 +471,13 @@ export default function Globe({
       }
 
       // 2. Every ~250 ms (or after a change), re-pick which markers cluster and which show a callout.
-      const lay = layout.current;
       if (now - lay.at > 250) {
         lay.at = now;
+        lay.sizes = new Map();
+        for (const [id, el] of newsEls.current) {
+          const c = el.querySelector(".gl-callout");
+          if (c && c.offsetHeight) lay.sizes.set(id, [c.offsetWidth || CALLOUT_W, c.offsetHeight]);
+        }
         const order = [...pts]
           .filter((p) => p.pt && p.fade > 0)
           .sort((a, b) => (b.m.id === L.reading) - (a.m.id === L.reading) || (b.m.open - a.m.open) || b.f - a.f);
@@ -461,20 +491,37 @@ export default function Globe({
             hidden.add(p.m.id);
           } else kept.push(p);
         }
-        const limit = narrow(w) ? 1 : 3;
+        // Phone: markers only; a callout opens when its marker is tapped (or focused / open).
+        const phone = narrow(w);
+        const limit = phone ? 1 : 3;
         const callouts = new Set();
-        const rects = [];
+        const avoid = baseAvoid(kept);
         for (const p of kept) {
           if (callouts.size >= limit) break;
           const forced = p.m.id === L.reading || p.m.open;
-          if (!forced && p.fade < 0.9) continue;
-          const e = calloutEnd(p.pt, isGlobe, cx, cy, R, w, h);
-          const r = { x0: e.bx, y0: e.by, x1: e.bx + CALLOUT_W, y1: e.by + CALLOUT_H };
-          if (!forced && rects.some((q) => r.x0 < q.x1 && r.x1 > q.x0 && r.y0 < q.y1 && r.y1 > q.y0)) continue;
-          rects.push(r);
+          if (!forced && (phone || p.fade < 0.9)) continue;
+          const e = calloutEnd(p.pt, isGlobe, cx, cy, R, w, h, avoid, lay.choice.get(p.m.id), calloutSize(p.m.id));
+          if (!forced && e.overlap > 0) continue;
+          avoid.push(e.rect);
           callouts.add(p.m.id);
         }
-        Object.assign(lay, { callouts, clusters, hidden });
+        Object.assign(lay, { callouts, clusters, hidden, kept: kept.map((k) => k.m.id) });
+      }
+
+      // Callout placement, every frame, in priority order: each box stays off its own marker, the other markers, the
+      // local grid (and its tag) and the callouts placed before it.
+      const placed = new Map();
+      if (lay.callouts.size) {
+        const keptPts = pts.filter((p) => p.pt && lay.kept?.includes(p.m.id));
+        const avoid = baseAvoid(keptPts);
+        for (const id of lay.callouts) {
+          const p = pts.find((q) => q.m.id === id);
+          if (!p?.pt) continue;
+          const e = calloutEnd(p.pt, isGlobe, cx, cy, R, w, h, avoid, lay.choice.get(id), calloutSize(id));
+          lay.choice.set(id, e.choice);
+          avoid.push(e.rect);
+          placed.set(id, e);
+        }
       }
 
       // 3. Write positions straight to the DOM (no React render per frame).
@@ -496,8 +543,8 @@ export default function Globe({
           const c = el.querySelector(".gl-news-cluster");
           if (c) c.textContent = n > 1 ? `+${n - 1}` : "";
         }
-        if (callout) {
-          const e = calloutEnd(p.pt, isGlobe, cx, cy, R, w, h);
+        const e = callout ? placed.get(p.m.id) : null;
+        if (e) {
           const dx = e.ax - p.pt[0];
           const dy = e.ay - p.pt[1];
           el.style.setProperty("--len", `${Math.hypot(dx, dy).toFixed(1)}px`);
@@ -607,14 +654,16 @@ export default function Globe({
         path(band.inner);
         ctx.fill("evenodd");
       }
+      ctx.restore();
+      // Ice sheets: the land shapes themselves, softly tinted (their own coastline keeps the edge natural).
       ctx.fillStyle = E.ice;
-      ctx.globalAlpha = 0.28;
-      for (const cap of ICE_CAPS) {
+      for (const sheet of ICE_SHEETS) {
+        ctx.globalAlpha = sheet.alpha;
         ctx.beginPath();
-        path(cap);
+        path(sheet.shape);
         ctx.fill();
       }
-      ctx.restore();
+      ctx.globalAlpha = 1;
 
       ctx.beginPath();
       path(LAND);
@@ -640,6 +689,12 @@ export default function Globe({
           { reduced: L.reduced },
         );
         coarseAnimating = res.animating;
+        // Coastlines again on top of the preview, so the Earth stays recognisable under the data wash.
+        ctx.beginPath();
+        path(LAND);
+        ctx.strokeStyle = E.coast;
+        ctx.lineWidth = 0.8;
+        ctx.stroke();
       }
 
       if (isGlobe) {
@@ -958,6 +1013,28 @@ export default function Globe({
   const openNews = (m) => (onOpenNews ?? onMarkerPick)?.(m);
   const readOn = (id) => () => setReading(id);
   const readOff = (id) => () => setReading((r) => (r === id ? null : r));
+  // Touch fires enter / leave around every tap; only a mouse hover should open or close a callout.
+  const mouseOnly = (fn) => (e) => {
+    if (e.pointerType === "mouse") fn();
+  };
+  // Moving focus between a marker and its own callout keeps the callout open.
+  const blurOff = (id) => (e) => {
+    const li = e.currentTarget.closest("li");
+    if (li && e.relatedTarget && li.contains(e.relatedTarget)) return;
+    readOff(id)();
+  };
+  // Phone: the first tap on a marker opens its callout (markers only by default); a tap on the open callout, or a
+  // second tap on the marker, opens the details. Desktop and keyboard: opens the details at once.
+  const tapState = useRef(null);
+  const tapMarker = (m) => {
+    const t = tapState.current;
+    tapState.current = null;
+    if (narrow(sizeRef.current.w) && t?.id === m.id && !t.shown) {
+      setReading(m.id);
+      return;
+    }
+    openNews(m);
+  };
 
   const hoveredCell = hover && hover.cell >= 0 ? cells[hover.cell] : null;
   const hoveredDot = hover && hover.dot >= 0 ? dots[hover.dot] : null;
@@ -1049,11 +1126,14 @@ export default function Globe({
                 className="gl-news-dot"
                 aria-label={`News context near ${m.name}: ${m.count} ${m.count === 1 ? "story" : "stories"}${m.verified ? "" : ", unverified news context"}${m.stale ? ", saved earlier" : ""}. Opens the details.`}
                 aria-haspopup="dialog"
-                onClick={() => openNews(m)}
-                onPointerEnter={readOn(m.id)}
-                onPointerLeave={readOff(m.id)}
+                onPointerDown={() => {
+                  tapState.current = { id: m.id, shown: newsEls.current.get(m.id)?.dataset.state === "callout" };
+                }}
+                onClick={() => tapMarker(m)}
+                onPointerEnter={mouseOnly(readOn(m.id))}
+                onPointerLeave={mouseOnly(readOff(m.id))}
                 onFocus={readOn(m.id)}
-                onBlur={readOff(m.id)}
+                onBlur={blurOff(m.id)}
               >
                 <span className="gl-news-glyph" aria-hidden="true">{m.verified ? m.glyph : ""}</span>
                 <span className="gl-news-cluster mono" aria-hidden="true" />
@@ -1065,8 +1145,9 @@ export default function Globe({
                   tabIndex={-1}
                   aria-hidden="true"
                   onClick={() => openNews(m)}
-                  onPointerEnter={readOn(m.id)}
-                  onPointerLeave={readOff(m.id)}
+                  onPointerEnter={mouseOnly(readOn(m.id))}
+                  onPointerLeave={mouseOnly(readOff(m.id))}
+                  onBlur={blurOff(m.id)}
                 >
                   {renderMarkerCard ? renderMarkerCard(m) : <span className="gl-callout-headline">{m.lead?.headline ?? m.name}</span>}
                 </button>
@@ -1142,35 +1223,84 @@ export default function Globe({
   );
 }
 
+/** Screen rectangle of a lon/lat extent (edges sampled so it follows the sphere), or null when it is out of view. */
+function extentScreenRect(proj, ext, isGlobe, v) {
+  if (isGlobe && geoDistance([ext.lon, ext.lat], [v.lon, v.lat]) > Math.PI / 2 - 0.02) return null;
+  const xy = [];
+  const steps = 4;
+  for (let i = 0; i <= steps; i += 1) {
+    const la = ext.south + ((ext.north - ext.south) * i) / steps;
+    const lo = ext.west + ((ext.east - ext.west) * i) / steps;
+    for (const q of [[ext.west, la], [ext.east, la], [lo, ext.south], [lo, ext.north]]) {
+      const pt = proj(q);
+      if (pt) xy.push(pt);
+    }
+  }
+  if (!xy.length) return null;
+  return {
+    x0: Math.min(...xy.map((q) => q[0])),
+    y0: Math.min(...xy.map((q) => q[1])),
+    x1: Math.max(...xy.map((q) => q[0])),
+    y1: Math.max(...xy.map((q) => q[1])),
+  };
+}
+
+const overlapArea = (a, b) => Math.max(0, Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0)) * Math.max(0, Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0));
+const CALLOUT_TURNS = [0, 1, -1, 2, -2, 3, -3, 4].map((n) => (n * Math.PI) / 4);
+const CALLOUT_LENS = [40, 72, 110, 150];
+
 /**
- * Where a callout goes: outward from the marker along the limb normal (the screen direction from the disc centre),
- * ending just outside the curved surface, clamped inside the stage. Returns the leader end (ax, ay) and the callout
- * box's top-left (bx, by).
+ * Where a callout goes: outward from the marker along the leader, never over the marker itself. It prefers the limb
+ * normal (the screen direction from the disc centre), then turns in 45-degree steps and lengthens the leader until
+ * the box (clamped inside the stage) covers none of the `avoid` rectangles (the marker, the other markers, the local
+ * grid, earlier callouts). The leader ends on the box edge nearest the marker. Returns the leader end (ax, ay), the
+ * box's top-left (bx, by), its rect, the overlap left (0 = clear) and the candidate index (`prefer` tries it first,
+ * so a callout does not jump between equally good spots while the Earth turns).
  */
-function calloutEnd(pt, isGlobe, cx, cy, R, w, h) {
+function calloutEnd(pt, isGlobe, cx, cy, R, w, h, avoid = [], prefer = null, size = [CALLOUT_W, CALLOUT_H]) {
+  const [CW, CH] = size;
   let dx = pt[0] - cx;
   let dy = pt[1] - cy;
   let d = Math.hypot(dx, dy);
   if (!isGlobe || d < 8) {
     dx = 0.72;
     dy = -0.7;
-    d = 1;
+    d = Math.hypot(dx, dy);
   }
-  const ux = dx / d;
-  const uy = dy / d;
-  const dist = Math.hypot(pt[0] - cx, pt[1] - cy);
-  const len = isGlobe ? clamp(R * 1.06 - dist, 34, 120) : 48;
-  let ax = pt[0] + ux * len;
-  let ay = pt[1] + uy * len;
-  const right = ux >= 0;
-  let bx = right ? ax : ax - CALLOUT_W;
-  let by = ay - CALLOUT_H / 2;
-  const cbx = clamp(bx, 8, w - CALLOUT_W - 8);
-  const cby = clamp(by, 8, h - CALLOUT_H - 8);
-  // If the stage edge pushed the box, keep the leader ending on the box's near edge.
-  ax += cbx - bx;
-  ay += cby - by;
-  bx = cbx;
-  by = cby;
-  return { ax, ay, bx, by };
+  const base = Math.atan2(dy / d, dx / d);
+  const minLen = isGlobe ? clamp(R * 1.06 - Math.hypot(pt[0] - cx, pt[1] - cy), 0, 120) : 0;
+  const tryOne = (ti, li) => {
+    const ang = ti < CALLOUT_TURNS.length ? base + CALLOUT_TURNS[ti] : ti === CALLOUT_TURNS.length ? -Math.PI / 2 : Math.PI / 2;
+    const ux = Math.cos(ang);
+    const uy = Math.sin(ang);
+    const len = Math.max(CALLOUT_LENS[li], li === 0 ? minLen : 0);
+    const ex = pt[0] + ux * len;
+    const ey = pt[1] + uy * len;
+    // Box sits beyond the leader end: to the side it points to, centred when the leader is near vertical.
+    let bx = Math.abs(ux) < 0.38 ? ex - CW / 2 : ux > 0 ? ex : ex - CW;
+    let by = Math.abs(ux) < 0.38 ? (uy < 0 ? ey - CH : ey) : ey - CH / 2;
+    bx = clamp(bx, 8, Math.max(8, w - CW - 8));
+    by = clamp(by, 8, Math.max(8, h - CH - 8));
+    const rect = { x0: bx, y0: by, x1: bx + CW, y1: by + CH };
+    const ax = clamp(pt[0], rect.x0, rect.x1);
+    const ay = clamp(pt[1], rect.y0, rect.y1);
+    let overlap = 0;
+    for (const r of avoid) overlap += overlapArea(rect, r);
+    // The box must also leave the marker itself and a short leader clear.
+    if (Math.hypot(ax - pt[0], ay - pt[1]) < 22) overlap += 1e6;
+    return { ax, ay, bx, by, rect, overlap, choice: [ti, li] };
+  };
+  let best = null;
+  if (prefer) {
+    const e = tryOne(prefer[0], prefer[1]);
+    if (e.overlap === 0) return e;
+  }
+  for (let li = 0; li < CALLOUT_LENS.length; li += 1) {
+    for (let ti = 0; ti < CALLOUT_TURNS.length + 2; ti += 1) {
+      const e = tryOne(ti, li);
+      if (e.overlap === 0) return e;
+      if (!best || e.overlap < best.overlap) best = e;
+    }
+  }
+  return best;
 }
