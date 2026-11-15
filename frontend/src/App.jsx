@@ -187,16 +187,18 @@ function usePlaces() {
 
 /**
  * The base-only welcome Earth: the real Globe renderer with no data, news, live weather, pins or picking, rotating
- * slowly behind sign-in and onboarding. Decorative (inert, hidden from assistive tech); it makes no request.
+ * slowly behind sign-in and onboarding, cropped so about half of it enters the screen (see .welcome-globe in shell.css).
+ * Decorative (hidden from assistive tech, out of the tab order, no country borders); it makes no request. It can still be
+ * dragged with a pointer; the form sits above it and stays usable.
  */
 function WelcomeEarth({ focus, reduced }) {
   const ref = useRef(null);
   useEffect(() => {
-    if (ref.current) ref.current.inert = true;
+    ref.current?.querySelectorAll("[tabindex]").forEach((el) => el.setAttribute("tabindex", "-1"));
   }, []);
   return (
     <div className="welcome-globe" ref={ref} aria-hidden="true">
-      <Globe idleSpin={!reduced} focus={focus} reducedMotion={reduced} controls={false} />
+      <Globe idleSpin={!reduced} focus={focus} reducedMotion={reduced} controls={false} borders={false} />
     </div>
   );
 }

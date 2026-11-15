@@ -87,14 +87,24 @@
 
 /* ---------- Welcome: the base-only Earth behind sign-in and the two questions ---------- */
 
-.welcome { position: relative; min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; overflow: hidden; background: var(--bg); }
-/* The real Globe renderer, base Earth only. Decorative: no HUD, no controls, no pointer input. */
+/* Half-Earth composition: the sphere is a square box centred at (--we-x, --we-y) with a visible radius of --we-r
+   (the renderer draws the disc at 0.88 of the half-box, hence 2 / 0.88 = 2.2727). The centre sits near the bottom edge,
+   so about half of the planet enters the screen, as if looking past its edge from space. */
+.welcome {
+  --we-r: max(54vh, 26vw);
+  --we-x: 82vw;
+  --we-y: 98vh;
+  --we-d: calc(var(--we-r) * 2.2727);
+  position: relative; min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; overflow: hidden; background: var(--bg);
+}
+/* The real Globe renderer, base Earth only: no HUD, no controls, no country borders. It can be dragged; the form is above it. */
 .welcome-globe {
   position: fixed;
-  inset: 0;
+  width: var(--we-d);
+  height: var(--we-d);
+  left: calc(var(--we-x) - var(--we-d) / 2);
+  top: calc(var(--we-y) - var(--we-d) / 2);
   z-index: var(--z-content);
-  pointer-events: none;
-  transition: transform var(--dur-slow) var(--ease-in-out);
 }
 .welcome-globe .globe { height: 100%; }
 .welcome-globe .globe > :not(canvas) { display: none !important; }
@@ -104,9 +114,11 @@
   flex: 1;
   display: grid;
   align-content: center;
-  justify-items: center;
-  padding: var(--space-12) var(--space-4);
+  justify-items: start;
+  padding: var(--space-12) var(--space-4) var(--space-12) clamp(var(--space-6), 9vw, 150px);
+  pointer-events: none; /* clicks in the empty space reach the Earth behind; the form itself opts back in below */
 }
+.welcome-main > * { pointer-events: auto; }
 .welcome-foot {
   position: relative;
   z-index: var(--z-rail);
@@ -149,10 +161,6 @@
 .demo-note { font-size: var(--fs-small); color: var(--text-faint); line-height: var(--lh-snug); }
 
 /* Onboarding: no box. On desktop the Earth moves right and the question sits in open black space on the left. */
-.welcome--onboarding .welcome-main { justify-items: start; padding-left: clamp(var(--space-6), 8vw, 140px); }
-@media (min-width: 1000px) {
-  .welcome--onboarding .welcome-globe { transform: translateX(24vw); }
-}
 .welcome-flow { width: min(560px, 100%); animation: fade var(--dur-base) var(--ease-standard) both; }
 
 .onboarding { display: grid; gap: var(--space-6); }
@@ -229,12 +237,14 @@
 .type-tiles.compact .type-icon { width: 18px; height: 18px; }
 
 @media (max-width: 999.98px) {
-  /* Phone/tablet portrait: the Earth sits in the upper part of the screen; content scrolls below it. */
-  .welcome--onboarding .welcome-globe { bottom: 52%; }
-  .welcome--onboarding .welcome-main { align-content: start; justify-items: center; padding: 46dvh var(--space-4) var(--space-6); }
+  /* Phone/tablet portrait: a larger cropped arc of Earth along the bottom edge; the form sits above it and the page
+     leaves room below the content, so no field is ever on top of the planet. */
+  .welcome { --we-r: min(78vw, 46vh); --we-x: 50vw; --we-y: calc(100vh + var(--we-r) * 0.3); }
+  .welcome--onboarding { --we-y: calc(100vh + var(--we-r) * 0.62); }
+  .welcome-main { align-content: start; justify-items: center; padding: var(--space-12) var(--space-4) calc(var(--we-r) * 0.55); }
+  .welcome--signin .welcome-main { padding-top: 12dvh; padding-bottom: calc(var(--we-r) * 0.5); }
 }
 @media (max-width: 767.98px) {
-  .welcome--signin .welcome-main { align-content: end; padding-bottom: var(--space-8); }
   .welcome-surface { padding: var(--space-6); }
   .ob-choices { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .type-tiles { grid-template-columns: minmax(0, 1fr); }

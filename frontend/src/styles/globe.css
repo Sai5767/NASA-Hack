@@ -146,10 +146,11 @@
   cursor: pointer;
   pointer-events: none;
   opacity: 0;
-  transform: translate(calc(var(--ux, 0) * -8px), calc(var(--uy, 0) * -8px)) scale(0.96);
+  transform: translate(calc(var(--ux, 0) * -8px), calc(var(--uy, 0) * -8px)); /* starts 8 px inward, glides 8 px outward; no scaling */
   transition: opacity var(--dur-callout) var(--ease-standard), transform var(--dur-callout) var(--ease-standard);
 }
-.gl-news[data-state="callout"] .gl-callout { opacity: 1; transform: none; pointer-events: auto; transition-delay: 60ms; }
+/* Entrance order: the leader grows first, then the callout arrives at its end. */
+.gl-news[data-state="callout"] .gl-callout { opacity: 1; transform: none; pointer-events: auto; transition-delay: calc(var(--dur-callout) * 0.6); }
 .gl-news--unverified .gl-callout { border-style: dashed; border-color: var(--news-unverified); }
 .gl-callout:hover { border-color: var(--border-control); }
 .gl-callout-body { display: grid; gap: 2px; }

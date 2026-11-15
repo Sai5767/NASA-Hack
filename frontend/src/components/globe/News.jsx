@@ -64,8 +64,8 @@ export function NewsPanel({ placeId, placeName }) {
   const snap = useNewsSnapshot();
   const list = snap.stories.filter((s) => s.place.id === placeId);
   const st = newsState(snap.req, list);
-  const verified = list.filter((s) => s.item.publisher_verified === true).map((s) => newsCard(s.item));
-  const unverified = list.filter((s) => s.item.publisher_verified !== true).map((s) => newsCard(s.item));
+  const verified = list.filter((s) => s.item.publisher_verified === true).map((s) => newsCard(s.item, { showcase: s.place.showcase === true }));
+  const unverified = list.filter((s) => s.item.publisher_verified !== true).map((s) => newsCard(s.item, { showcase: s.place.showcase === true }));
   const first = verified[0] ?? unverified[0];
   return (
     <div className="news-panel">

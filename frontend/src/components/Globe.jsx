@@ -5,6 +5,7 @@ import world from "world-atlas/countries-110m.json";
 import { cellContains, cellRing } from "../lib/geo.js";
 import { clamp, easeInOutCubic, easeOutCubic, lerp, mean, wrapLon } from "../lib/format.js";
 import { motionReduced, PIN_COLORS } from "../lib/theme.js";
+import { CYCLE, createCycle, isEligible, stepCycle } from "../lib/newsCycle.js";
 import { FALLBACK, readTokens, rgba } from "../lib/tokens.js";
 import { useReducedMotion } from "../hooks.js";
 import { drawCoarse, drawField, makePatterns } from "./globe/fieldLayer.js";
@@ -60,8 +61,11 @@ const cssMs = (name, fallback) => {
 function earthPalette() {
   const pick = (name, fb) => cssVar(name) || fb;
   const atm = (cssVar("--earth-atmosphere-rgb") || cssVar("--globe-halo-rgb") || PAL.atmosphere).replace(/\s+/g, "");
+  const alpha = Number.parseFloat(cssVar("--earth-atmosphere-alpha"));
   return {
     atmosphere: atm,
+    // One shared strength for the thin blue limb on Welcome and Main (theme.css --earth-atmosphere-alpha).
+    atmosphereAlpha: Number.isFinite(alpha) ? Math.min(Math.max(alpha, 0), 0.4) : 0.18,
     oceanA: pick("--earth-ocean-lit", PAL.oceanA),
     oceanB: pick("--earth-ocean-dark", PAL.oceanB),
     flatOcean: pick("--earth-flat-ocean", PAL.flatOcean),
@@ -214,6 +218,10 @@ export default function Globe({
   liveGlyph = null,
   rotationPaused = false,
   controls = true,
+  borders = true,
+  autoNews = true,
+  newsPaused = false,
+  newsHoldKey = null,
   onCellFocus,
   layerLabel = "",
   reducedMotion = false,
@@ -291,8 +299,18 @@ export default function Globe({
   live.current = {
     pins, cells, polys, cellHalf, selectedCell, dots, busy, idleSpin, reduced, mode, reveal,
     hoverCell: hover?.cell ?? -1, hoverDot: hover?.dot ?? -1, hoverField: hover?.fieldCell ?? null,
-    coarse, field, markers, savedPins, liveGlyph, rotationPaused, userPaused, reading,
+    coarse, field, markers, savedPins, liveGlyph, rotationPaused, userPaused, reading, borders, autoNews, newsPaused,
   };
+
+  // The automatic news cycle (lib/newsCycle.js): one active callout, takeover on any interaction. `newsHoldKey` is any value
+  // that changes while the user is busy elsewhere (timeline moved): it holds the cycle until the idle delay has passed.
+  const cycle = useRef(createCycle());
+  const holdUntil = useRef(0);
+  useEffect(() => {
+    if (newsHoldKey == null) return;
+    holdUntil.current = performance.now() + CYCLE.resumeMs;
+    layout.current.at = 0;
+  }, [newsHoldKey]);
 
   useEffect(() => {
     dirty.current = true;
@@ -330,6 +348,7 @@ export default function Globe({
   const interacted = (extraMs = 0) => {
     idleAt.current = performance.now() + idle.current.resumeMs + extraMs;
     spinSince.current = null;
+    layout.current.at = 0; // the automatic news callout closes on the next pass
   };
 
   const startFly = useCallback((to, duration = 1400, arc = true) => {
@@ -458,6 +477,8 @@ export default function Globe({
       const lay = layout.current;
       const baseAvoid = (list) => {
         const out = fieldRect ? [{ x0: fieldRect.x0 - 6, y0: fieldRect.y0 - 28, x1: fieldRect.x1 + 6, y1: fieldRect.y1 + 6 }] : [];
+        // Keep callouts clear of the floating timeline (bottom) and the globe controls (top right).
+        out.push({ x0: 0, y0: h - 88, x1: w, y1: h }, { x0: w - 116, y0: 0, x1: w, y1: 64 });
         for (const k of list) out.push({ x0: k.pt[0] - 16, y0: k.pt[1] - 16, x1: k.pt[0] + 16, y1: k.pt[1] + 16 });
         return out;
       };
@@ -491,19 +512,44 @@ export default function Globe({
             hidden.add(p.m.id);
           } else kept.push(p);
         }
-        // Phone: markers only; a callout opens when its marker is tapped (or focused / open).
-        const phone = narrow(w);
-        const limit = phone ? 1 : 3;
         const callouts = new Set();
         const avoid = baseAvoid(kept);
+        // Manual first: a marker the user hovers, focuses, taps or has open always shows its callout.
         for (const p of kept) {
-          if (callouts.size >= limit) break;
-          const forced = p.m.id === L.reading || p.m.open;
-          if (!forced && (phone || p.fade < 0.9)) continue;
+          if (!(p.m.id === L.reading || p.m.open)) continue;
           const e = calloutEnd(p.pt, isGlobe, cx, cy, R, w, h, avoid, lay.choice.get(p.m.id), calloutSize(p.m.id));
-          if (!forced && e.overlap > 0) continue;
           avoid.push(e.rect);
           callouts.add(p.m.id);
+        }
+        // Automatic: exactly one callout at a time, chosen by the deterministic queue in lib/newsCycle.js.
+        const orderOf = new Map(L.markers.map((m, i) => [m.id, i]));
+        const candidates = kept.map((p) => {
+          const placeable = callouts.has(p.m.id) || calloutEnd(p.pt, isGlobe, cx, cy, R, w, h, avoid, lay.choice.get(p.m.id), calloutSize(p.m.id)).overlap === 0;
+          return {
+            id: p.m.id,
+            showcase: !!p.m.showcase,
+            order: orderOf.get(p.m.id) ?? 0,
+            eligible: isEligible({ fade: p.fade, clustered: false, hasStory: !!p.m.lead, placeable }),
+          };
+        });
+        const enabled =
+          L.autoNews &&
+          !L.newsPaused &&
+          !L.reduced &&
+          L.reading == null &&
+          !L.markers.some((m) => m.open) &&
+          !drag.current &&
+          !fly.current &&
+          now > idleAt.current &&
+          now > holdUntil.current &&
+          (typeof document === "undefined" || document.visibilityState !== "hidden");
+        stepCycle(cycle.current, { enabled, candidates }, now);
+        const auto = cycle.current.activeId;
+        const autoPt = auto != null ? kept.find((p) => p.m.id === auto) : null;
+        if (autoPt && !callouts.has(auto)) {
+          const e = calloutEnd(autoPt.pt, isGlobe, cx, cy, R, w, h, avoid, lay.choice.get(auto), calloutSize(auto));
+          avoid.push(e.rect);
+          callouts.add(auto);
         }
         Object.assign(lay, { callouts, clusters, hidden, kept: kept.map((k) => k.m.id) });
       }
@@ -616,7 +662,7 @@ export default function Globe({
       if (isGlobe) {
         // Thin atmosphere rim just outside the disc (within ~4% of the radius, max alpha 0.22).
         const rim = ctx.createRadialGradient(cx, cy, R * 0.995, cx, cy, R * 1.04);
-        rim.addColorStop(0, `rgba(${E.atmosphere},0.22)`);
+        rim.addColorStop(0, `rgba(${E.atmosphere},${E.atmosphereAlpha})`);
         rim.addColorStop(1, `rgba(${E.atmosphere},0)`);
         ctx.fillStyle = rim;
         ctx.beginPath();
@@ -670,11 +716,13 @@ export default function Globe({
       ctx.strokeStyle = E.coast;
       ctx.lineWidth = 0.6;
       ctx.stroke();
-      ctx.beginPath();
-      path(BORDERS);
-      ctx.strokeStyle = E.border;
-      ctx.lineWidth = 0.4;
-      ctx.stroke();
+      if (L.borders) {
+        ctx.beginPath();
+        path(BORDERS);
+        ctx.strokeStyle = E.border;
+        ctx.lineWidth = 0.4;
+        ctx.stroke();
+      }
 
       // Coarse whole-Earth preview: under the lighting, so it reads as part of the sphere.
       let coarseAnimating = false;
@@ -715,7 +763,7 @@ export default function Globe({
         ctx.fill();
         const inner = ctx.createRadialGradient(cx, cy, R * 0.93, cx, cy, R);
         inner.addColorStop(0, `rgba(${E.atmosphere},0)`);
-        inner.addColorStop(1, `rgba(${E.atmosphere},0.14)`);
+        inner.addColorStop(1, `rgba(${E.atmosphere},${(E.atmosphereAlpha * 0.64).toFixed(3)})`);
         ctx.fillStyle = inner;
         ctx.fill();
         ctx.lineWidth = 1;

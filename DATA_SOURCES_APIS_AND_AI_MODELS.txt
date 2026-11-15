@@ -56,8 +56,11 @@ NOAA Climate Prediction Center and NCEI climate indices
 GDELT DOC 2.0 API
   Endpoint family: https://api.gdeltproject.org/api/v2/doc/doc (server-side, backend/app/news.py GdeltNewsProvider)
   Kind: news context (not scientific evidence)
-  When it runs: only on demand, for the user's saved places (first scroll into view of the news card or "Load news
-    context"); never a global feed on load. NEWS_PROVIDER=disabled turns it off.
+  When it runs: automatically on Main once onboarding is finished (never before), for the user's saved places first and
+    then a fixed showcase of ten cities (London, New York, Sao Paulo, Cairo, Delhi, Singapore, Tokyo, Sydney,
+    Johannesburg, Mexico City; frontend/src/lib/showcaseCities.js), in batches of at most five, one batch at a time,
+    about six seconds apart, through the same cached and rate-limited /api/news flow. No arbitrary coordinates are
+    ever requested. NEWS_PROVIDER=disabled turns it off.
   UI label: every item says "news context, not scientific evidence"; green/amber/red is an attention label from
     transparent keyword rules, not an official warning; items whose host is not on the verified-publisher list
     (publisher_verified: false) are shown as "Unverified news context".

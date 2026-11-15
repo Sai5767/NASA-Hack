@@ -43,6 +43,24 @@ VISHWA = Validated Insights on Significant Hydro-climate and Weather Anomalies (
   disclosure). The password is not in localStorage (keys: version, account, onboarding, places, interests, prefs).
 - The news request for Delhi took 20 s (GDELT) and returned nothing, so no news marker or callout was seen live.
 
+## Targeted final visual fix (15 November 2026, evening; prompt: Planning and prompts/frontend_plan_final.txt)
+1. Welcome: about half of the Earth, low right (low centre on phones), behind sign-in and both questions. The form sits on the
+   left (above the Earth on phones). Same real Globe renderer, base only, no country borders, no requests, draggable, rotation
+   resumes after the usual short delay, still when reduced motion is on. Measured: 40% of the disc visible at 1024x768, 26% on
+   375x812, no control over the planet at either size (shell.css `.welcome`, App.jsx `WelcomeEarth`, Globe `borders` prop).
+2. Main: the blue limb is one token (`--earth-atmosphere-rgb` plus the new `--earth-atmosphere-alpha: 0.18`), drawn by the same
+   renderer on Welcome and Main, behind data layers, markers and callouts. No other blue was added.
+3. News cycle: exactly one automatic callout at a time (`lib/newsCycle.js`, pure and tested), saved places first, then ten fixed
+   showcase cities (`lib/showcaseCities.js`, batches of at most five, one batch at a time, ~6 s apart, none before onboarding
+   ends). Eligible only on the visible hemisphere away from the limb with room for the box; dwell 5.2 s, 0.9 s gap, least
+   recently shown first, 24 s rest per story. Hover, focus, click, drag, timeline movement or an open drawer takes over at once;
+   the cycle resumes ~1.1 s after the interaction ends. Reduced motion: no automatic cycling, markers stay keyboard-focusable.
+   Callouts avoid the timeline and the globe controls. Entrance: leader grows, then the callout glides 8 px outward in 200 ms.
+   Tests: frontend/tests/news-cycle.test.mjs (10 tests). Front-end tests 137/137, build passes.
+   Browser check of the cycle used a TEST-ONLY synthetic /api/news response injected in the page (the real provider was
+   rate-limiting); it proved the mechanics (max one callout, takeover in ~140 ms, resume ~1.3 s after release, limb close,
+   reduced motion, detail drawer text) but is not evidence of real stories. Not captured: screenshots or a recording.
+
 ## Full feature test (15 November 2026, real browser, local backend)
 Passed: month slider (arrows, PageUp/PageDown = 12, Home/End, playback stops at the end, aria-valuetext), rotation pause/resume, help and Key,
 evidence drawer (five questions, Plain words/With the numbers, Esc), forecast gate then forecast months on the slider labelled Forecast,

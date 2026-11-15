@@ -60,10 +60,12 @@ export function MainStage({ globeProps = {}, overlay, reducedMotion, onOpenNews,
   ].filter(Boolean).join("; ");
   const pickNews = (m) => {
     if (onOpenNews) return onOpenNews(m);
-    const p = L?.places.find((x) => x.id === m.placeId);
+    const p = [...(L?.places ?? []), ...(L?.showcasePlaces ?? [])].find((x) => x.id === m.placeId);
     if (p) openNewsPanel(p);
     return undefined;
   };
+  // Anything that takes the user's attention pauses the automatic news cycle: an open drawer, and moving the timeline.
+  const holdKey = `${L?.index ?? ""}|${L?.scrub?.index ?? ""}|${L?.playing ? 1 : 0}`;
   return (
     <>
       <div className="globe-stage" id="globe-stage">
@@ -78,6 +80,8 @@ export function MainStage({ globeProps = {}, overlay, reducedMotion, onOpenNews,
           liveGlyph={L?.liveGlyph ?? null}
           // Only an explicit pause or reading the open news detail stops rotation; data layers and playback do not.
           rotationPaused={!!rotationPaused || !!globeProps.rotationPaused}
+          newsPaused={!!shell.drawerId}
+          newsHoldKey={holdKey}
           layerLabel={layerLabel}
           reducedMotion={reducedMotion ?? L?.reduced}
         >

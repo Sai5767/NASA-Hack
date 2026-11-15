@@ -75,7 +75,7 @@ const hostOf = (u) => {
 };
 
 /** Index of the saved place a story belongs to (same rounded coordinates, within ~2 km), or -1. */
-export function placeIndexFor(item, places) {
+export function placeIndexFor(item, places, tolerance = 0.02) {
   let best = -1;
   let bestD = Infinity;
   (places ?? []).forEach((p, i) => {
@@ -85,7 +85,7 @@ export function placeIndexFor(item, places) {
       best = i;
     }
   });
-  return bestD <= 0.02 ? best : -1;
+  return bestD <= tolerance ? best : -1;
 }
 
 export function formatDate(iso) {
@@ -104,16 +104,16 @@ export function ageText(seconds) {
   return `${Math.round(h / 24)} days ago`;
 }
 
-export function precisionText(item) {
+export function precisionText(item, showcase = false) {
   const km = item?.uncertainty_km;
   const within = Number.isFinite(km) ? ` (within about ${km} km)` : "";
-  if (item?.coordinate_precision === "city_centroid") return `Location: city centre, approximate${within}`;
+  if (showcase || item?.coordinate_precision === "city_centroid") return `Location: city centre, approximate${within}`;
   if (item?.coordinate_precision === "custom_pin") return `Location: your saved place, approximate${within}`;
   return `Location: region, approximate${within}`;
 }
 
 /** View model of one card (closed card, list row and panel entry). */
-export function newsCard(item) {
+export function newsCard(item, { showcase = false } = {}) {
   const verified = item?.publisher_verified === true;
   const severity = verified && SEVERITY_RANK[item?.severity] ? item.severity : null;
   const place = item?.location_name ? `near ${item.location_name} (approximate)` : "location approximate";
@@ -132,17 +132,17 @@ export function newsCard(item) {
     label: item?.label || NEWS_LABEL,
     url: safeUrl(item?.url ?? item?.canonical_url),
     host: hostOf(item?.url ?? item?.canonical_url),
-    precision: precisionText(item),
+    precision: precisionText(item, showcase),
     uncertaintyKm: Number.isFinite(item?.uncertainty_km) ? item.uncertainty_km : null,
   };
 }
 
 /** Saved-place stories only (the backend adds a fixed global rotation set; it is never shown), sorted verified first. */
-export function savedStories(resp, places) {
+export function savedStories(resp, places, tolerance = 0.02) {
   const out = [];
   for (const item of resp?.items ?? []) {
     if (!item || item.location_source !== "saved_location") continue;
-    const idx = placeIndexFor(item, places);
+    const idx = placeIndexFor(item, places, tolerance);
     if (idx < 0) continue;
     out.push({ item, place: places[idx] });
   }
@@ -192,6 +192,7 @@ export function markersFor(list, { stale = false, openPlaceId = null } = {}) {
     return {
       id: place.id,
       placeId: place.id,
+      showcase: place.showcase === true,
       name: place.name,
       lat: lead.lat,
       lon: lead.lon,
@@ -202,7 +203,7 @@ export function markersFor(list, { stale = false, openPlaceId = null } = {}) {
       stale,
       open: openPlaceId === place.id,
       uncertaintyKm: unc.length ? Math.max(...unc) : null,
-      lead: newsCard(lead),
+      lead: newsCard(lead, { showcase: place.showcase === true }),
     };
   });
 }
