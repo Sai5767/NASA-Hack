@@ -35,6 +35,7 @@ MIN_NEWS_CACHE_TTL_SECONDS = 900  # 15 minutes minimum
 MAX_SAVED_LOCATIONS = 5
 MAX_TOTAL_QUERIES = 6
 MAX_NEWS_CONCURRENCY = 2
+NEWS_TOTAL_BUDGET_SECONDS = 20.0  # whole request: slow locations are reported as timeouts instead of holding the page up
 
 GLOBAL_ROTATION_PLACE_IDS = ("delhi", "phoenix", "amazon", "london", "sydney")
 _PLACES_BY_ID = {p["id"]: p for p in PLACES}
@@ -116,10 +117,24 @@ RED_SEVERITY_KEYWORDS = (
 )
 
 AMBER_SEVERITY_KEYWORDS = (
-    "warning",
-    "advisory",
-    "watch",
-    "alert",
+    # Warning-style words only count as part of a weather phrase: a bare "watch" or "alert" would mark "Watch: how
+    # scientists measure sea level" as a hazard.
+    "weather warning",
+    "weather advisory",
+    "weather alert",
+    "heat warning",
+    "heat advisory",
+    "heat alert",
+    "flood warning",
+    "flood watch",
+    "flood alert",
+    "storm warning",
+    "storm watch",
+    "storm alert",
+    "tornado warning",
+    "tornado watch",
+    "fire warning",
+    "air quality alert",
     "heatwave",
     "heat wave",
     "wildfire",
@@ -145,6 +160,38 @@ SEVERITY_LABELS = {
     "amber": "Weather / environmental watch",
     "green": "Informational science / environment context",
 }
+
+# Words that make a story about weather, climate or the environment at all. A story matching none of them (a royal
+# visit, a film list, a comic) is dropped instead of being shown as "environment context". Severity words such as
+# "deadly" or "warning" are deliberately NOT here: on their own they would let crime or sport stories through.
+GENERIC_RELEVANCE_KEYWORDS = (
+    "climate", "weather", "temperature", "rainfall", "rain", "snowfall", "global warming", "greenhouse",
+    "emissions", "el nino", "el niño", "la nina", "la niña", "environment", "environmental", "ecosystem",
+    "pollution", "monsoon", "tornado", "blizzard", "cold snap", "sea level", "biodiversity", "deforestation",
+    "rainforest", "glacier", "thunderstorm", "snowstorm", "windstorm", "tropical storm", "winter storm",
+    "severe storm", "storm surge", "bushfire", "wildfire", "heatwave", "heat wave", "flood", "drought",
+    "cyclone", "hurricane", "typhoon", "landslide", "coral bleaching", "water shortage", "water restriction",
+    "smog", "torrential",
+)
+
+
+def _word_regex(words) -> "re.Pattern[str]":
+    """Whole-word (optionally plural) matcher, so "flood" does not fire inside "floodlight"."""
+    alternatives = "|".join(re.escape(w) for w in sorted(set(words), key=len, reverse=True))
+    return re.compile(rf"(?<![a-z0-9])(?:{alternatives})(?:s|es)?(?![a-z0-9])")
+
+
+# Relevance = the environmental category words plus the generic list above. Severity words ("warning", "watch",
+# "alert") only raise severity on a story that already passed this check; they never make a story relevant.
+_RELEVANCE_RE = _word_regex(list(GENERIC_RELEVANCE_KEYWORDS) + [kw for _, kws in CATEGORY_RULES for kw in kws])
+_CATEGORY_RES = [(code, _word_regex(kws)) for code, kws in CATEGORY_RULES]
+_RED_RE = _word_regex(RED_SEVERITY_KEYWORDS)
+_AMBER_RE = _word_regex(AMBER_SEVERITY_KEYWORDS)
+
+
+def is_environmentally_relevant(title: str, snippet: str = "") -> bool:
+    """True when a story is plausibly about weather, climate or the environment (deterministic keyword rule)."""
+    return bool(_RELEVANCE_RE.search(f"{title} {snippet}".lower()))
 
 
 @dataclass(frozen=True)
@@ -364,14 +411,14 @@ def classify_category_and_severity(title: str, snippet: str = "") -> tuple[str, 
     combined = f"{title} {snippet}".lower()
 
     category = "climate_science"
-    for cat_code, keywords in CATEGORY_RULES:
-        if any(kw in combined for kw in keywords):
+    for cat_code, pattern in _CATEGORY_RES:
+        if pattern.search(combined):
             category = cat_code
             break
 
-    if any(kw in combined for kw in RED_SEVERITY_KEYWORDS):
+    if _RED_RE.search(combined):
         severity = "red"
-    elif any(kw in combined for kw in AMBER_SEVERITY_KEYWORDS):
+    elif _AMBER_RE.search(combined):
         severity = "amber"
     else:
         severity = "green"
@@ -395,6 +442,9 @@ def normalize_and_deduplicate_articles(raw_entries: list[tuple[NewsLocationQuery
         title = " ".join(str(raw.get("title") or "").strip().split())
         if len(title) < 10:
             continue
+        snippet = str(raw.get("snippet") or raw.get("description") or "").strip()
+        if not is_environmentally_relevant(title, snippet):
+            continue  # not about weather, climate or the environment: never shown as "environment context"
         canonical_url = normalize_canonical_url(raw.get("url") or raw.get("canonical_url"))
         if not canonical_url:
             continue
@@ -418,7 +468,6 @@ def normalize_and_deduplicate_articles(raw_entries: list[tuple[NewsLocationQuery
         seen_urls.add(canonical_url)
         seen_titles.add(title_key)
 
-        snippet = str(raw.get("snippet") or raw.get("description") or "").strip()
         category, severity, severity_label = classify_category_and_severity(title, snippet)
         item_id = "news_" + hashlib.sha256(canonical_url.encode("utf-8")).hexdigest()[:12]
 
@@ -462,7 +511,7 @@ class GdeltNewsProvider:
     async def fetch_for_location(self, query: NewsLocationQuery, timeout_seconds: float) -> list[dict]:
         search_q = (
             f'"{query.name}" (climate OR weather OR temperature OR rainfall OR drought '
-            f'OR flood OR heatwave OR wildfire OR storm)'
+            f'OR flood OR heatwave OR wildfire OR storm) sourcelang:english'
         )
         params = {
             "query": search_q,
@@ -592,7 +641,22 @@ async def fetch_news_context(
                 code = exc.code if isinstance(exc, UpstreamServiceError) else "provider_error"
                 return q, None, {"location_id": q.id, "location_name": q.name, "code": code, "message": safe_msg}
 
-    results = await asyncio.gather(*(_run_query(q) for q in queries))
+    # One overall time budget: a provider that is slow (or rate-limiting) must not hold the page up for a minute. Locations
+    # that have not answered by then are reported as timeouts, and whatever did arrive is used.
+    tasks = [asyncio.ensure_future(_run_query(q)) for q in queries]
+    done, pending = await asyncio.wait(tasks, timeout=NEWS_TOTAL_BUDGET_SECONDS)
+    for task in pending:
+        task.cancel()
+    if pending:
+        await asyncio.gather(*pending, return_exceptions=True)
+    results = []
+    for q, task in zip(queries, tasks):
+        if task in done and not task.cancelled():
+            results.append(task.result())
+        else:
+            results.append(
+                (q, None, {"location_id": q.id, "location_name": q.name, "code": "timeout", "message": "News for this location did not arrive in time."})
+            )
 
     raw_pairs: list[tuple[NewsLocationQuery, dict]] = []
     partial_failures: list[dict] = []

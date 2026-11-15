@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 
 import pytest
 from fastapi.testclient import TestClient
@@ -173,6 +174,56 @@ def test_news_returns_stale_cache_when_provider_fails_after_warm_cache():
     assert stale_resp["stale"] is True
     assert len(stale_resp["items"]) == 1
     assert stale_resp["partial_failures"]
+
+
+def _story(title: str, slug: str) -> dict:
+    return {"title": title, "url": f"https://www.example-news.com/{slug}", "publisher": "Example News", "seendate": "20261114T120000Z"}
+
+
+def test_stories_not_about_weather_or_climate_are_dropped_not_shown_as_environment_context():
+    provider = FakeNewsProvider(
+        by_location={
+            "delhi": [
+                _story("Princess to join husband on India visit in biggest foreign trip", "royal"),
+                _story("15 Best Hard Sci-Fi Movies Of All Time, Ranked", "movies"),
+                _story("Deadly shooting leaves five dead outside a Delhi nightclub", "crime"),  # severity words, not environment
+                _story("New floodlights installed at the city stadium", "floodlights"),  # "flood" inside another word
+                _story("Delhi heatwave pushes power demand to a record high", "heat"),
+            ]
+        }
+    )
+    resp = asyncio.run(news_module.fetch_news_context(locations="delhi", provider=provider))
+    titles = [item["title"] for item in resp["items"]]
+    assert titles == ["Delhi heatwave pushes power demand to a record high"]
+
+
+def test_severity_words_are_matched_as_whole_phrases_not_loose_substrings():
+    # "Watch:" at the start of a headline is not a hazard watch; a real flood warning is.
+    _, sev, _ = news_module.classify_category_and_severity("Watch: how scientists measure sea level from space")
+    assert sev == "green"
+    _, sev, _ = news_module.classify_category_and_severity("Flood warning issued for the river valley")
+    assert sev == "amber"
+    assert news_module.is_environmentally_relevant("Drought deepens across the plains")
+    assert not news_module.is_environmentally_relevant("Miami Heat beat the Celtics in overtime")
+    assert not news_module.is_environmentally_relevant("Deadly attack condemned by leaders")
+
+
+def test_news_request_returns_within_its_time_budget_and_reports_slow_locations(monkeypatch):
+    monkeypatch.setattr(news_module, "NEWS_TOTAL_BUDGET_SECONDS", 0.3)
+
+    class SlowProvider(FakeNewsProvider):
+        async def fetch_for_location(self, query, timeout_seconds):
+            if query.id == "phoenix":
+                await asyncio.sleep(30)  # an upstream that never answers in time
+            return await super().fetch_for_location(query, timeout_seconds)
+
+    provider = SlowProvider(by_location={"delhi": [_story("Delhi heatwave pushes power demand to a record high", "heat")]})
+    started = time.monotonic()
+    resp = asyncio.run(news_module.fetch_news_context(locations="delhi,phoenix", provider=provider))
+    assert time.monotonic() - started < 5.0  # the 30-second sleeper was cut off at the 0.3-second budget
+    assert [i["location_id"] for i in resp["items"]] == ["delhi"]
+    slow = [f for f in resp["partial_failures"] if f["location_id"] == "phoenix"]
+    assert slow and slow[0]["code"] == "timeout"
 
 
 def test_news_returns_honest_empty_result_on_cold_failure_never_synthetic():
