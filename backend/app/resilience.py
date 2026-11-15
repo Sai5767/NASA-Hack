@@ -464,6 +464,16 @@ HEALTH_REGISTRY = ServiceHealthRegistry()
 
 
 RETRYABLE_HTTP_STATUS = {408, 429, 500, 502, 503, 504}
+MAX_RESPONSE_BYTES = 4 * 1024 * 1024  # no upstream reply used by V2 is anywhere near this; anything larger is refused
+
+
+def _too_large(service: str) -> "UpstreamResponseError":
+    return UpstreamResponseError(
+        service,
+        f"{service} returned a response larger than the allowed size.",
+        code="response_too_large",
+        retryable=False,
+    )
 
 
 async def request_with_resilience(
@@ -491,14 +501,25 @@ async def request_with_resilience(
                 headers=headers,
                 timeout=timeout_seconds,
             )
+        # Streamed so that an oversized reply is refused as soon as it passes the limit instead of being fully downloaded.
         async with httpx.AsyncClient(timeout=timeout_seconds, follow_redirects=True) as client:
-            return await client.request(
-                method,
-                url,
-                params=params,
-                json=json_body,
-                headers=headers,
-            )
+            async with client.stream(method, url, params=params, json=json_body, headers=headers) as streamed:
+                declared = streamed.headers.get("content-length", "")
+                if declared.isdigit() and int(declared) > MAX_RESPONSE_BYTES:
+                    raise _too_large(service)
+                chunks: list[bytes] = []
+                total = 0
+                async for chunk in streamed.aiter_bytes():
+                    total += len(chunk)
+                    if total > MAX_RESPONSE_BYTES:
+                        raise _too_large(service)
+                    chunks.append(chunk)
+                return httpx.Response(
+                    status_code=streamed.status_code,
+                    headers=streamed.headers,
+                    content=b"".join(chunks),
+                    request=streamed.request,
+                )
 
     last_error: UpstreamServiceError | None = None
     max_attempts = len(retry_delays) + 1

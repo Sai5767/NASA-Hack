@@ -221,3 +221,26 @@ def test_cors_allows_post_explanations():
     assert res.status_code == 200
     allow_methods = res.headers.get("access-control-allow-methods", "")
     assert "POST" in allow_methods
+
+
+def _client_serving(monkeypatch, handler):
+    """Make request_with_resilience talk to an in-memory fake server instead of the network."""
+    real = httpx.AsyncClient
+    monkeypatch.setattr("app.resilience.httpx.AsyncClient", lambda *a, **kw: real(*a, transport=httpx.MockTransport(handler), **kw))
+
+
+def test_real_http_path_returns_small_responses_normally(monkeypatch):
+    _client_serving(monkeypatch, lambda request: httpx.Response(200, json={"ok": True}))
+    resp = asyncio.run(request_with_resilience("demo", "GET", "https://example.org/data", retry_delays=()))
+    assert resp.status_code == 200 and resp.json() == {"ok": True}
+
+
+def test_oversized_upstream_responses_are_refused(monkeypatch):
+    from app import resilience
+
+    big = b"x" * (resilience.MAX_RESPONSE_BYTES + 1)
+    _client_serving(monkeypatch, lambda request: httpx.Response(200, content=big))
+    with pytest.raises(UpstreamServiceError) as caught:
+        asyncio.run(request_with_resilience("demo", "GET", "https://example.org/huge", retry_delays=()))
+    assert caught.value.code == "response_too_large"
+    assert caught.value.retryable is False
