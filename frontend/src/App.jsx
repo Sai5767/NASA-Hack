@@ -1131,6 +1131,7 @@ function Workspace({ store, places, placesStatus }) {
             modeRequest={modeRequest}
             busy={busy}
             idleSpin={!reducedMotion}
+            wheelZoom="ctrl"
             onPick={handlePick}
           >
             {cells.length > 0 && <GlobeLegend scanStyles={cellStylesShown(cells)} />}

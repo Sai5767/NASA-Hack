@@ -98,6 +98,11 @@ sign-in screen with the form in the middle and the Earth as a semicircle on the 
   outside the stage. The severity borders and the overview with a story were checked with a TEST-ONLY synthetic /api/news
   response injected into the page (the real provider was rate-limiting); that is not evidence of real stories.
 - Tests: 143 front-end tests pass (new: tests/news-cycle.test.mjs); `npm run build` passes.
+- Fix (Explore scrolling): on Explore the big globe used to capture every mouse-wheel scroll for zoom, so the page (Sweep, Case
+  file and the other tabs) would not scroll while the pointer was over it. Now the Explore globe zooms only with Ctrl or Command +
+  wheel (a trackpad pinch works too) or the + and − buttons, a plain wheel scrolls the page, and on touch screens a vertical swipe
+  scrolls the page while a sideways drag still turns the Earth (`wheelZoom="ctrl"` prop, `.globe--page-scroll`). Main keeps the
+  plain wheel zoom because it does not scroll. Checked with a real wheel event over the globe on the Sweep tab.
 - Sign-in: form in the middle; the Earth is a semicircle standing on the bottom edge (diameter along the base: as wide as the
   screen when the screen is tall enough, otherwise 56% of the height). The two onboarding questions keep the earlier low-right /
   bottom-arc composition.

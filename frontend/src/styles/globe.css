@@ -16,6 +16,8 @@
 }
 .globe:focus-visible { outline-offset: -3px; }
 .globe-canvas { position: absolute; inset: 0; width: 100%; height: 100%; cursor: grab; touch-action: none; }
+/* On a scrolling page (Explore) a vertical swipe over the Earth scrolls the page; a sideways drag still turns it. */
+.globe--page-scroll .globe-canvas { touch-action: pan-y; }
 .globe-canvas:active { cursor: grabbing; }
 
 .hud { position: absolute; z-index: var(--z-globe-hud); font-family: var(--font-ui); font-size: var(--fs-label); }

@@ -226,6 +226,7 @@ export default function Globe({
   controls = true,
   borders = true,
   glow = "main",
+  wheelZoom = "always",
   autoNews = true,
   newsPaused = false,
   newsHoldKey = null,
@@ -306,7 +307,7 @@ export default function Globe({
   live.current = {
     pins, cells, polys, cellHalf, selectedCell, dots, busy, idleSpin, reduced, mode, reveal,
     hoverCell: hover?.cell ?? -1, hoverDot: hover?.dot ?? -1, hoverField: hover?.fieldCell ?? null,
-    coarse, field, markers, savedPins, liveGlyph, rotationPaused, userPaused, reading, borders, glow, autoNews, newsPaused,
+    coarse, field, markers, savedPins, liveGlyph, rotationPaused, userPaused, reading, borders, glow, wheelZoom, autoNews, newsPaused,
   };
 
   // The automatic news cycle (lib/newsCycle.js): one active callout, takeover on any interaction. `newsHoldKey` is any value
@@ -968,6 +969,9 @@ export default function Globe({
     const canvas = canvasRef.current;
     if (!canvas) return undefined;
     const onWheel = (e) => {
+      // On a scrolling page (Explore) a plain wheel must scroll the page, not zoom: only Ctrl or Command + wheel (a trackpad
+      // pinch arrives the same way) zooms there. On Main, which does not scroll, the plain wheel zooms.
+      if (live.current.wheelZoom === "ctrl" && !(e.ctrlKey || e.metaKey)) return;
       e.preventDefault();
       fly.current = null;
       interacted();
@@ -1144,7 +1148,7 @@ export default function Globe({
 
   return (
     <div
-      className="globe"
+      className={`globe${wheelZoom === "ctrl" ? " globe--page-scroll" : ""}`}
       ref={wrapRef}
       tabIndex={0}
       role="application"
@@ -1301,7 +1305,7 @@ export default function Globe({
             <div className="gl-help" id="globe-help" role="region" aria-label="How to use the Earth">
               <ul>
                 <li>Drag to turn the Earth</li>
-                <li>Scroll, or use + and −, to zoom</li>
+                <li>{wheelZoom === "ctrl" ? "Hold Ctrl (or Command) and scroll, or use + and −, to zoom" : "Scroll, or use + and −, to zoom"}</li>
                 <li>Click or tap to choose a place</li>
                 <li>Keyboard: arrow keys turn, + and − zoom, Enter picks the centre</li>
               </ul>
