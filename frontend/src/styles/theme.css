@@ -1,33 +1,62 @@
+/*
+ * Themes. Every colour that defines the look is a token here; the rest of the CSS uses the tokens.
+ * "nebula" (violet, the default) is set on :root; "classic" (the original cyan HUD) overrides it.
+ * Colours drawn by JavaScript (globe, stars, map dots) follow the same themes: see src/lib/theme.js.
+ */
 :root {
   color-scheme: dark;
-  --bg-0: #04060d;
-  --bg-1: #080c18;
-  --bg-2: #0e1528;
-  --panel: rgba(12, 18, 36, 0.74);
-  --panel-solid: #0b1122;
-  --panel-raised: rgba(22, 32, 60, 0.7);
-  --line: rgba(110, 150, 255, 0.16);
-  --line-strong: rgba(110, 150, 255, 0.36);
-  --text: #e9efff;
-  --text-dim: #a5b3d8;
-  --text-faint: #7280a8;
-  --accent: #4dffd9;
-  --accent-dim: rgba(77, 255, 217, 0.14);
-  --accent-ink: #031b17;
+  --bg-0: #07060f;
+  --bg-1: #0d0b1c;
+  --bg-2: #16132b;
+  --panel: rgba(20, 17, 40, 0.74);
+  --panel-solid: #110f24;
+  --panel-raised: rgba(34, 29, 64, 0.7);
+  --line-rgb: 150, 130, 255;
+  --line: rgba(var(--line-rgb), 0.16);
+  --line-strong: rgba(var(--line-rgb), 0.36);
+  --text: #efeaff;
+  --text-dim: #b8b0dc;
+  --text-faint: #8a83b3;
+  --accent-rgb: 180, 155, 255;
+  --accent: #b49bff;
+  --accent-dim: rgba(var(--accent-rgb), 0.16);
+  --accent-ink: #14092e;
+  --ink-rgb: 6, 5, 16;
+  --glow-rgb: 255, 107, 213;
   --amber: #ffc24d;
   --up: #ff6a5c;
   --up-dim: rgba(255, 106, 92, 0.16);
   --down: #4da6ff;
   --down-dim: rgba(77, 166, 255, 0.16);
   --flat: #8794b8;
-  --pin-a: #4dffd9;
-  --pin-b: #ff6bd5;
+  --pin-a: var(--accent);
+  --pin-b: #5ee6c4;
   --ok: #7dff9b;
   --font-display: "Space Grotesk Variable", "Space Grotesk", system-ui, sans-serif;
   --font-mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, Consolas, monospace;
   --radius: 14px;
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
+
+:root[data-theme="classic"] {
+  --bg-0: #04060d;
+  --bg-1: #080c18;
+  --bg-2: #0e1528;
+  --panel: rgba(12, 18, 36, 0.74);
+  --panel-solid: #0b1122;
+  --panel-raised: rgba(22, 32, 60, 0.7);
+  --line-rgb: 110, 150, 255;
+  --text: #e9efff;
+  --text-dim: #a5b3d8;
+  --text-faint: #7280a8;
+  --accent-rgb: 77, 255, 217;
+  --accent: #4dffd9;
+  --accent-ink: #031b17;
+  --ink-rgb: 5, 9, 22;
+  --glow-rgb: 120, 90, 255;
+  --pin-b: #ff6bd5;
+}
+/* ---- end of theme tokens ---- */
 
 *,
 *::before,
@@ -48,8 +77,8 @@ body {
   font-size: 15px;
   line-height: 1.55;
   background:
-    radial-gradient(1200px 700px at 78% -10%, rgba(77, 255, 217, 0.1), transparent 60%),
-    radial-gradient(900px 640px at 4% 108%, rgba(120, 90, 255, 0.15), transparent 60%),
+    radial-gradient(1200px 700px at 78% -10%, rgba(var(--accent-rgb), 0.1), transparent 60%),
+    radial-gradient(900px 640px at 4% 108%, rgba(var(--glow-rgb), 0.15), transparent 60%),
     var(--bg-0);
   background-attachment: fixed;
   overflow-x: hidden;
@@ -62,8 +91,8 @@ body::before {
   z-index: 0;
   pointer-events: none;
   background-image:
-    linear-gradient(rgba(110, 150, 255, 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(110, 150, 255, 0.05) 1px, transparent 1px);
+    linear-gradient(rgba(var(--line-rgb), 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(var(--line-rgb), 0.05) 1px, transparent 1px);
   background-size: 52px 52px;
   mask-image: radial-gradient(ellipse at 50% 28%, #000 15%, transparent 72%);
 }
@@ -93,10 +122,10 @@ button { cursor: pointer; }
   border-radius: 6px;
 }
 
-::selection { background: rgba(77, 255, 217, 0.3); }
+::selection { background: rgba(var(--accent-rgb), 0.3); }
 
 ::-webkit-scrollbar { width: 10px; height: 10px; }
-::-webkit-scrollbar-thumb { background: rgba(110, 150, 255, 0.25); border-radius: 8px; }
+::-webkit-scrollbar-thumb { background: rgba(var(--line-rgb), 0.25); border-radius: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
 
 /* ---------- Surfaces ---------- */
@@ -156,9 +185,9 @@ button { cursor: pointer; }
   color: var(--accent-ink);
   font-weight: 700;
   letter-spacing: 0.02em;
-  box-shadow: 0 0 26px rgba(77, 255, 217, 0.32);
+  box-shadow: 0 0 26px rgba(var(--accent-rgb), 0.32);
 }
-.btn-primary:hover { box-shadow: 0 0 34px rgba(77, 255, 217, 0.55); }
+.btn-primary:hover { box-shadow: 0 0 34px rgba(var(--accent-rgb), 0.55); }
 .btn-sm { padding: 6px 11px; font-size: 13px; border-radius: 8px; }
 .btn-ghost { background: transparent; }
 
@@ -184,7 +213,7 @@ button { cursor: pointer; }
   padding: 9px 11px;
   border: 1px solid var(--line-strong);
   border-radius: 9px;
-  background: rgba(2, 5, 14, 0.7);
+  background: rgba(var(--ink-rgb), 0.7);
   color: var(--text);
   font-family: var(--font-mono);
   font-size: 14px;
@@ -199,7 +228,7 @@ button { cursor: pointer; }
   border: 1px solid var(--line-strong);
   border-radius: 9px;
   overflow: hidden;
-  background: rgba(2, 5, 14, 0.72);
+  background: rgba(var(--ink-rgb), 0.72);
   backdrop-filter: blur(8px);
 }
 .seg button {
@@ -234,7 +263,7 @@ button { cursor: pointer; }
   padding: 10px 12px;
   border-radius: 10px;
   border: 1px solid var(--line-strong);
-  background: #0b1226;
+  background: var(--panel-solid);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
   color: var(--text);
   font-size: 12.5px;

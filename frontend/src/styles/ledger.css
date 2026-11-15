@@ -31,7 +31,7 @@
 .ledger-row.up .rate b { color: var(--up); }
 .ledger-row.down .rate b { color: var(--down); }
 .ledger-detail { display: grid; gap: 8px; padding: 4px 14px 14px 52px; }
-.ledger-detail .why { display: grid; gap: 4px; padding: 9px 12px; border-left: 3px solid var(--accent); background: rgba(77, 255, 217, 0.05); border-radius: 0 8px 8px 0; }
+.ledger-detail .why { display: grid; gap: 4px; padding: 9px 12px; border-left: 3px solid var(--accent); background: rgba(var(--accent-rgb), 0.05); border-radius: 0 8px 8px 0; }
 .ledger-detail .btn { justify-self: start; }
 .conf { margin-left: 6px; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--line-strong); font-size: 10.5px; letter-spacing: 0.04em; text-transform: none; }
 .conf.well-established { color: var(--ok); border-color: rgba(125, 255, 155, 0.5); }

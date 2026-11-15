@@ -11,11 +11,11 @@
 
 .ax-unit { fill: var(--text-faint); font: 11px var(--font-mono); }
 .ax-tick { fill: var(--text-faint); font: 11px var(--font-mono); }
-.grid { stroke: rgba(110, 150, 255, 0.12); stroke-width: 1; }
+.grid { stroke: rgba(var(--line-rgb), 0.12); stroke-width: 1; }
 .zero { stroke: rgba(255, 255, 255, 0.34); stroke-width: 1; stroke-dasharray: 3 4; }
-.band { fill: rgba(77, 255, 217, 0.16); }
+.band { fill: rgba(var(--accent-rgb), 0.16); }
 .cross { stroke: rgba(255, 255, 255, 0.28); stroke-width: 1; }
-.tip-box { fill: rgba(5, 9, 22, 0.96); stroke: var(--line-strong); }
+.tip-box { fill: rgba(var(--ink-rgb), 0.96); stroke: var(--line-strong); }
 .tip-title { fill: var(--text-faint); font: 11px var(--font-mono); }
 .tip-val { fill: var(--text); font: 600 13px var(--font-mono); }
 .tip-sub { fill: var(--text-dim); font: 11px var(--font-mono); }

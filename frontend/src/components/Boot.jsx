@@ -40,9 +40,9 @@ export default function Boot({ onDone }) {
     <div className={`boot${leaving ? " out" : ""}`} onClick={() => setLeaving(true)} role="status" aria-label="Starting up">
       <div className="boot-inner">
         <svg className="boot-mark" viewBox="0 0 48 48" aria-hidden="true">
-          <circle cx="22" cy="22" r="15" fill="none" stroke="#4dffd9" strokeWidth="2.4" />
-          <path d="M11 28 L17 22 L22 25 L32 14" fill="none" stroke="#4dffd9" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
-          <line x1="33" y1="33" x2="44" y2="44" stroke="#4dffd9" strokeWidth="3.4" strokeLinecap="round" />
+          <circle cx="22" cy="22" r="15" fill="none" stroke="var(--accent)" strokeWidth="2.4" />
+          <path d="M11 28 L17 22 L22 25 L32 14" fill="none" stroke="var(--accent)" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+          <line x1="33" y1="33" x2="44" y2="44" stroke="var(--accent)" strokeWidth="3.4" strokeLinecap="round" />
         </svg>
         <pre className="boot-text mono">
           {LINES.slice(0, shown).map((line, i) => (

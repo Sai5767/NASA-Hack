@@ -10,7 +10,7 @@ import Events from "./components/Events.jsx";
 import { ExplainContext } from "./components/ExplainContext.js";
 import Explainer from "./components/Explainer.jsx";
 import ForYou from "./components/ForYou.jsx";
-import Globe from "./components/Globe.jsx";
+import Globe, { applyGlobePalette } from "./components/Globe.jsx";
 import Home from "./components/Home.jsx";
 import IntakeWizard from "./components/Intake.jsx";
 import Ledger from "./components/Ledger.jsx";
@@ -29,6 +29,7 @@ import { cellContains, nearestPlace } from "./lib/geo.js";
 import { intensity, mixHex, prepareLapse } from "./lib/lapse.js";
 import { DEFAULT_PROFILE, addWatch, defaultView, hasWatch, removeWatch, suggest, toggleWatch } from "./lib/profile.js";
 import { decodeState, encodeState } from "./lib/share.js";
+import { DEFAULT_THEME, applyTheme, nextTheme, themeOf } from "./lib/theme.js";
 
 const COLORS = { up: "#ff6a5c", down: "#4da6ff", flat: "#8794b8", failed: "#5f6a8a", a: "#4dffd9", b: "#ff6bd5" };
 const EMPTY = { data: null, key: "", loading: false, error: "" };
@@ -226,6 +227,12 @@ export default function App() {
   const [archK, setArchK] = useState(null);
   const [ledger, setLedger] = useState(EMPTY);
   const [lapse, setLapse] = useState({ on: false, year: null, playing: false, speed: 500 });
+  const [theme, setTheme] = useStoredState("td-theme", DEFAULT_THEME);
+  // Colours drawn by JavaScript (map dots, pins, the globe) follow the theme; the CSS follows data-theme on <html>.
+  const palette = themeOf(theme);
+  Object.assign(COLORS, palette.colors);
+  applyGlobePalette(palette.globe);
+  useEffect(() => applyTheme(theme), [theme]);
   const [storedProfile, setProfile] = useStoredState("td-profile", DEFAULT_PROFILE);
   const [watch, setWatch] = useStoredState("td-watch", []);
   const [viewPref, setViewPref] = useStoredState("td-view", null);
@@ -390,7 +397,7 @@ export default function App() {
   }, []);
 
   const gridFresh = tab === "scan" && !!grid.data && !!params && grid.key === keys.grid(params, scanCfg);
-  const cells = useMemo(() => (gridFresh ? scanCells(grid.data) : []), [gridFresh, grid.data]);
+  const cells = useMemo(() => (gridFresh ? scanCells(grid.data) : []), [gridFresh, grid.data, theme]);
   const cellHalf = gridFresh ? grid.data.size / (grid.data.n - 1) / 2 : 0;
   const worldFresh = tab === "world" && worldMode === "survey" && !!world.data && world.key === keys.world(worldParams);
   const archFresh =
@@ -411,7 +418,7 @@ export default function App() {
       home
         ? watch.map((w) => ({ id: w.id, name: w.name, lat: w.lat, lon: w.lon, color: COLORS.a, r: 6, ring: true, tip: `${w.name} · on your watchlist`, watch: w }))
         : [],
-    [home, watch],
+    [home, watch, theme],
   );
   const eventDots = useMemo(
     () =>
@@ -435,7 +442,7 @@ export default function App() {
     if (archFresh) return archetypeDots(archetypes.data);
     if (eventDots.length) return eventDots;
     return watchDots;
-  }, [worldFresh, archFresh, world.data, archetypes.data, eventDots, watchDots, lapse.on, lapse.year, lapseData]);
+  }, [worldFresh, archFresh, world.data, archetypes.data, eventDots, watchDots, lapse.on, lapse.year, lapseData, theme]);
 
   const handlePick = (lat, lon) => {
     const la = round2(lat);
@@ -668,7 +675,7 @@ export default function App() {
   return (
     <ExplainContext.Provider value={explainTerm}>
     <div className="app">
-      <Starfield />
+      <Starfield key={theme} accentRgb={palette.accentRgb} />
       <svg width="0" height="0" style={{ position: "absolute" }} aria-hidden="true" focusable="false">
         <defs>
           <filter id="ink" x="-5%" y="-5%" width="110%" height="110%">
@@ -683,9 +690,9 @@ export default function App() {
       <header className="topbar">
         <div className="brand">
           <svg className="brand-mark" viewBox="0 0 48 48" aria-hidden="true">
-            <circle cx="22" cy="22" r="15" fill="none" stroke="#4dffd9" strokeWidth="2.4" />
-            <path d="M11 28 L17 22 L22 25 L32 14" fill="none" stroke="#4dffd9" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
-            <line x1="33" y1="33" x2="44" y2="44" stroke="#4dffd9" strokeWidth="3.4" strokeLinecap="round" />
+            <circle cx="22" cy="22" r="15" fill="none" stroke="var(--accent)" strokeWidth="2.4" />
+            <path d="M11 28 L17 22 L22 25 L32 14" fill="none" stroke="var(--accent)" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+            <line x1="33" y1="33" x2="44" y2="44" stroke="var(--accent)" strokeWidth="3.4" strokeLinecap="round" />
           </svg>
           <div>
             <h1>Trend <span>Detective</span></h1>
@@ -696,6 +703,9 @@ export default function App() {
           <button type="button" className="btn btn-sm" onClick={() => setModal("intake")}>✦ Personalise</button>
           <button type="button" className="btn btn-sm" onClick={() => setModal("cases")}>Case files</button>
           <button type="button" className="btn btn-sm" onClick={() => askExplainer(null)}>? Explain</button>
+          <button type="button" className="btn btn-sm" onClick={() => setTheme(nextTheme(theme))} title={`Colour theme: ${palette.label}. Click to switch to ${themeOf(nextTheme(theme)).label}.`}>
+            ◐ {palette.label}
+          </button>
           <button type="button" className="btn btn-sm" onClick={() => setModal("glossary")}>Glossary</button>
           <button type="button" className="btn btn-sm" onClick={() => setModal("about")}>About</button>
         </nav>
@@ -704,6 +714,7 @@ export default function App() {
       <main className={`stage${home ? " home" : ""}`}>
         <div className="globe-col">
           <Globe
+            key={theme}
             pins={pins}
             cells={cells}
             cellHalf={cellHalf}

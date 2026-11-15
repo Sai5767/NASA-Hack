@@ -10,5 +10,5 @@
 .lapse-year {
   font-family: var(--font-mono); font-size: 44px; font-weight: 700; line-height: 1; letter-spacing: -0.02em;
   color: var(--text); text-shadow: 0 0 24px rgba(0, 0, 0, 0.8); padding: 4px 10px; border-radius: 10px;
-  background: rgba(2, 5, 14, 0.55); backdrop-filter: blur(6px); width: max-content;
+  background: rgba(var(--ink-rgb), 0.55); backdrop-filter: blur(6px); width: max-content;
 }

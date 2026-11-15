@@ -16,6 +16,9 @@ import "./styles/lapse.css";
 import "./styles/motion.css";
 import App from "./App.jsx";
 import ErrorBoundary from "./components/ErrorBoundary.jsx";
+import { applyTheme, savedTheme } from "./lib/theme.js";
+
+applyTheme(savedTheme()); // before the first paint, so the page never flashes the wrong colours
 
 createRoot(document.getElementById("root")).render(
   <React.StrictMode>

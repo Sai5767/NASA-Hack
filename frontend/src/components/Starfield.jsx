@@ -18,14 +18,14 @@ function layer(count, seed, color) {
 }
 
 /** Fixed, drifting, twinkling stars behind the whole app. Pure CSS animation. */
-export default function Starfield() {
+export default function Starfield({ accentRgb = "180,155,255" }) {
   const layers = useMemo(
     () => [
       { shadow: layer(140, 11, "rgba(190,210,255,0.75)"), size: 1, cls: "stars-a" },
       { shadow: layer(60, 23, "rgba(190,230,255,0.85)"), size: 2, cls: "stars-b" },
-      { shadow: layer(16, 37, "rgba(77,255,217,0.9)"), size: 3, cls: "stars-c" },
+      { shadow: layer(16, 37, `rgba(${accentRgb},0.9)`), size: 3, cls: "stars-c" },
     ],
-    [],
+    [accentRgb],
   );
   return (
     <div className="starfield" aria-hidden="true">

@@ -11,7 +11,7 @@
 @keyframes slideIn { from { opacity: 0; transform: translateX(-14px); } to { opacity: 1; transform: none; } }
 @keyframes blink { 50% { opacity: 0; } }
 @keyframes scanBar { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
-@keyframes pulseGlow { 0%, 100% { box-shadow: 0 0 0 0 rgba(77, 255, 217, 0.5); } 50% { box-shadow: 0 0 0 8px rgba(77, 255, 217, 0); } }
+@keyframes pulseGlow { 0%, 100% { box-shadow: 0 0 0 0 rgba(var(--accent-rgb), 0.5); } 50% { box-shadow: 0 0 0 8px rgba(var(--accent-rgb), 0); } }
 @keyframes slam {
   0% { opacity: 0; transform: scale(2.6) rotate(-16deg); }
   58% { opacity: 1; transform: scale(0.94) rotate(-5deg); }
@@ -19,7 +19,7 @@
   100% { opacity: 1; transform: scale(1) rotate(-6deg); }
 }
 @keyframes thud {
-  0% { box-shadow: 0 0 0 0 var(--stamp, rgba(77, 255, 217, 0.7)); }
+  0% { box-shadow: 0 0 0 0 var(--stamp, rgba(var(--accent-rgb), 0.7)); }
   100% { box-shadow: 0 0 0 46px rgba(0, 0, 0, 0); }
 }
 

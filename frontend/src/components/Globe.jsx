@@ -23,6 +23,11 @@ const PAL = {
   grid: "rgba(110, 165, 255, 0.11)",
 };
 
+/** Switch the globe's land, sea and glow to a theme's colours (remount the globe afterwards so it redraws). */
+export function applyGlobePalette(palette) {
+  Object.assign(PAL, palette);
+}
+
 const VIEW_DEFAULTS = {
   globe: { lon: -40, lat: 24, k: 1 },
   flat: { lon: 0, lat: 12, k: 1.7 },

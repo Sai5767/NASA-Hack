@@ -12,7 +12,7 @@
 }
 
 .brand { display: flex; align-items: center; gap: 12px; }
-.brand-mark { width: 38px; height: 38px; flex: none; filter: drop-shadow(0 0 10px rgba(77, 255, 217, 0.5)); }
+.brand-mark { width: 38px; height: 38px; flex: none; filter: drop-shadow(0 0 10px rgba(var(--accent-rgb), 0.5)); }
 .brand h1 {
   font-size: 20px;
   font-weight: 700;
@@ -65,8 +65,8 @@
   border-radius: 20px;
   overflow: hidden;
   border: 1px solid var(--line-strong);
-  background: radial-gradient(circle at 50% 45%, rgba(20, 40, 90, 0.55), rgba(3, 6, 16, 0.92) 70%);
-  box-shadow: 0 0 60px rgba(77, 255, 217, 0.07), inset 0 0 80px rgba(0, 0, 0, 0.55);
+  background: radial-gradient(circle at 50% 45%, rgba(20, 40, 90, 0.55), rgba(var(--ink-rgb), 0.92) 70%);
+  box-shadow: 0 0 60px rgba(var(--accent-rgb), 0.07), inset 0 0 80px rgba(0, 0, 0, 0.55);
 }
 .globe:focus-visible { outline-offset: -3px; }
 .globe { container-type: inline-size; container-name: globe; }
@@ -95,7 +95,7 @@
   padding: 8px 12px;
   border: 1px solid var(--line);
   border-radius: 10px;
-  background: rgba(2, 5, 14, 0.66);
+  background: rgba(var(--ink-rgb), 0.66);
   backdrop-filter: blur(8px);
   pointer-events: none;
 }
@@ -112,7 +112,7 @@
   padding: 7px 10px;
   border-radius: 8px;
   border: 1px solid var(--line-strong);
-  background: rgba(5, 9, 22, 0.94);
+  background: rgba(var(--ink-rgb), 0.94);
   font-family: var(--font-mono);
   font-size: 11.5px;
   line-height: 1.45;
@@ -122,7 +122,7 @@
 
 /* ---------- Tabs ---------- */
 
-.tabs { display: flex; gap: 4px; padding: 5px; border: 1px solid var(--line); border-radius: 14px; background: rgba(5, 9, 22, 0.7); }
+.tabs { display: flex; gap: 4px; padding: 5px; border: 1px solid var(--line); border-radius: 14px; background: rgba(var(--ink-rgb), 0.7); }
 .tab {
   flex: 1;
   display: grid;
@@ -138,7 +138,7 @@
 .tab b { font-size: 14px; font-weight: 600; }
 .tab small { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-faint); }
 .tab:hover { color: var(--text); background: rgba(255, 255, 255, 0.04); }
-.tab[aria-selected="true"] { background: var(--accent-dim); color: var(--accent); box-shadow: inset 0 0 0 1px rgba(77, 255, 217, 0.5); }
+.tab[aria-selected="true"] { background: var(--accent-dim); color: var(--accent); box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), 0.5); }
 .tab[aria-selected="true"] small { color: var(--accent); opacity: 0.8; }
 
 /* ---------- Responsive ---------- */

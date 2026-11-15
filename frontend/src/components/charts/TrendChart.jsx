@@ -124,7 +124,7 @@ export default function TrendChart({ data, events = [], onEvent }) {
             <>
               <li><i className="sw line" style={{ background: "var(--accent)" }} />yearly average</li>
               <li><i className="sw line" style={{ background: trendColor }} />trend (Sen)</li>
-              <li><i className="sw box" style={{ background: "rgba(77,255,217,0.18)" }} />95% range of trend</li>
+              <li><i className="sw box" style={{ background: "rgba(var(--accent-rgb),0.18)" }} />95% range of trend</li>
               {events.length > 0 && <li><i className="sw box" style={{ background: "var(--amber)" }} />major event nearby</li>}
             </>
           ) : (
