@@ -8,7 +8,7 @@ Read this first if you are an agent (or person) taking over. Keep it current: up
   Python/FastAPI backend (`backend/`) + React/Vite front-end (`frontend/`). See `README.md` for what exists.
 - `main` on GitHub is stable and holds everything that has been checked: the whole **To Do** pass and the **V2 backend**
   (resilience layer, evidence trace, monthly frames and forecast, AI explanations, news, Meteomatics live weather). Merged branches
-  are deleted; the only other branch is `backup/before-coauthor-labels` (old history, kept for old clones). The V2 **frontend** has not
+  are deleted, so `main` is the only branch. The V2 **frontend** has not
   been started (see "V2 status" below). For any new work: use a new branch, push it often (it is the backup), and merge to `main` only
   when the project owner says so, after checking it.
 - Owner's standing rules: work only inside this folder (and GitHub only when asked); keep everything accurate and keyless
@@ -27,7 +27,8 @@ Environment gotchas: Windows PowerShell 5.1 (no `&&`); git pushes work with the 
 the message: `Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>` (if an AI wrote the change) and
 `Co-authored-by: Yuvraj Singh <143264768+YuvixSinh@users.noreply.github.com>` (the team credit: Yuvraj + Sai built this together).
 All 20 earlier commits that were not Yuvraj's own were relabelled this way on 2026-11-15 (history rewritten and force-pushed; the old
-history is kept on the branch `backup/before-coauthor-labels`). Anyone with an older clone must run
+history was kept on a backup branch until 2026-11-15, when it was deleted after its contents were checked to be identical to the
+rewritten history). Anyone with an older clone must run
 `git fetch origin` then `git checkout main` then `git reset --hard origin/main`.
 
 ## The To Do list (from the `To Do` file, now in `Planning and prompts/`) and how each item is interpreted
